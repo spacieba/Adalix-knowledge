@@ -31,7 +31,7 @@ function selectProfile(c){
   $('#screen-app').classList.remove('hidden');
   $('#hdr-who').textContent = c === 'adam' ? '🐉 Adam' : '🦊 Alix';
   localStorage.setItem('adalix_child', c);
-  buildNav(['programme','quiz','les100','checklist','projet','chat']);
+  buildNav(['programme','quiz','les100','checklist','projet','chat','guide']);
   assistantName = null;
   loadUnlocked(); refreshStreak(); loadAssistantName();
   loadBadges().then(checkBadges);
@@ -67,12 +67,12 @@ const TABS = {
   programme:{icon:'📅',label:'Programme'}, quiz:{icon:'🧠',label:'Quiz'},
   les100:{icon:'🏆',label:'Les 100'}, checklist:{icon:'✅',label:'Checklist'},
   projet:{icon:'💻',label:'Mon projet'},
-  chat:{icon:'💬',label:'Questions'}, dashboard:{icon:'📊',label:'Tableau de bord'},
+  chat:{icon:'💬',label:'Questions'}, guide:{icon:'📖',label:'Guide'}, dashboard:{icon:'📊',label:'Tableau de bord'},
 };
 // icônes réhabillées selon le profil — mêmes intitulés, juste l'esprit visuel qui change
 const THEME_ICONS = {
-  adam: {programme:'🗺️', quiz:'🐲', les100:'🏆', checklist:'📜', projet:'⚒️', chat:'🔮'},
-  alix: {programme:'🌿', quiz:'🦊', les100:'🦋', checklist:'🐣', projet:'🎨', chat:'🐰'},
+  adam: {programme:'🗺️', quiz:'🐲', les100:'🏆', checklist:'📜', projet:'⚒️', chat:'🔮', guide:'🧭'},
+  alix: {programme:'🌿', quiz:'🦊', les100:'🦋', checklist:'🐣', projet:'🎨', chat:'🐰', guide:'📖'},
 };
 function tabIcon(t){ return (THEME_ICONS[child] && THEME_ICONS[child][t]) || TABS[t].icon; }
 function buildNav(tabs){
@@ -82,7 +82,41 @@ function showTab(t){
   tab = t;
   document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
   const nb = $('#nav-'+t); if(nb) nb.classList.add('active');
-  ({programme:renderProgramme, quiz:renderQuizList, les100:renderGallery, checklist:renderChecklist, projet:renderProjet, chat:renderChat, dashboard:renderDashboard}[t])();
+  ({programme:renderProgramme, quiz:renderQuizList, les100:renderGallery, checklist:renderChecklist, projet:renderProjet, chat:renderChat, guide:renderGuide, dashboard:renderDashboard}[t])();
+}
+
+/* ---------- guide ---------- */
+function renderGuide(){
+  const gcard = (emoji, titre, html) => `<div class="card"><h3>${emoji} ${titre}</h3><div style="font-size:14px;line-height:1.6;">${html}</div></div>`;
+  $('#main').innerHTML = `<div class="narrow">
+    ${gcard('🌞', 'Bienvenue dans Le Grand Été',
+      `Quatre semaines, du 27 juillet au 22 août, pour apprendre autrement : pas de notes, pas de profs — juste toi, des idées passionnantes, et environ 1h à 1h30 par jour. L'app s'ouvre chaque matin sur <b>le programme du jour</b> : tout ce qu'il y a à faire est sur cette page, dans l'ordre. Six jours par semaine, repos le dimanche. Chaque semaine a son grand thème : <b>S1 douter et vérifier</b>, <b>S2 raconter et convaincre</b>, <b>S3 comprendre les mécanismes</b>, <b>S4 penser par toi-même</b>.`)}
+    ${gcard('📅', "L'onglet Programme",
+      `Le cœur de l'app. Chaque jour a son thème : <b>lundi</b> géographie, <b>mardi</b> « Qui écrit l'histoire ? », <b>mercredi</b> économie, <b>jeudi</b> géopolitique ou religions, <b>vendredi</b> maths curieuses + ton exposé, <b>samedi</b> esprit critique. Sur la fiche du jour tu trouves : le sujet expliqué, <b>le déroulé</b> (les étapes concrètes, avec les durées), la consigne d'écriture du soir, des liens à explorer et des personnalités en rapport avec le thème.`)}
+    ${gcard('🧠', 'Pourquoi la logique et la rhétorique ? (le fil rouge le plus important)',
+      `Chaque jour, une notion de <b>logique</b> ou de <b>rhétorique</b>. Pourquoi ? Parce que ce sont les armes de l'esprit.<br><br>
+      La <b>rhétorique</b>, c'est l'art de convaincre — inventé par les Grecs il y a 2500 ans. Ceux qui la maîtrisent mènent les débats, décrochent les jobs, défendent leurs idées ; ceux qui l'ignorent se font mener. Elle te servira dans tes exposés du vendredi, à l'école, et toute ta vie. Mais surtout : connaître les techniques de persuasion, c'est <b>reconnaître quand on les utilise contre toi</b> — dans une pub, une vidéo, un discours.<br><br>
+      La <b>logique</b>, c'est le solfège de la pensée : savoir distinguer un raisonnement qui tient debout d'un raisonnement qui triche (les fameux <b>sophismes</b> — homme de paille, faux dilemme, appel à la popularité…). Une fois que tu sais les nommer, tu les vois PARTOUT. Personne ne pourra plus te vendre n'importe quoi.<br><br>
+      Les samedis « esprit critique » assemblent le tout : démonter un complot, détecter les sophismes, vérifier une info comme un pro.`)}
+    ${gcard('🤖', "Le fil rouge « IA du jour »",
+      `Chaque jour aussi, une notion sur l'intelligence artificielle. En 24 jours tu sauras : d'où vient l'IA (Turing 1950, Dartmouth 1956), comment fonctionne vraiment un assistant comme celui de l'onglet Questions, pourquoi il peut se tromper, ce que l'IA peut apporter à l'humanité (médecine, science, climat), quels métiers elle menace, lesquels elle va créer — et comment garder ton cerveau aux commandes. Tu vis la révolution de TON siècle : autant la comprendre de l'intérieur.`)}
+    ${gcard('🧠', "L'onglet Quiz",
+      `Un QCM par semaine (13 questions sur tout ce que tu as vu, dont 3 sur l'IA) — objectif : <b>70% minimum</b>, tu peux rejouer autant que tu veux. Le <b>quiz des capitales</b> (20 questions, difficulté croissante) se joue dès le premier lundi — note ton score, tu le rejoueras en fin de mois pour mesurer tes progrès. Et le dernier samedi : le <b>grand quiz final</b>, 20 questions piochées dans tout le mois. Tous tes scores sont enregistrés.`)}
+    ${gcard('🏆', "L'onglet Les 100 — ta collection",
+      `103 personnalités qui ont changé le monde : scientifiques, résistants, artistes, sportifs, explorateurs… <b>C'est toi qui choisis</b> qui découvrir : parcours la galerie, clique sur les cartes qui t'intriguent. Tu peux en ajouter <b>3 nouvelles par jour</b> à ta collection (la lecture, elle, est illimitée). Chaque fiche propose un lien vidéo vers la chaîne <b>« Quelle Histoire »</b> pour aller plus loin. La fiche du jour te suggère des personnalités en lien avec le thème, mais rien n'est imposé. Objectif du mois : la collection complète ?`)}
+    ${gcard('✅', "L'onglet Checklist",
+      `Tes 12 gestes quotidiens : lit fait, lecture, balade, programme du jour, projet, écriture du soir… Chaque journée complète allume ta série 🔥 en haut de l'écran. L'<b>écriture du soir</b> (ce que j'ai appris / ce qui m'a étonné) construit jour après jour ton journal du mois — tu seras fier(e) de le relire en septembre.`)}
+    ${gcard('💻', "L'onglet Mon projet",
+      `Un vrai projet personnel, mené sur tout le mois, <b>guidé jour par jour</b> : chaque jour, l'app te donne l'étape à faire. Semaine 1 : tu ne fabriques rien — tu <b>brainstormes avec ton assistant</b>, tu choisis ton idée et tu poses ton plan. Semaine 2 : première version complète, même moche. Semaine 3 : amélioration et finitions. Semaine 4 : préparation de la présentation. Le <b>rendu final</b> se montre à la fête du 22 août, avec une mini-présentation de 2-3 minutes. Six idées te sont proposées, mais tu peux inventer la tienne.`)}
+    ${gcard('💬', "L'onglet Questions",
+      `Ton assistant IA personnel — c'est toi qui l'as baptisé ! Pose-lui TOUTES tes questions : un mot compliqué, un point d'histoire, une idée d'exposé. Règle d'or (tu la verras dans le fil IA) : utilise-le pour <b>comprendre plus</b>, jamais pour réfléchir à ta place. Il y a aussi l'atelier d'images pour illustrer tes projets et exposés.`)}
+    ${gcard('🎤', "Les exposés du vendredi",
+      `Chaque vendredi, 5 à 10 minutes devant la famille, avec un support créé avec les outils de la semaine. La règle du jeu : le thème est <b>au choix, mais connexe à quelque chose vu dans la semaine</b> — et tu <b>brainstormes d'abord tes idées avec ton assistant</b> avant de choisir. La recette apprise en rhétorique : une <b>accroche</b>, <b>3 idées</b>, une <b>chute</b>. Après ton passage, papa note ton exposé (étoiles + commentaire) — tu verras son avis apparaître sur la page du jour. Le dernier samedi : l'exposé final, le grand quiz… et la fête !`)}
+    ${gcard('🎖️', 'Les badges',
+      `18 badges à débloquer (bouton en haut de l'écran) : assiduité, savoir, collection, créativité, curiosité, discipline. Trois sont rares et déclenchent une vraie célébration. Ils se débloquent tout seuls au fil de tes actions.`)}
+    ${gcard('💛', 'Le mot de la fin',
+      `Ce programme n'est pas une école bis : c'est TON été. Avance à ton rythme, creuse ce qui te passionne, saute ce qui t'ennuie un jour et reviens-y le lendemain. La seule vraie règle : rester curieux — et garder ton esprit critique allumé, même (surtout !) face à cette app.`)}
+  </div>`;
 }
 
 /* ---------- exposés ---------- */
@@ -184,8 +218,12 @@ async function renderDay(wi, di, ctx){
       <div class="theme-tag">${esc(d.dow)} ${esc(d.date)} · Semaine ${D.weeks[wi].num} · ${esc(d.theme)}</div>
       <h2>${d.emoji} ${esc(d.title)}</h2>
       <p style="font-size:14.5px;line-height:1.55;">${esc(d.summary)}</p>
+      ${d.detail?`<p style="font-size:14px;line-height:1.6;color:#444;">${esc(d.detail)}</p>`:''}
       <div class="ecrit-box"><b>✍️ Écriture :</b> ${esc(d.ecrit)}</div>
     </div>
+    ${d.etapes && d.etapes.length ? `<div class="card"><h3>🧭 Le déroulé du jour</h3>
+      <ol style="margin:6px 0 2px 20px;padding:0;">${d.etapes.map(e=>`<li style="font-size:14px;line-height:1.55;margin-bottom:8px;">${esc(e)}</li>`).join('')}</ol>
+    </div>` : ''}
     ${expoNoteHtml}
     ${renderCases(d.cases)}
     ${D.ia && D.ia[wi*6+di] ? `<div class="card"><h3>🤖 IA du jour</h3>
@@ -196,9 +234,11 @@ async function renderDay(wi, di, ctx){
       <div style="font-size:13px;font-weight:700;color:var(--accent2);margin-bottom:4px;">${esc(d.logique.titre)}</div>
       <p style="font-size:14px;line-height:1.55;">${esc(d.logique.texte)}</p>
     </div>` : ''}
-    <div class="card"><h3>🔗 À explorer</h3><div class="links">${d.links.map(l=>`<a href="${l.u}" target="_blank" rel="noopener">${esc(l.t)} ↗</a>`).join('')}</div></div>
-    <div class="card"><h3>👤 Personnalités du jour</h3>
-      <div style="font-size:13px;color:#888;">Choisis-en 2 ou 3 à découvrir aujourd'hui — clique pour ouvrir la fiche.</div>
+    <div class="card"><h3>🔗 À explorer</h3><div class="links">${d.links.map(l=> l.u && l.u.startsWith('tab:')
+      ? `<a href="javascript:void(0)" onclick="showTab('${l.u.slice(4)}')">${esc(l.t)} →</a>`
+      : `<a href="${l.u}" target="_blank" rel="noopener">${esc(l.t)} ↗</a>`).join('')}</div></div>
+    <div class="card"><h3>👤 Personnalités en lien avec aujourd'hui</h3>
+      <div style="font-size:13px;color:#888;">Des suggestions liées au thème du jour — mais c'est toi qui choisis : tu peux préférer n'importe quelle carte de l'onglet « Les 100 ».</div>
       <div style="font-size:12.5px;color:${remaining>0?'#888':'#c9636a'};margin:3px 0 6px;">${remaining>0?`Encore ${remaining} nouvelle${remaining>1?'s':''} carte${remaining>1?'s':''} à collectionner aujourd'hui.`:"Limite du jour atteinte — tu peux encore lire les fiches, la collection continuera demain."}</div>
       <div class="persos-chips">${d.persos.map(p=>`<button class="perso-chip" onclick="openPerson('${esc(p).replace(/'/g,"\\'")}')">${personEmoji(p)} ${esc(p)}</button>`).join('')}</div>
     </div>
@@ -239,6 +279,7 @@ async function openPerson(name){
     <div style="text-align:center;font-size:12.5px;color:#888;">${esc(p.meta)} · ${p.catEmoji} ${esc(p.cat)}</div>
     <p style="text-align:center;font-weight:700;color:var(--accent2);">« ${esc(p.tagline)} »</p>
     <p style="font-size:14px;line-height:1.5;">${esc(p.desc)}</p>
+    <div class="links"><a href="https://www.youtube.com/@QuelleHistoireParis/search?query=${encodeURIComponent(p.name)}" target="_blank" rel="noopener">🎥 Vidéo « Quelle Histoire » sur ${esc(p.name)} ↗</a></div>
     ${isNew && !capped?`<p style="text-align:center;color:#b06a1a;font-weight:700;">🎉 Nouvelle carte débloquée ! (${unlocked.size}/${D.persons.length})</p>`:''}
     ${capped?`<p style="text-align:center;color:#c9636a;font-weight:700;font-size:13px;">🔒 Tu as déjà choisi ${MAX_NEW_PERSONS_PER_DAY} cartes aujourd'hui — reviens demain pour collectionner celle-ci !</p>`:''}
     <div class="actions"><button class="btn" onclick="closeModal();if(tab==='les100')renderGallery();">Fermer</button></div>`);
@@ -249,14 +290,14 @@ function renderGallery(){
   const shown = D.persons.filter(p=>galFilter==='all'||p.cat===galFilter);
   $('#main').innerHTML = `
     <div class="card"><h3>🏆 Ta collection : ${unlocked.size} / ${D.persons.length}</h3>
-      <div style="font-size:13px;color:#888;">Découvre les personnalités dans les fiches du jour, ou clique sur une carte mystère pour la révéler.</div></div>
+      <div style="font-size:13px;color:#888;">C'est toi qui choisis ! Parcours la galerie, clique sur les personnalités qui t'intriguent — tu peux en ajouter ${MAX_NEW_PERSONS_PER_DAY} nouvelles par jour à ta collection (et tout relire à volonté).</div></div>
     <div class="gal-filter"><button class="${galFilter==='all'?'active':''}" onclick="galFilter='all';renderGallery()">Toutes</button>
       ${cats.map(c=>`<button class="${galFilter===c?'active':''}" onclick="galFilter='${esc(c).replace(/'/g,"\\'")}';renderGallery()">${esc(c)}</button>`).join('')}</div>
     <div class="gal-grid2">${shown.map(p=>{
       const un = unlocked.has(p.name);
       return un
         ? `<div class="pcard" onclick="openPerson('${esc(p.name).replace(/'/g,"\\'")}')"><div class="pe">${p.emoji}</div><div class="pn">${esc(p.name)}</div><div class="pt2">${esc(p.tagline)}</div></div>`
-        : `<div class="pcard locked" onclick="openPerson('${esc(p.name).replace(/'/g,"\\'")}')"><div class="pe">${p.catEmoji}</div><div class="pn">? ? ?</div><div class="pt2">${esc(p.cat)}</div></div>`;
+        : `<div class="pcard locked" onclick="openPerson('${esc(p.name).replace(/'/g,"\\'")}')"><div class="pe">${p.catEmoji}</div><div class="pn">${esc(p.name)}</div><div class="pt2">${esc(p.meta)}</div></div>`;
     }).join('')}</div>`;
 }
 
@@ -282,7 +323,8 @@ function quizTitle(id){ return id==='final' ? 'Grand quiz final' : (D.quizzes[id
 function startQuiz(id){
   let questions;
   if(id==='final'){
-    const all = Object.values(D.quizzes).flatMap(q=>q.questions);
+    // le grand final pioche dans les QCM hebdo (pas dans le quiz des capitales, qui a son propre match S1 vs S4)
+    const all = Object.entries(D.quizzes).filter(([qid])=>qid.startsWith('s')).flatMap(([,q])=>q.questions);
     questions = all.sort(()=>Math.random()-0.5).slice(0,20);
   } else { questions = D.quizzes[id].questions; }
   quizState = { id, questions, idx:0, score:0, t0:Date.now(), answered:false };
@@ -405,11 +447,20 @@ async function renderProjet(){
   const mine = P[child] || P.adam;
   const {data} = await db.from('adalix_projet').select('*').eq('child',child).maybeSingle();
   projetState = data || {child, idea:null, notes:'', phase:1};
-  const curPhase = currentWeek+1;
+  const t = todayInProgramme();
+  const stepIdx = t ? t.wi*6 + t.di : 23;
+  const curPhase = (t ? t.wi : 3) + 1;
+  const weekSteps = (P.steps||[]).slice((curPhase-1)*6, (curPhase-1)*6+6);
   $('#main').innerHTML = `<div class="narrow">
     <div class="card"><h3>💻 Ton projet du mois</h3>
       <div style="font-size:13.5px;color:#666;line-height:1.5;">${esc(P.intro)}</div>
+      ${P.rendu?`<div class="ecrit-box" style="margin-top:10px;">${esc(P.rendu)}</div>`:''}
     </div>
+    ${P.steps && P.steps[stepIdx] ? `<div class="card" style="border-left:4px solid #c98f2f;"><h3>🪜 L'étape du jour (jour ${stepIdx+1}/24)</h3>
+      <p style="font-size:14.5px;line-height:1.6;margin:4px 0;">${esc(P.steps[stepIdx])}</p>
+      <div style="font-size:12px;color:#888;margin-top:8px;">Les étapes de la semaine ${curPhase} :</div>
+      <ol style="margin:4px 0 0 20px;padding:0;" start="${(curPhase-1)*6+1}">${weekSteps.map((s,i)=>`<li style="font-size:12.5px;line-height:1.5;margin-bottom:4px;${(curPhase-1)*6+i===stepIdx?'font-weight:700;color:var(--accent2);':'color:#888;'}">${esc(s.split('.')[0])}.</li>`).join('')}</ol>
+    </div>` : ''}
     <div class="card"><h3>🗺️ Les 4 phases</h3>
       ${P.phases.map(ph=>`<div style="display:flex;gap:8px;align-items:baseline;padding:4px 0;${ph.semaine===curPhase?'font-weight:700;color:var(--accent2);':'color:#888;'}">
         <div>S${ph.semaine}</div><div style="font-size:13.5px;">${esc(ph.titre)}</div>${ph.semaine===curPhase?'<span style="font-size:12px;">← cette semaine</span>':''}
