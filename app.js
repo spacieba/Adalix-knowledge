@@ -85,6 +85,15 @@ function showTab(t){
   ({programme:renderProgramme, quiz:renderQuizList, les100:renderGallery, checklist:renderChecklist, projet:renderProjet, chat:renderChat, dashboard:renderDashboard}[t])();
 }
 
+/* ---------- exposés ---------- */
+const EXPOSES = [
+  {num:1, wi:0, di:4, label:'Exposé n°1', date:'ven 31/07'},
+  {num:2, wi:1, di:4, label:'Exposé n°2', date:'ven 07/08'},
+  {num:3, wi:2, di:4, label:'Exposé n°3', date:'ven 14/08'},
+  {num:4, wi:3, di:5, label:'Exposé final', date:'sam 22/08'},
+];
+function exposeNumFor(wi, di){ const e = EXPOSES.find(x=>x.wi===wi && x.di===di); return e ? e.num : null; }
+
 /* ---------- programme ---------- */
 function renderProgramme(){
   const w = D.weeks[currentWeek];
@@ -114,6 +123,18 @@ function renderCases(cases){
 async function renderDay(wi, di){
   const d = D.weeks[wi].days[di];
   const remaining = child==='parent' ? MAX_NEW_PERSONS_PER_DAY : Math.max(0, MAX_NEW_PERSONS_PER_DAY - await countUnlockedToday());
+  const expoNum = exposeNumFor(wi, di);
+  let expoNoteHtml = '';
+  if(expoNum && child!=='parent'){
+    const {data:en} = await db.from('adalix_expose_notes').select('*').eq('child',child).eq('expose_num',expoNum).maybeSingle();
+    if(en){
+      expoNoteHtml = `<div class="card" style="border-left:4px solid #c98f2f;">
+        <h3>⭐ L'avis du parent sur ton exposé</h3>
+        <div style="font-size:24px;letter-spacing:4px;color:#c98f2f;">${'★'.repeat(en.stars)}<span style="color:#ccd4e0;">${'★'.repeat(5-en.stars)}</span></div>
+        ${en.comment?`<p style="font-size:14px;line-height:1.55;">${esc(en.comment)}</p>`:''}
+      </div>`;
+    }
+  }
   $('#main').innerHTML = `
     <div class="narrow">
     <button class="back-btn" onclick="renderProgramme()">← Semaine ${D.weeks[wi].num}</button>
@@ -123,6 +144,7 @@ async function renderDay(wi, di){
       <p style="font-size:14.5px;line-height:1.55;">${esc(d.summary)}</p>
       <div class="ecrit-box"><b>✍️ Écriture :</b> ${esc(d.ecrit)}</div>
     </div>
+    ${expoNoteHtml}
     ${renderCases(d.cases)}
     ${d.logique ? `<div class="card"><h3>🧠 Logique & rhétorique du jour</h3>
       <div style="font-size:13px;font-weight:700;color:var(--accent2);margin-bottom:4px;">${esc(d.logique.titre)}</div>
@@ -590,7 +612,7 @@ function openBadges(){ modal(renderBadgesHTML()); }
 /* ---------- parent dashboard ---------- */
 async function renderDashboard(){
   $('#main').innerHTML = '<div class="card">Chargement…</div>';
-  const [scores, checks, persos, journal, chats, projets, assistants, badges] = await Promise.all([
+  const [scores, checks, persos, journal, chats, projets, assistants, badges, expoNotes] = await Promise.all([
     db.from('adalix_qcm_scores').select('*').order('created_at',{ascending:false}).limit(30),
     db.from('adalix_checklist').select('*').order('day',{ascending:false}).limit(60),
     db.from('adalix_personalities').select('*'),
@@ -599,8 +621,12 @@ async function renderDashboard(){
     db.from('adalix_projet').select('*'),
     db.from('adalix_assistant').select('*'),
     db.from('adalix_badges').select('*'),
+    db.from('adalix_expose_notes').select('*'),
   ]);
   const S = scores.data||[], C = checks.data||[], P = persos.data||[], J = journal.data||[], CH = chats.data||[], PR = projets.data||[], AS = assistants.data||[], BD = badges.data||[];
+  expoNotesCache = expoNotes.data||[];
+  expoStars = {};
+  expoNotesCache.forEach(r=>{ expoStars[r.child+'_'+r.expose_num] = r.stars; });
   const assistantOf = k => (AS.find(r=>r.child===k)||{}).name;
   const badgeCountOf = k => BD.filter(r=>r.child===k).length;
   const kids = ['adam','alix'];
@@ -617,6 +643,7 @@ async function renderDashboard(){
       </div>`).join('')}</div>
     <div class="card"><h3>🧠 Derniers quiz</h3><table class="ptable"><tr><th>Qui</th><th>Quiz</th><th>Score</th><th>Date</th></tr>
       ${S.slice(0,12).map(r=>`<tr><td>${kidName(r.child)}</td><td>${esc(quizTitle(r.quiz_id))}</td><td><b>${r.score}/${r.total}</b></td><td>${new Date(r.created_at).toLocaleDateString('fr-FR')}</td></tr>`).join('')||'<tr><td colspan=4 style="color:#999;">Aucun quiz encore</td></tr>'}</table></div>
+    ${renderExpoNotationCard()}
     <div class="card"><h3>💻 Leur projet du mois</h3>
       ${kids.map(k=>{
         const pr = PR.find(r=>r.child===k);
@@ -635,6 +662,55 @@ async function renderDashboard(){
   </div>`;
 }
 
+/* ---------- notation des exposés (parent) ---------- */
+let expoNotesCache = [];
+let expoStars = {};
+function expoNoteOf(k, num){ return expoNotesCache.find(r=>r.child===k && r.expose_num===num); }
+function expoStarsHtml(k, num){
+  const v = expoStars[k+'_'+num] || 0;
+  return [1,2,3,4,5].map(i=>`<span onclick="setExpoStar('${k}',${num},${i})" style="cursor:pointer;font-size:24px;color:${i<=v?'#c98f2f':'#ccd4e0'};">★</span>`).join('');
+}
+function setExpoStar(k, num, v){
+  expoStars[k+'_'+num] = v;
+  const el = $('#stars-'+k+'-'+num);
+  if(el) el.innerHTML = expoStarsHtml(k, num);
+}
+function renderExpoNotationCard(){
+  const kids = ['adam','alix'];
+  const kidName = k => k==='adam'?'🚀 Adam':'🎨 Alix';
+  return `<div class="card"><h3>🎤 Exposés — notation</h3>
+    <div style="font-size:12.5px;color:#888;margin-bottom:8px;">Note chaque exposé (1 à 5 étoiles) et laisse un petit mot — l'enfant verra ton avis sur la page du jour de son exposé.</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;">
+      ${kids.map(k=>`<div>
+        <div style="font-weight:800;color:var(--accent2);margin-bottom:6px;">${kidName(k)}</div>
+        ${EXPOSES.map(e=>{
+          const existing = expoNoteOf(k, e.num);
+          return `<div class="jentry">
+            <div class="jd">${e.label} · ${e.date}${existing?` · noté le ${new Date(existing.updated_at).toLocaleDateString('fr-FR')}`:''}</div>
+            <div id="stars-${k}-${e.num}">${expoStarsHtml(k, e.num)}</div>
+            <textarea id="cmt-${k}-${e.num}" rows="2" placeholder="Ton commentaire…">${esc(existing?existing.comment:'')}</textarea>
+            <button class="btn" style="font-size:12.5px;padding:7px 14px;" onclick="saveExpoNote('${k}',${e.num})">${existing?'Mettre à jour':'Enregistrer'}</button>
+          </div>`;
+        }).join('')}
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+async function saveExpoNote(k, num){
+  const stars = expoStars[k+'_'+num] || 0;
+  if(!stars){ toast("Choisis d'abord un nombre d'étoiles ⭐"); return; }
+  const cmtEl = $('#cmt-'+k+'-'+num);
+  const comment = cmtEl ? cmtEl.value.trim() : '';
+  const {error} = await db.from('adalix_expose_notes').upsert(
+    {child:k, expose_num:num, stars, comment, updated_at:new Date().toISOString()},
+    {onConflict:'child,expose_num'});
+  if(error){ toast('Erreur — réessaie'); return; }
+  const idx = expoNotesCache.findIndex(r=>r.child===k && r.expose_num===num);
+  const rec = {child:k, expose_num:num, stars, comment, updated_at:new Date().toISOString()};
+  if(idx>=0) expoNotesCache[idx] = rec; else expoNotesCache.push(rec);
+  toast('Note enregistrée ⭐');
+}
+
 /* ---------- administration ---------- */
 let adminScope = 'adam';
 const RESET_TABLES = [
@@ -646,6 +722,7 @@ const RESET_TABLES = [
   {key:'projet', table:'adalix_projet', label:'Projet du mois'},
   {key:'assistant', table:'adalix_assistant', label:'Nom de l\'assistant'},
   {key:'badges', table:'adalix_badges', label:'Badges débloqués'},
+  {key:'exposes', table:'adalix_expose_notes', label:'Notes des exposés'},
 ];
 function renderAdminPanel(){
   return `<div class="card" style="border-left:4px solid #c9636a;">
