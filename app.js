@@ -146,6 +146,10 @@ async function renderDay(wi, di){
     </div>
     ${expoNoteHtml}
     ${renderCases(d.cases)}
+    ${D.ia && D.ia[wi*6+di] ? `<div class="card"><h3>🤖 IA du jour</h3>
+      <div style="font-size:13px;font-weight:700;color:var(--accent2);margin-bottom:4px;">${esc(D.ia[wi*6+di].titre)}</div>
+      <p style="font-size:14px;line-height:1.55;">${esc(D.ia[wi*6+di].texte)}</p>
+    </div>` : ''}
     ${d.logique ? `<div class="card"><h3>🧠 Logique & rhétorique du jour</h3>
       <div style="font-size:13px;font-weight:700;color:var(--accent2);margin-bottom:4px;">${esc(d.logique.titre)}</div>
       <p style="font-size:14px;line-height:1.55;">${esc(d.logique.texte)}</p>
