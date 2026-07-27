@@ -224,6 +224,9 @@ async function renderDay(wi, di, ctx){
     ${d.etapes && d.etapes.length ? `<div class="card"><h3>🧭 Le déroulé du jour</h3>
       <ol style="margin:6px 0 2px 20px;padding:0;">${d.etapes.map(e=>`<li style="font-size:14px;line-height:1.55;margin-bottom:8px;">${esc(e)}</li>`).join('')}</ol>
     </div>` : ''}
+    ${d.outil ? `<div class="card"><h3>🛠️ L'outil de la semaine : ${esc(d.outil.nom)}</h3>
+      <p style="font-size:14px;line-height:1.6;">${esc(d.outil.texte)}</p>
+    </div>` : ''}
     ${expoNoteHtml}
     ${renderCases(d.cases)}
     ${D.ia && D.ia[wi*6+di] ? `<div class="card"><h3>🤖 IA du jour</h3>
