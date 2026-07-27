@@ -95,15 +95,44 @@ const EXPOSES = [
 function exposeNumFor(wi, di){ const e = EXPOSES.find(x=>x.wi===wi && x.di===di); return e ? e.num : null; }
 
 /* ---------- programme ---------- */
-function renderProgramme(){
+function dayDate(d){ const [dd,mm] = d.date.split('/').map(Number); return new Date(2026, mm-1, dd); }
+// Trouve le jour du programme correspondant à aujourd'hui.
+// Retourne {wi, di, banner} ou null (programme terminé → vue d'ensemble).
+function todayInProgramme(){
+  const now = new Date(); now.setHours(0,0,0,0);
+  let exact = null, next = null, last = null;
+  D.weeks.forEach((w,wi)=>w.days.forEach((d,di)=>{
+    const t = dayDate(d).getTime();
+    last = {wi, di, t};
+    if(t === now.getTime()) exact = {wi, di};
+    if(!next && t > now.getTime()) next = {wi, di, t};
+  }));
+  if(exact) return {...exact, today:true, banner:null};
+  if(next){
+    const isBefore = dayDate(D.weeks[0].days[0]).getTime() > now.getTime();
+    return {...next, today:false, banner: isBefore
+      ? "🌞 Le programme commence bientôt — le voici en avant-première !"
+      : "😴 Aujourd'hui c'est dimanche, repos ! Voici ce qui t'attend demain."};
+  }
+  return null; // programme terminé
+}
+function renderProgramme(overview){
+  if(!overview){
+    const t = todayInProgramme();
+    if(t){ currentWeek = t.wi; renderDay(t.wi, t.di, t); return; }
+  }
+  const t = todayInProgramme();
   const w = D.weeks[currentWeek];
   $('#main').innerHTML = `
-    <div class="week-pills">${D.weeks.map((wk,i)=>`<button class="${i===currentWeek?'active':''}" onclick="currentWeek=${i};renderProgramme()">S${wk.num}</button>`).join('')}</div>
+    ${t ? `<div style="margin-bottom:12px;"><button class="btn" onclick="renderProgramme()">📍 Revenir à aujourd'hui</button></div>` : ''}
+    <div class="week-pills">${D.weeks.map((wk,i)=>`<button class="${i===currentWeek?'active':''}" onclick="currentWeek=${i};renderProgramme(true)">S${wk.num}</button>`).join('')}</div>
     <div class="card"><h3>Semaine ${w.num} — ${esc(w.title)}</h3><div style="font-size:13px;color:#888;">${esc(w.dates)}</div></div>
-    <div class="day-list">${w.days.map((d,i)=>`<div class="day-item" onclick="renderDay(${currentWeek},${i})">
+    <div class="day-list">${w.days.map((d,i)=>{
+      const isToday = t && t.today && t.wi===currentWeek && t.di===i;
+      return `<div class="day-item" style="${isToday?'border-left-color:#c98f2f;background:#fdf6ec;':''}" onclick="renderDay(${currentWeek},${i})">
       <div class="emoji">${d.emoji}</div>
-      <div><div class="di-title">${esc(d.title)}</div><div class="di-sub">${esc(d.dow)} ${esc(d.date)} · ${esc(d.theme)}</div></div>
-    </div>`).join('')}</div>`;
+      <div><div class="di-title">${esc(d.title)}${isToday?' <span style="font-size:11px;background:#c98f2f;color:white;border-radius:10px;padding:2px 8px;vertical-align:middle;">📍 AUJOURD’HUI</span>':''}</div><div class="di-sub">${esc(d.dow)} ${esc(d.date)} · ${esc(d.theme)}</div></div>
+    </div>`;}).join('')}</div>`;
 }
 function renderCases(cases){
   if(!cases || !cases.length) return '';
@@ -120,8 +149,17 @@ function renderCases(cases){
       <p style="font-size:13.5px;line-height:1.5;color:#555;margin-top:6px;"><b>Pourquoi ça marche quand même ?</b> ${esc(c.psycho)}</p>
     </div>`).join('');
 }
-async function renderDay(wi, di){
+async function renderDay(wi, di, ctx){
   const d = D.weeks[wi].days[di];
+  const idx = wi*6 + di;
+  const prev = idx > 0 ? {wi: Math.floor((idx-1)/6), di: (idx-1)%6} : null;
+  const next = idx < 23 ? {wi: Math.floor((idx+1)/6), di: (idx+1)%6} : null;
+  const pd = prev ? D.weeks[prev.wi].days[prev.di] : null;
+  const nd = next ? D.weeks[next.wi].days[next.di] : null;
+  const dayNav = `<div style="display:flex;gap:10px;justify-content:space-between;margin:14px 0 4px;">
+    ${pd?`<button class="btn ghost" style="font-size:12.5px;" onclick="renderDay(${prev.wi},${prev.di})">◀ ${esc(pd.dow)} ${esc(pd.date)}</button>`:'<span></span>'}
+    ${nd?`<button class="btn ghost" style="font-size:12.5px;" onclick="renderDay(${next.wi},${next.di})">${esc(nd.dow)} ${esc(nd.date)} ▶</button>`:'<span></span>'}
+  </div>`;
   const remaining = child==='parent' ? MAX_NEW_PERSONS_PER_DAY : Math.max(0, MAX_NEW_PERSONS_PER_DAY - await countUnlockedToday());
   const expoNum = exposeNumFor(wi, di);
   let expoNoteHtml = '';
@@ -137,9 +175,13 @@ async function renderDay(wi, di){
   }
   $('#main').innerHTML = `
     <div class="narrow">
-    <button class="back-btn" onclick="renderProgramme()">← Semaine ${D.weeks[wi].num}</button>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      ${ctx && ctx.today ? `<div style="font-weight:800;color:var(--accent2);font-size:15px;">📍 Aujourd'hui</div>` : `<button class="back-btn" style="margin:0;" onclick="renderProgramme()">📍 Aujourd'hui</button>`}
+      <button class="back-btn" style="margin:0;" onclick="currentWeek=${wi};renderProgramme(true)">📅 Tout le programme</button>
+    </div>
+    ${ctx && ctx.banner ? `<div class="card" style="border-left:4px solid #c98f2f;background:#fdf6ec;"><div style="font-size:14px;">${esc(ctx.banner)}</div></div>` : ''}
     <div class="card day-detail">
-      <div class="theme-tag">${esc(d.dow)} ${esc(d.date)} · ${esc(d.theme)}</div>
+      <div class="theme-tag">${esc(d.dow)} ${esc(d.date)} · Semaine ${D.weeks[wi].num} · ${esc(d.theme)}</div>
       <h2>${d.emoji} ${esc(d.title)}</h2>
       <p style="font-size:14.5px;line-height:1.55;">${esc(d.summary)}</p>
       <div class="ecrit-box"><b>✍️ Écriture :</b> ${esc(d.ecrit)}</div>
@@ -160,6 +202,7 @@ async function renderDay(wi, di){
       <div style="font-size:12.5px;color:${remaining>0?'#888':'#c9636a'};margin:3px 0 6px;">${remaining>0?`Encore ${remaining} nouvelle${remaining>1?'s':''} carte${remaining>1?'s':''} à collectionner aujourd'hui.`:"Limite du jour atteinte — tu peux encore lire les fiches, la collection continuera demain."}</div>
       <div class="persos-chips">${d.persos.map(p=>`<button class="perso-chip" onclick="openPerson('${esc(p).replace(/'/g,"\\'")}')">${personEmoji(p)} ${esc(p)}</button>`).join('')}</div>
     </div>
+    ${dayNav}
     </div>`;
 }
 
