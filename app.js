@@ -27,7 +27,7 @@ function selectProfile(c){
   document.body.className = 'theme-' + c;
   $('#screen-profile').classList.add('hidden');
   $('#screen-app').classList.remove('hidden');
-  $('#hdr-who').textContent = c === 'adam' ? '🚀 Adam' : '🎨 Alix';
+  $('#hdr-who').textContent = c === 'adam' ? '🐉 Adam' : '🦊 Alix';
   localStorage.setItem('adalix_child', c);
   buildNav(['programme','quiz','les100','checklist','projet','chat']);
   assistantName = null;
@@ -65,8 +65,14 @@ const TABS = {
   projet:{icon:'💻',label:'Mon projet'},
   chat:{icon:'💬',label:'Questions'}, dashboard:{icon:'📊',label:'Tableau de bord'},
 };
+// icônes réhabillées selon le profil — mêmes intitulés, juste l'esprit visuel qui change
+const THEME_ICONS = {
+  adam: {programme:'🗺️', quiz:'🐲', les100:'🏆', checklist:'📜', projet:'⚒️', chat:'🔮'},
+  alix: {programme:'🌿', quiz:'🦊', les100:'🦋', checklist:'🐣', projet:'🎨', chat:'🐰'},
+};
+function tabIcon(t){ return (THEME_ICONS[child] && THEME_ICONS[child][t]) || TABS[t].icon; }
 function buildNav(tabs){
-  $('#navbar').innerHTML = tabs.map(t=>`<button id="nav-${t}" onclick="showTab('${t}')">${TABS[t].icon} ${TABS[t].label}</button>`).join('');
+  $('#navbar').innerHTML = tabs.map(t=>`<button id="nav-${t}" onclick="showTab('${t}')">${tabIcon(t)} ${TABS[t].label}</button>`).join('');
 }
 function showTab(t){
   tab = t;
