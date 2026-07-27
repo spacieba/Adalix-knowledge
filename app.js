@@ -10,6 +10,8 @@ let tab = 'programme';
 let unlocked = new Set();  // person names
 let chatMsgs = [];         // {role, content}
 let currentWeek = 0;
+let assistantName = null;
+const MAX_NEW_PERSONS_PER_DAY = 3;
 
 /* ---------- utils ---------- */
 const $ = sel => document.querySelector(sel);
@@ -28,8 +30,13 @@ function selectProfile(c){
   $('#hdr-who').textContent = c === 'adam' ? '🚀 Adam' : '🎨 Alix';
   localStorage.setItem('adalix_child', c);
   buildNav(['programme','quiz','les100','checklist','projet','chat']);
-  loadUnlocked(); refreshStreak();
+  assistantName = null;
+  loadUnlocked(); refreshStreak(); loadAssistantName();
   showTab('programme');
+}
+async function loadAssistantName(){
+  const {data} = await db.from('adalix_assistant').select('name').eq('child',child).maybeSingle();
+  assistantName = (data && data.name) || null;
 }
 function askParentPin(){
   modal(`<h3>Espace parent</h3><p style="font-size:14px;">Code d'accès :</p>
@@ -77,11 +84,7 @@ function renderProgramme(){
     ${w.days.map((d,i)=>`<div class="day-item" onclick="renderDay(${currentWeek},${i})">
       <div class="emoji">${d.emoji}</div>
       <div><div class="di-title">${esc(d.title)}</div><div class="di-sub">${esc(d.dow)} ${esc(d.date)} · ${esc(d.theme)}</div></div>
-    </div>`).join('')}
-    ${w.rhetorique ? `<div class="card"><h3>🎤 Rhétorique — Marche ${w.rhetorique.marche} : ${esc(w.rhetorique.titre)}</h3>
-      <p style="font-size:14px;line-height:1.55;">${esc(w.rhetorique.texte)}</p>
-      <div class="ecrit-box"><b>🏋️ Exercice :</b> ${esc(w.rhetorique.exercice)}</div>
-    </div>` : ''}`;
+    </div>`).join('')}`;
 }
 function renderCases(cases){
   if(!cases || !cases.length) return '';
@@ -98,8 +101,9 @@ function renderCases(cases){
       <p style="font-size:13.5px;line-height:1.5;color:#555;margin-top:6px;"><b>Pourquoi ça marche quand même ?</b> ${esc(c.psycho)}</p>
     </div>`).join('');
 }
-function renderDay(wi, di){
+async function renderDay(wi, di){
   const d = D.weeks[wi].days[di];
+  const remaining = child==='parent' ? MAX_NEW_PERSONS_PER_DAY : Math.max(0, MAX_NEW_PERSONS_PER_DAY - await countUnlockedToday());
   $('#main').innerHTML = `
     <button class="back-btn" onclick="renderProgramme()">← Semaine ${D.weeks[wi].num}</button>
     <div class="card day-detail">
@@ -109,9 +113,14 @@ function renderDay(wi, di){
       <div class="ecrit-box"><b>✍️ Écriture :</b> ${esc(d.ecrit)}</div>
     </div>
     ${renderCases(d.cases)}
+    ${d.logique ? `<div class="card"><h3>🧠 Logique & rhétorique du jour</h3>
+      <div style="font-size:13px;font-weight:700;color:var(--accent2);margin-bottom:4px;">${esc(d.logique.titre)}</div>
+      <p style="font-size:14px;line-height:1.55;">${esc(d.logique.texte)}</p>
+    </div>` : ''}
     <div class="card"><h3>🔗 À explorer</h3><div class="links">${d.links.map(l=>`<a href="${l.u}" target="_blank" rel="noopener">${esc(l.t)} ↗</a>`).join('')}</div></div>
     <div class="card"><h3>👤 Personnalités du jour</h3>
-      <div style="font-size:13px;color:#888;">Clique pour découvrir — et les débloquer dans ta collection !</div>
+      <div style="font-size:13px;color:#888;">Choisis-en 2 ou 3 à découvrir aujourd'hui — clique pour ouvrir la fiche.</div>
+      <div style="font-size:12.5px;color:${remaining>0?'#888':'#c9636a'};margin:3px 0 6px;">${remaining>0?`Encore ${remaining} nouvelle${remaining>1?'s':''} carte${remaining>1?'s':''} à collectionner aujourd'hui.`:"Limite du jour atteinte — tu peux encore lire les fiches, la collection continuera demain."}</div>
       <div class="persos-chips">${d.persos.map(p=>`<button class="perso-chip" onclick="openPerson('${esc(p).replace(/'/g,"\\'")}')">${personEmoji(p)} ${esc(p)}</button>`).join('')}</div>
     </div>`;
 }
@@ -124,20 +133,33 @@ async function loadUnlocked(){
   const {data} = await db.from('adalix_personalities').select('person').eq('child', child);
   unlocked = new Set((data||[]).map(r=>r.person));
 }
+async function countUnlockedToday(){
+  if(child==='parent') return 0;
+  const start = new Date(); start.setHours(0,0,0,0);
+  const {data} = await db.from('adalix_personalities').select('created_at').eq('child',child).gte('created_at', start.toISOString());
+  return (data||[]).length;
+}
 async function openPerson(name){
   const p = findPerson(name);
   if(!p){ toast('Fiche à venir !'); return; }
   const isNew = !unlocked.has(name);
+  let capped = false;
   if(isNew && child!=='parent'){
-    unlocked.add(name);
-    db.from('adalix_personalities').insert({child, person:name}).then(()=>{});
+    const todayCount = await countUnlockedToday();
+    if(todayCount >= MAX_NEW_PERSONS_PER_DAY){
+      capped = true;
+    } else {
+      unlocked.add(name);
+      db.from('adalix_personalities').insert({child, person:name}).then(()=>{});
+    }
   }
   modal(`<div style="text-align:center;font-size:46px;">${p.emoji}</div>
     <h3 style="text-align:center;">${esc(p.name)}</h3>
     <div style="text-align:center;font-size:12.5px;color:#888;">${esc(p.meta)} · ${p.catEmoji} ${esc(p.cat)}</div>
     <p style="text-align:center;font-weight:700;color:var(--accent2);">« ${esc(p.tagline)} »</p>
     <p style="font-size:14px;line-height:1.5;">${esc(p.desc)}</p>
-    ${isNew?`<p style="text-align:center;color:#b06a1a;font-weight:700;">🎉 Nouvelle carte débloquée ! (${unlocked.size}/${D.persons.length})</p>`:''}
+    ${isNew && !capped?`<p style="text-align:center;color:#b06a1a;font-weight:700;">🎉 Nouvelle carte débloquée ! (${unlocked.size}/${D.persons.length})</p>`:''}
+    ${capped?`<p style="text-align:center;color:#c9636a;font-weight:700;font-size:13px;">🔒 Tu as déjà choisi ${MAX_NEW_PERSONS_PER_DAY} cartes aujourd'hui — reviens demain pour collectionner celle-ci !</p>`:''}
     <div class="actions"><button class="btn" onclick="closeModal();if(tab==='les100')renderGallery();">Fermer</button></div>`);
 }
 let galFilter = 'all';
@@ -341,17 +363,38 @@ async function markChecklistItemDone(id){
 
 /* ---------- chat ---------- */
 function renderChat(){
+  if(!assistantName){ askAssistantName(); return; }
   $('#main').innerHTML = `
-    <div class="card"><h3>💬 Pose toutes tes questions</h3>
-      <div style="font-size:13px;color:#888;">Je suis Claude, ton assistant du Grand Été. Histoire, sciences, économie, mots compliqués… demande-moi tout !</div>
+    <div class="card"><h3>💬 Pose toutes tes questions à ${esc(assistantName)}</h3>
+      <div style="font-size:13px;color:#888;">Je suis ${esc(assistantName)}, ton assistant du Grand Été. Histoire, sciences, économie, mots compliqués… demande-moi tout !</div>
       <div id="chat-box"></div>
       <div class="chat-input">
         <input type="text" id="chat-in" placeholder="Ta question…" onkeydown="if(event.key==='Enter')sendChat()">
         <button class="btn" onclick="sendChat()">➤</button>
       </div>
-      <div style="margin-top:10px;"><button class="btn ghost" onclick="openImagine()">🎨 Atelier d'images</button></div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn ghost" onclick="openImagine()">🎨 Atelier d'images</button>
+        <button class="btn ghost" onclick="askAssistantName()">✏️ Renommer ${esc(assistantName)}</button>
+      </div>
     </div>`;
   drawChat();
+}
+function askAssistantName(){
+  const first = !assistantName;
+  modal(`<h3>🤖 ${first?'Baptise ton assistant !':'Renomme ton assistant'}</h3>
+    <p style="font-size:13.5px;color:#666;">${first?"C'est lui qui répondra à toutes tes questions ce mois-ci — donne-lui un nom !":"Choisis un nouveau nom :"}</p>
+    <input type="text" id="assistant-name-input" placeholder="Ex : Nova, Sam, Merlin…" maxlength="20" value="${esc(assistantName||'')}">
+    <div class="actions"><button class="btn" onclick="saveAssistantName()">${first?"C'est parti !":'Enregistrer'}</button>${first?'':'<button class="btn ghost" onclick="closeModal()">Annuler</button>'}</div>`);
+  setTimeout(()=>{ const el=$('#assistant-name-input'); if(el) el.focus(); },50);
+}
+async function saveAssistantName(){
+  const el = $('#assistant-name-input');
+  const name = el ? el.value.trim() : '';
+  if(!name){ toast('Donne-lui un nom !'); return; }
+  assistantName = name;
+  await db.from('adalix_assistant').upsert({child, name});
+  closeModal();
+  if(tab==='chat') renderChat();
 }
 function drawChat(){
   const box = $('#chat-box'); if(!box) return;
@@ -365,7 +408,7 @@ async function sendChat(){
   chatMsgs.push({role:'assistant', content:'…'}); drawChat();
   try {
     const r = await fetch('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({child, messages: chatMsgs.slice(0,-1).slice(-12)})});
+      body: JSON.stringify({child, assistantName, messages: chatMsgs.slice(0,-1).slice(-12)})});
     const j = await r.json();
     chatMsgs[chatMsgs.length-1] = {role:'assistant', content: j.reply || j.error || 'Oups, réessaie !'};
     db.from('adalix_chat').insert({child, role:'assistant', content: chatMsgs[chatMsgs.length-1].content}).then(()=>{});
@@ -395,15 +438,17 @@ async function genImage(){
 /* ---------- parent dashboard ---------- */
 async function renderDashboard(){
   $('#main').innerHTML = '<div class="card">Chargement…</div>';
-  const [scores, checks, persos, journal, chats, projets] = await Promise.all([
+  const [scores, checks, persos, journal, chats, projets, assistants] = await Promise.all([
     db.from('adalix_qcm_scores').select('*').order('created_at',{ascending:false}).limit(30),
     db.from('adalix_checklist').select('*').order('day',{ascending:false}).limit(60),
     db.from('adalix_personalities').select('*'),
     db.from('adalix_journal').select('*').order('created_at',{ascending:false}).limit(30),
     db.from('adalix_chat').select('*').order('created_at',{ascending:false}).limit(60),
     db.from('adalix_projet').select('*'),
+    db.from('adalix_assistant').select('*'),
   ]);
-  const S = scores.data||[], C = checks.data||[], P = persos.data||[], J = journal.data||[], CH = chats.data||[], PR = projets.data||[];
+  const S = scores.data||[], C = checks.data||[], P = persos.data||[], J = journal.data||[], CH = chats.data||[], PR = projets.data||[], AS = assistants.data||[];
+  const assistantOf = k => (AS.find(r=>r.child===k)||{}).name;
   const kids = ['adam','alix'];
   const kidName = k => k==='adam'?'🚀 Adam':'🎨 Alix';
   const streakOf = k => {
@@ -429,8 +474,59 @@ async function renderDashboard(){
     <div class="card"><h3>✍️ Leurs réalisations — journal du soir</h3>
       ${J.map(r=>`<div class="jentry"><div class="jd">${kidName(r.child)} · ${new Date(r.created_at).toLocaleDateString('fr-FR')}</div>
         ${r.learned?`<div><b>Appris :</b> ${esc(r.learned)}</div>`:''}${r.surprised?`<div><b>Étonné :</b> ${esc(r.surprised)}</div>`:''}</div>`).join('')||'<span style="color:#999;font-size:13px;">Rien pour l\'instant</span>'}</div>
-    <div class="card"><h3>💬 Leurs conversations avec Claude</h3>
-      ${CH.slice(0,30).reverse().map(r=>`<div style="font-size:13px;padding:4px 0;border-bottom:1px solid #f0f2f6;"><b>${kidName(r.child)}${r.role==='assistant'?' ← Claude':''} :</b> ${esc(r.content.slice(0,180))}${r.content.length>180?'…':''}</div>`).join('')||'<span style="color:#999;font-size:13px;">Aucune conversation encore</span>'}</div>`;
+    <div class="card"><h3>💬 Leurs conversations</h3>
+      <div style="font-size:12px;color:#888;margin-bottom:4px;">${kids.map(k=>`${kidName(k)} a baptisé son assistant : <b>${esc(assistantOf(k)||'pas encore choisi')}</b>`).join(' · ')}</div>
+      ${CH.slice(0,30).reverse().map(r=>`<div style="font-size:13px;padding:4px 0;border-bottom:1px solid #f0f2f6;"><b>${kidName(r.child)}${r.role==='assistant'?` ← ${esc(assistantOf(r.child)||'assistant')}`:''} :</b> ${esc(r.content.slice(0,180))}${r.content.length>180?'…':''}</div>`).join('')||'<span style="color:#999;font-size:13px;">Aucune conversation encore</span>'}</div>
+    ${renderAdminPanel()}`;
+}
+
+/* ---------- administration ---------- */
+let adminScope = 'adam';
+const RESET_TABLES = [
+  {key:'checklist', table:'adalix_checklist', label:'Checklist quotidienne'},
+  {key:'quiz', table:'adalix_qcm_scores', label:'Scores de quiz'},
+  {key:'personnalites', table:'adalix_personalities', label:'Galerie de personnalités'},
+  {key:'journal', table:'adalix_journal', label:'Journal du soir'},
+  {key:'chat', table:'adalix_chat', label:'Conversations avec l\'assistant'},
+  {key:'projet', table:'adalix_projet', label:'Projet du mois'},
+  {key:'assistant', table:'adalix_assistant', label:'Nom de l\'assistant'},
+];
+function renderAdminPanel(){
+  return `<div class="card" style="border-left:4px solid #c9636a;">
+    <h3>⚙️ Administration</h3>
+    <p style="font-size:12.5px;color:#888;">Réinitialise tout ou partie des données. Ces actions sont irréversibles.</p>
+    <div style="margin:8px 0;">
+      <label style="font-size:13px;font-weight:700;">Enfant concerné : </label>
+      <select id="admin-scope" onchange="adminScope=this.value" style="padding:6px;border-radius:8px;border:1.5px solid #ccd4e0;">
+        <option value="adam" ${adminScope==='adam'?'selected':''}>🚀 Adam</option>
+        <option value="alix" ${adminScope==='alix'?'selected':''}>🎨 Alix</option>
+        <option value="all" ${adminScope==='all'?'selected':''}>Les deux</option>
+      </select>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;">
+      ${RESET_TABLES.map(t=>`<button class="btn ghost" style="font-size:12.5px;" onclick="confirmReset('${t.key}','${esc(t.label).replace(/'/g,"\\'")}')">↺ ${esc(t.label)}</button>`).join('')}
+    </div>
+    <div class="actions" style="margin-top:12px;">
+      <button class="btn" style="background:#c9636a;" onclick="confirmReset('all','TOUT (toutes les données)')">⚠️ Tout réinitialiser</button>
+    </div>
+  </div>`;
+}
+function confirmReset(key, label){
+  const scopeLabel = adminScope==='all' ? 'Adam ET Alix' : (adminScope==='adam'?'Adam':'Alix');
+  modal(`<h3>⚠️ Confirmer la réinitialisation</h3>
+    <p style="font-size:14px;">Tu vas réinitialiser <b>${esc(label)}</b> pour <b>${scopeLabel}</b>. Cette action est irréversible.</p>
+    <div class="actions"><button class="btn" style="background:#c9636a;" onclick="doReset('${key}')">Confirmer</button><button class="btn ghost" onclick="closeModal()">Annuler</button></div>`);
+}
+async function doReset(key){
+  closeModal();
+  const targets = key==='all' ? RESET_TABLES : RESET_TABLES.filter(t=>t.key===key);
+  for(const t of targets){
+    let q = db.from(t.table).delete();
+    q = adminScope==='all' ? q.neq('child','__all__') : q.eq('child', adminScope);
+    await q;
+  }
+  toast('Réinitialisé ✅');
+  renderDashboard();
 }
 
 /* ---------- boot ---------- */

@@ -1,14 +1,16 @@
 // /api/chat — proxy vers l'API Anthropic (Claude), avec garde-fous enfants
-const SYSTEM = `Tu es "Claude du Grand Été", l'assistant pédagogique d'Adam (13 ans) et d'Alix (11 ans) pendant leur programme d'été.
+function buildSystem(name){
+  return `Tu t'appelles "${name}" — c'est le nom que l'enfant t'a choisi lui-même. Tu es l'assistant pédagogique d'Adam (13 ans) et d'Alix (11 ans) pendant leur programme d'été, "Le Grand Été". Réponds aux questions sur ton identité en utilisant ce nom naturellement.
 
 Règles :
 - Réponds TOUJOURS en français, avec un ton chaleureux, enthousiaste et adapté à l'âge de l'enfant (Adam 13 ans : tu peux aller plus loin ; Alix 11 ans : plus simple et imagé).
 - Réponses courtes et claires (3-8 phrases en général), avec un exemple concret quand c'est utile.
-- Tu connais leur programme : géographie, "Qui écrit l'histoire ?" (César/Gaulois, conquête de l'Amérique, Howard Zinn), économie (Smith, Marx, Keynes, Ricardo, bourse, obligations, dette), géopolitique (ONU, Moyen-Orient), esprit critique (complot lunaire, sophismes, fact-checking, logique), rhétorique, maths curieuses (nombre d'or, Fibonacci, fractales), et les 100 personnalités inspirantes.
+- Tu connais leur programme : géographie, "Qui écrit l'histoire ?" (César/Gaulois, conquête de l'Amérique, Howard Zinn — Noirs américains et Amérindiens), économie (Smith, Marx, Keynes, Ricardo, bourse, obligations, dette, Bretton Woods et le dollar), géopolitique (ONU, Moyen-Orient), esprit critique (complot lunaire, terre plate, chemtrails, 11-Septembre, sophismes, fact-checking), logique et rhétorique (fil rouge quotidien), maths curieuses (nombre d'or, Fibonacci, fractales), et les personnalités inspirantes à collectionner.
 - Encourage-les à raisonner : parfois, retourne la question ("et toi, qu'en penses-tu ?") avant de donner la réponse.
-- Sur les sujets sensibles (guerres actuelles, religion), reste factuel, équilibré, présente les différents points de vue et conseille d'en parler avec leurs parents.
+- Sur les sujets sensibles (guerres actuelles, religion, 11-Septembre), reste factuel, équilibré, présente les différents points de vue et conseille d'en parler avec leurs parents.
 - Refuse gentiment tout contenu inapproprié pour des enfants et recentre sur le programme.
 - Jamais de réponse aux devoirs "à leur place" : guide-les.`;
+}
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return; }
@@ -18,7 +20,8 @@ module.exports = async (req, res) => {
     return;
   }
   try {
-    const { child, messages } = req.body || {};
+    const { child, messages, assistantName } = req.body || {};
+    const name = (assistantName || 'ton assistant').toString().slice(0, 30) || 'ton assistant';
     const clean = (messages || [])
       .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
       .slice(-12)
@@ -36,7 +39,7 @@ module.exports = async (req, res) => {
       body: JSON.stringify({
         model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5',
         max_tokens: 700,
-        system: SYSTEM + `\n\nL'enfant connecté est : ${child === 'alix' ? 'Alix, 11 ans' : 'Adam, 13 ans'}.`,
+        system: buildSystem(name) + `\n\nL'enfant connecté est : ${child === 'alix' ? 'Alix, 11 ans' : 'Adam, 13 ans'}.`,
         messages: clean,
       }),
     });
