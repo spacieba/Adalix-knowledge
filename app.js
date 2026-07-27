@@ -111,7 +111,7 @@ function renderGuide(){
     ${gcard('💬', "L'onglet Questions",
       `Ton assistant IA personnel — c'est toi qui l'as baptisé ! Pose-lui TOUTES tes questions : un mot compliqué, un point d'histoire, une idée d'exposé. Règle d'or (tu la verras dans le fil IA) : utilise-le pour <b>comprendre plus</b>, jamais pour réfléchir à ta place. Il y a aussi l'atelier d'images pour illustrer tes projets et exposés.`)}
     ${gcard('🎤', "Les exposés du vendredi",
-      `Chaque vendredi, 5 à 10 minutes devant la famille, avec un support créé avec les outils de la semaine. La règle du jeu : le thème est <b>au choix, mais connexe à quelque chose vu dans la semaine</b> — et tu <b>brainstormes d'abord tes idées avec ton assistant</b> avant de choisir. La recette apprise en rhétorique : une <b>accroche</b>, <b>3 idées</b>, une <b>chute</b>. Après ton passage, papa note ton exposé (étoiles + commentaire) — tu verras son avis apparaître sur la page du jour. Le dernier samedi : l'exposé final, le grand quiz… et la fête !`)}
+      `Chaque vendredi, 5 à 10 minutes devant la famille, avec un support créé avec les outils de la semaine. La règle du jeu : le thème est <b>au choix, mais connexe à quelque chose vu dans la semaine</b> — et tu <b>brainstormes d'abord tes idées avec ton assistant</b> avant de choisir. Un outil différent chaque semaine, avec son mode d'emploi sur la page du vendredi : <b>Gamma</b> (S1), <b>Claude</b> (S2), <b>Canva</b> (S3), <b>PowerPoint et son IA</b> (S4). La recette apprise en rhétorique : une <b>accroche</b>, <b>3 idées</b>, une <b>chute</b>. Après ton passage, papa note ton exposé (étoiles + commentaire) — tu verras son avis apparaître sur la page du jour. Le dernier samedi : l'exposé final, le grand quiz… et la fête !`)}
     ${gcard('🎖️', 'Les badges',
       `18 badges à débloquer (bouton en haut de l'écran) : assiduité, savoir, collection, créativité, curiosité, discipline. Trois sont rares et déclenchent une vraie célébration. Ils se débloquent tout seuls au fil de tes actions.`)}
     ${gcard('💛', 'Le mot de la fin',
@@ -514,8 +514,11 @@ function renderChat(){
     <div class="card"><h3>💬 Pose toutes tes questions à ${esc(assistantName)}</h3>
       <div style="font-size:13px;color:#888;">Je suis ${esc(assistantName)}, ton assistant du Grand Été. Histoire, sciences, économie, mots compliqués… demande-moi tout !</div>
       <div id="chat-box"></div>
+      <div id="chat-img-preview"></div>
       <div class="chat-input">
-        <input type="text" id="chat-in" placeholder="Ta question…" onkeydown="if(event.key==='Enter')sendChat()">
+        <button class="btn ghost" style="padding:10px 12px;" title="Envoyer une image ou une capture d'écran" onclick="document.getElementById('chat-file').click()">🖼️</button>
+        <input type="file" id="chat-file" accept="image/*" style="display:none;" onchange="if(this.files[0])handleChatFile(this.files[0]);this.value='';">
+        <input type="text" id="chat-in" placeholder="Ta question… (tu peux aussi coller une image !)" onkeydown="if(event.key==='Enter')sendChat()" onpaste="handleChatPaste(event)">
         <button class="btn" onclick="sendChat()">➤</button>
       </div>
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
@@ -545,17 +548,63 @@ async function saveAssistantName(){
 }
 function drawChat(){
   const box = $('#chat-box'); if(!box) return;
-  box.innerHTML = chatMsgs.map(m=>`<div class="msg ${m.role==='user'?'user':'bot'}">${esc(m.content)}</div>`).join('') || '<div style="color:#999;font-size:13px;text-align:center;margin-top:30px;">Aucun message — pose ta première question !</div>';
+  box.innerHTML = chatMsgs.map(m=>`<div class="msg ${m.role==='user'?'user':'bot'}">${m.dataUrl?`<img src="${m.dataUrl}" style="max-width:100%;border-radius:10px;display:block;margin-bottom:${m.content?'6px':'0'};">`:''}${esc(m.content)}</div>`).join('') || '<div style="color:#999;font-size:13px;text-align:center;margin-top:30px;">Aucun message — pose ta première question ! Tu peux aussi m\'envoyer une image ou une capture d\'écran. 🖼️</div>';
   box.scrollTop = box.scrollHeight;
 }
+/* ---- images dans le chat (les "yeux" de l'assistant) ---- */
+let pendingImage = null;   // {media_type, data, dataUrl}
+function handleChatPaste(ev){
+  const items = (ev.clipboardData || {}).items || [];
+  for(const it of items){
+    if(it.type && it.type.startsWith('image/')){
+      ev.preventDefault();
+      handleChatFile(it.getAsFile());
+      return;
+    }
+  }
+}
+function handleChatFile(file){
+  if(!file || !file.type.startsWith('image/')) { toast('Ce fichier n\'est pas une image'); return; }
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = () => {
+    URL.revokeObjectURL(url);
+    // redimensionne (max 1024px) et compresse pour rester léger
+    const MAX = 1024;
+    const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(img.width * scale); cv.height = Math.round(img.height * scale);
+    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+    const dataUrl = cv.toDataURL('image/jpeg', 0.85);
+    pendingImage = { media_type:'image/jpeg', data:dataUrl.split(',')[1], dataUrl };
+    drawImgPreview();
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); toast('Image illisible — réessaie'); };
+  img.src = url;
+}
+function drawImgPreview(){
+  const el = $('#chat-img-preview'); if(!el) return;
+  el.innerHTML = pendingImage ? `<div style="display:flex;align-items:center;gap:10px;margin-top:8px;background:rgba(0,0,0,.05);border-radius:10px;padding:6px 10px;">
+    <img src="${pendingImage.dataUrl}" style="height:52px;border-radius:8px;">
+    <span style="font-size:12.5px;color:#888;flex:1;">Image prête à envoyer — ajoute ta question puis ➤</span>
+    <button class="btn ghost" style="padding:4px 10px;" onclick="pendingImage=null;drawImgPreview();">✕</button>
+  </div>` : '';
+}
 async function sendChat(){
-  const inp = $('#chat-in'); const text = inp.value.trim(); if(!text) return;
-  inp.value=''; chatMsgs.push({role:'user', content:text}); drawChat();
-  db.from('adalix_chat').insert({child, role:'user', content:text}).then(()=>{ checkBadges(); });
+  const inp = $('#chat-in'); const text = inp.value.trim();
+  if(!text && !pendingImage) return;
+  const img = pendingImage; pendingImage = null; drawImgPreview();
+  inp.value='';
+  chatMsgs.push({role:'user', content:text, image: img?{media_type:img.media_type, data:img.data}:undefined, dataUrl: img?img.dataUrl:undefined});
+  drawChat();
+  db.from('adalix_chat').insert({child, role:'user', content:(text||'') + (img?' [📷 image envoyée]':'')}).then(()=>{ checkBadges(); });
   chatMsgs.push({role:'assistant', content:'…'}); drawChat();
   try {
+    // on n'envoie l'image que sur le dernier message (l'historique reste en texte, léger)
+    const hist = chatMsgs.slice(0,-1).slice(-12);
+    const payload = hist.map((m,i)=>({ role:m.role, content:m.content, image: (i===hist.length-1 && m.image) ? m.image : undefined }));
     const r = await fetch('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({child, assistantName, messages: chatMsgs.slice(0,-1).slice(-12)})});
+      body: JSON.stringify({child, assistantName, messages: payload})});
     const j = await r.json();
     chatMsgs[chatMsgs.length-1] = {role:'assistant', content: j.reply || j.error || 'Oups, réessaie !'};
     db.from('adalix_chat').insert({child, role:'assistant', content: chatMsgs[chatMsgs.length-1].content}).then(()=>{});

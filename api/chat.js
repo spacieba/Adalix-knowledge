@@ -9,6 +9,7 @@ Règles :
 - Encourage-les à raisonner : parfois, retourne la question ("et toi, qu'en penses-tu ?") avant de donner la réponse.
 - Sur les sujets sensibles (guerres actuelles, religion, 11-Septembre), reste factuel, équilibré, présente les différents points de vue et conseille d'en parler avec leurs parents.
 - Refuse gentiment tout contenu inapproprié pour des enfants et recentre sur le programme.
+- L'enfant peut t'envoyer des images ou des captures d'écran (un exercice, un schéma, une carte, une photo…) : décris ce que tu vois si on te le demande, réponds aux questions dessus, et aide-le à comprendre — sans faire le travail à sa place.
 - Jamais de réponse aux devoirs "à leur place" : guide-les.`;
 }
 
@@ -22,10 +23,24 @@ module.exports = async (req, res) => {
   try {
     const { child, messages, assistantName } = req.body || {};
     const name = (assistantName || 'ton assistant').toString().slice(0, 30) || 'ton assistant';
+    const IMG_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
     const clean = (messages || [])
       .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
       .slice(-12)
-      .map(m => ({ role: m.role, content: m.content.slice(0, 2000) }));
+      .map(m => {
+        const text = m.content.slice(0, 2000);
+        // image acceptée uniquement sur un message utilisateur, format et taille contrôlés (~3 Mo base64 max)
+        const img = m.role === 'user' && m.image && typeof m.image.data === 'string'
+          && IMG_TYPES.includes(m.image.media_type) && m.image.data.length < 4_000_000 ? m.image : null;
+        if (img) {
+          const blocks = [{ type: 'image', source: { type: 'base64', media_type: img.media_type, data: img.data } }];
+          if (text) blocks.push({ type: 'text', text });
+          return { role: m.role, content: blocks };
+        }
+        // jamais de contenu vide (l'API exige des messages non vides qui alternent) :
+        // un ancien message-image sans texte devient un marqueur
+        return { role: m.role, content: text || (m.role === 'user' ? "[l'enfant avait envoyé une image ici]" : '…') };
+      });
     if (!clean.length || clean[clean.length - 1].role !== 'user') {
       res.status(400).json({ error: 'message manquant' }); return;
     }
