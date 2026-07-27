@@ -12,6 +12,8 @@ let chatMsgs = [];         // {role, content}
 let currentWeek = 0;
 let assistantName = null;
 const MAX_NEW_PERSONS_PER_DAY = 3;
+let earnedBadges = new Set();
+let pendingRareBadges = [];
 
 /* ---------- utils ---------- */
 const $ = sel => document.querySelector(sel);
@@ -32,6 +34,7 @@ function selectProfile(c){
   buildNav(['programme','quiz','les100','checklist','projet','chat']);
   assistantName = null;
   loadUnlocked(); refreshStreak(); loadAssistantName();
+  loadBadges().then(checkBadges);
   showTab('programme');
 }
 async function loadAssistantName(){
@@ -52,6 +55,7 @@ function checkPin(){
     $('#screen-app').classList.remove('hidden');
     $('#hdr-who').textContent='📊 Espace parent';
     $('#hdr-streak').style.display='none';
+    $('#hdr-badges').style.display='none';
     buildNav(['dashboard']);
     showTab('dashboard');
   } else { toast('Code incorrect'); }
@@ -158,7 +162,7 @@ async function openPerson(name){
       capped = true;
     } else {
       unlocked.add(name);
-      db.from('adalix_personalities').insert({child, person:name}).then(()=>{});
+      db.from('adalix_personalities').insert({child, person:name}).then(()=>{ checkBadges(); });
     }
   }
   modal(`<div style="text-align:center;font-size:46px;">${p.emoji}</div>
@@ -243,6 +247,7 @@ async function finishQuiz(){
   const pct = s.score/s.questions.length;
   const badge = pct===1?'🥇 PARFAIT !':pct>=0.85?'🏅 Expert':pct>=0.7?'✅ Objectif atteint':'💪 Retente ta chance';
   await db.from('adalix_qcm_scores').insert({child, quiz_id:s.id, score:s.score, total:s.questions.length, duration_s:dur});
+  checkBadges();
   $('#main').innerHTML = `
     <div class="narrow">
     <div class="card" style="text-align:center;">
@@ -297,11 +302,13 @@ async function saveJournal(){
   await db.from('adalix_journal').insert({child, day:todayStr(), learned, surprised});
   todayItems['ecriture'] = true;
   closeModal(); drawChecklist(); saveChecklist(); toast('Enregistré ! 🌟');
+  checkBadges();
 }
 async function saveChecklist(){
   const completed = D.checklist.filter(it=>todayItems[it.id]).length;
   await db.from('adalix_checklist').upsert({child, day:todayStr(), items:todayItems, completed, updated_at:new Date().toISOString()});
   refreshStreak();
+  checkBadges();
 }
 async function refreshStreak(){
   if(child==='parent') return;
@@ -374,6 +381,7 @@ async function markChecklistItemDone(id){
   await db.from('adalix_checklist').upsert({child, day:todayStr(), items, completed, updated_at:new Date().toISOString()});
   todayItems = items;
   refreshStreak();
+  checkBadges();
 }
 
 /* ---------- chat ---------- */
@@ -420,7 +428,7 @@ function drawChat(){
 async function sendChat(){
   const inp = $('#chat-in'); const text = inp.value.trim(); if(!text) return;
   inp.value=''; chatMsgs.push({role:'user', content:text}); drawChat();
-  db.from('adalix_chat').insert({child, role:'user', content:text}).then(()=>{});
+  db.from('adalix_chat').insert({child, role:'user', content:text}).then(()=>{ checkBadges(); });
   chatMsgs.push({role:'assistant', content:'…'}); drawChat();
   try {
     const r = await fetch('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'},
@@ -451,10 +459,138 @@ async function genImage(){
   $('#img-go').textContent='Générer'; $('#img-go').disabled=false;
 }
 
+/* ---------- badges ---------- */
+const BADGE_CATS = {
+  assiduite:{label:'Assiduité', emoji:'🔥'},
+  savoir:{label:'Savoir', emoji:'🧠'},
+  collection:{label:'Collection', emoji:'🏆'},
+  creativite:{label:'Créativité', emoji:'✍️'},
+  curiosite:{label:'Curiosité', emoji:'💬'},
+  discipline:{label:'Discipline', emoji:'✅'},
+};
+const BADGES = [
+  {id:'streak3', cat:'assiduite', emoji:'🔥', label:"3 jours d'affilée", desc:'Checklist complète 3 jours de suite.'},
+  {id:'streak7', cat:'assiduite', emoji:'🔥🔥', label:'Une semaine', desc:'Checklist complète 7 jours de suite.'},
+  {id:'streak14', cat:'assiduite', emoji:'🔥🔥🔥', label:'Deux semaines', desc:'Checklist complète 14 jours de suite.'},
+  {id:'streak28', cat:'assiduite', emoji:'👑', label:'Streak parfait', desc:'Checklist complète sur les 4 semaines.', rare:true},
+  {id:'quiz_first', cat:'savoir', emoji:'🥇', label:'Premier quiz réussi', desc:'Un quiz réussi à 70% ou plus.'},
+  {id:'quiz_perfect', cat:'savoir', emoji:'💯', label:'Premier sans-faute', desc:'Un quiz réussi à 100%.'},
+  {id:'quiz_5', cat:'savoir', emoji:'🧠', label:'5 quiz complétés', desc:'5 quiz terminés, peu importe le score.'},
+  {id:'quiz_final', cat:'savoir', emoji:'🏆', label:'Grand quiz final réussi', desc:'Le grand quiz final réussi à 70% ou plus.', rare:true},
+  {id:'quiz_fast', cat:'savoir', emoji:'⚡', label:'Éclair', desc:'Un quiz réussi (≥70%) en moins de 90 secondes.'},
+  {id:'collec_first', cat:'collection', emoji:'🔍', label:'Première carte', desc:'Ta première personnalité débloquée.'},
+  {id:'collec_10', cat:'collection', emoji:'📚', label:'10 cartes', desc:'10 personnalités débloquées.'},
+  {id:'collec_50', cat:'collection', emoji:'🏛️', label:'Mi-collection', desc:'50 personnalités débloquées.'},
+  {id:'collec_100', cat:'collection', emoji:'👑', label:'Collection complète', desc:`Les ${D.persons.length} personnalités débloquées.`, rare:true},
+  {id:'journal_first', cat:'creativite', emoji:'✍️', label:'Première page', desc:'Ta première écriture du soir.'},
+  {id:'journal_week', cat:'creativite', emoji:'📖', label:"Semaine d'écriture", desc:'7 entrées de journal.'},
+  {id:'chat_first', cat:'curiosite', emoji:'💬', label:'Première question', desc:"Ta première question posée à l'assistant."},
+  {id:'chat_10', cat:'curiosite', emoji:'🔬', label:'10 questions', desc:"10 questions posées à l'assistant."},
+  {id:'checklist_full', cat:'discipline', emoji:'✅', label:'Journée complète', desc:'Une première journée 12/12.'},
+];
+async function computeStreak(){
+  if(child==='parent') return 0;
+  const {data} = await db.from('adalix_checklist').select('day,completed').eq('child',child).order('day',{ascending:false}).limit(40);
+  let streak = 0;
+  if(data){
+    const map = Object.fromEntries(data.map(r=>[r.day, r.completed]));
+    for(let i=0;i<40;i++){
+      const d = new Date(); d.setDate(d.getDate()-i);
+      const key = d.toISOString().slice(0,10);
+      const c = map[key]||0;
+      if(c >= 8) streak++;
+      else if(i===0) continue;
+      else break;
+    }
+  }
+  return streak;
+}
+async function loadBadges(){
+  if(child==='parent') return;
+  const {data} = await db.from('adalix_badges').select('badge_id').eq('child',child);
+  earnedBadges = new Set((data||[]).map(r=>r.badge_id));
+  updateBadgeHeader();
+}
+function updateBadgeHeader(){
+  const el = $('#hdr-badges'); if(el) el.textContent = '🎖️ ' + earnedBadges.size;
+}
+async function checkBadges(){
+  if(child==='parent') return;
+  const [streak, qzRes, jrRes, chRes, ckRes] = await Promise.all([
+    computeStreak(),
+    db.from('adalix_qcm_scores').select('quiz_id,score,total,duration_s').eq('child',child),
+    db.from('adalix_journal').select('id').eq('child',child),
+    db.from('adalix_chat').select('id').eq('child',child).eq('role','user'),
+    db.from('adalix_checklist').select('completed').eq('child',child),
+  ]);
+  const qz = qzRes.data||[], jr = jrRes.data||[], ch = chRes.data||[], ck = ckRes.data||[];
+  const stats = {
+    streak,
+    quizCount: qz.length,
+    quizPassed: qz.some(r=>r.total && r.score/r.total>=0.7),
+    quizPerfect: qz.some(r=>r.total && r.score===r.total),
+    quizFinalPassed: qz.some(r=>r.quiz_id==='final' && r.total && r.score/r.total>=0.7),
+    quizFast: qz.some(r=>r.total && r.score/r.total>=0.7 && r.duration_s!=null && r.duration_s<90),
+    collecCount: unlocked.size,
+    journalCount: jr.length,
+    chatCount: ch.length,
+    checklistFullDay: ck.some(r=>r.completed>=D.checklist.length),
+  };
+  const conditions = {
+    streak3: stats.streak>=3, streak7: stats.streak>=7, streak14: stats.streak>=14, streak28: stats.streak>=28,
+    quiz_first: stats.quizPassed, quiz_perfect: stats.quizPerfect, quiz_5: stats.quizCount>=5,
+    quiz_final: stats.quizFinalPassed, quiz_fast: stats.quizFast,
+    collec_first: stats.collecCount>=1, collec_10: stats.collecCount>=10, collec_50: stats.collecCount>=50, collec_100: stats.collecCount>=D.persons.length,
+    journal_first: stats.journalCount>=1, journal_week: stats.journalCount>=7,
+    chat_first: stats.chatCount>=1, chat_10: stats.chatCount>=10,
+    checklist_full: stats.checklistFullDay,
+  };
+  const toUnlock = BADGES.filter(b=>!earnedBadges.has(b.id) && conditions[b.id]);
+  if(!toUnlock.length) return;
+  for(const b of toUnlock){
+    earnedBadges.add(b.id);
+    db.from('adalix_badges').upsert({child, badge_id:b.id}).then(()=>{});
+  }
+  updateBadgeHeader();
+  celebrateBadges(toUnlock);
+}
+function celebrateBadges(list){
+  const rare = list.filter(b=>b.rare), common = list.filter(b=>!b.rare);
+  common.forEach(b=>toast(`${b.emoji} Badge débloqué : ${b.label} !`));
+  if(rare.length){ pendingRareBadges = pendingRareBadges.concat(rare); showNextRareBadge(); }
+}
+function showNextRareBadge(){
+  if(!pendingRareBadges.length) return;
+  const b = pendingRareBadges.shift();
+  modal(`<div style="text-align:center;">
+    <div style="font-size:60px;">${b.emoji}</div>
+    <h3>🎉 Badge rare débloqué !</h3>
+    <div style="font-weight:800;font-size:17px;color:var(--accent2);">${esc(b.label)}</div>
+    <p style="font-size:13.5px;color:#666;">${esc(b.desc)}</p>
+    <div class="actions" style="justify-content:center;"><button class="btn" onclick="showNextRareBadge()">${pendingRareBadges.length?'Suivant':'Trop bien !'}</button></div>
+  </div>`);
+}
+function renderBadgesHTML(){
+  const cats = Object.keys(BADGE_CATS);
+  return `<h3 style="text-align:center;">🎖️ Tes badges : ${earnedBadges.size} / ${BADGES.length}</h3>
+    ${cats.map(c=>{
+      const items = BADGES.filter(b=>b.cat===c);
+      return `<div style="margin-bottom:10px;"><div style="font-size:12.5px;font-weight:700;color:#888;margin-bottom:4px;">${BADGE_CATS[c].emoji} ${BADGE_CATS[c].label}</div>
+      <div class="gal-grid2">${items.map(b=>{
+        const has = earnedBadges.has(b.id);
+        return has
+          ? `<div class="pcard" title="${esc(b.desc)}"><div class="pe">${b.emoji}</div><div class="pn">${esc(b.label)}</div></div>`
+          : `<div class="pcard locked" title="${esc(b.desc)}"><div class="pe">🔒</div><div class="pn">? ? ?</div></div>`;
+      }).join('')}</div></div>`;
+    }).join('')}
+    <div class="actions" style="justify-content:center;"><button class="btn ghost" onclick="closeModal()">Fermer</button></div>`;
+}
+function openBadges(){ modal(renderBadgesHTML()); }
+
 /* ---------- parent dashboard ---------- */
 async function renderDashboard(){
   $('#main').innerHTML = '<div class="card">Chargement…</div>';
-  const [scores, checks, persos, journal, chats, projets, assistants] = await Promise.all([
+  const [scores, checks, persos, journal, chats, projets, assistants, badges] = await Promise.all([
     db.from('adalix_qcm_scores').select('*').order('created_at',{ascending:false}).limit(30),
     db.from('adalix_checklist').select('*').order('day',{ascending:false}).limit(60),
     db.from('adalix_personalities').select('*'),
@@ -462,9 +598,11 @@ async function renderDashboard(){
     db.from('adalix_chat').select('*').order('created_at',{ascending:false}).limit(60),
     db.from('adalix_projet').select('*'),
     db.from('adalix_assistant').select('*'),
+    db.from('adalix_badges').select('*'),
   ]);
-  const S = scores.data||[], C = checks.data||[], P = persos.data||[], J = journal.data||[], CH = chats.data||[], PR = projets.data||[], AS = assistants.data||[];
+  const S = scores.data||[], C = checks.data||[], P = persos.data||[], J = journal.data||[], CH = chats.data||[], PR = projets.data||[], AS = assistants.data||[], BD = badges.data||[];
   const assistantOf = k => (AS.find(r=>r.child===k)||{}).name;
+  const badgeCountOf = k => BD.filter(r=>r.child===k).length;
   const kids = ['adam','alix'];
   const kidName = k => k==='adam'?'🚀 Adam':'🎨 Alix';
   const streakOf = k => {
@@ -475,7 +613,7 @@ async function renderDashboard(){
     <div class="stat-row">${kids.map(k=>`
       <div class="stat"><div class="v">${kidName(k)}</div>
         <div style="margin-top:8px;font-size:13px;">🔥 Série : <b>${streakOf(k)} j</b> · 🏆 Cartes : <b>${P.filter(p=>p.child===k).length}/${D.persons.length}</b></div>
-        <div style="font-size:13px;">✅ Aujourd'hui : <b>${(C.find(r=>r.child===k&&r.day===todayStr())||{}).completed||0}/12</b></div>
+        <div style="font-size:13px;">✅ Aujourd'hui : <b>${(C.find(r=>r.child===k&&r.day===todayStr())||{}).completed||0}/12</b> · 🎖️ Badges : <b>${badgeCountOf(k)}/${BADGES.length}</b></div>
       </div>`).join('')}</div>
     <div class="card"><h3>🧠 Derniers quiz</h3><table class="ptable"><tr><th>Qui</th><th>Quiz</th><th>Score</th><th>Date</th></tr>
       ${S.slice(0,12).map(r=>`<tr><td>${kidName(r.child)}</td><td>${esc(quizTitle(r.quiz_id))}</td><td><b>${r.score}/${r.total}</b></td><td>${new Date(r.created_at).toLocaleDateString('fr-FR')}</td></tr>`).join('')||'<tr><td colspan=4 style="color:#999;">Aucun quiz encore</td></tr>'}</table></div>
@@ -507,6 +645,7 @@ const RESET_TABLES = [
   {key:'chat', table:'adalix_chat', label:'Conversations avec l\'assistant'},
   {key:'projet', table:'adalix_projet', label:'Projet du mois'},
   {key:'assistant', table:'adalix_assistant', label:'Nom de l\'assistant'},
+  {key:'badges', table:'adalix_badges', label:'Badges débloqués'},
 ];
 function renderAdminPanel(){
   return `<div class="card" style="border-left:4px solid #c9636a;">
