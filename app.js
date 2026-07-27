@@ -27,7 +27,7 @@ function selectProfile(c){
   $('#screen-app').classList.remove('hidden');
   $('#hdr-who').textContent = c === 'adam' ? '🚀 Adam' : '🎨 Alix';
   localStorage.setItem('adalix_child', c);
-  buildNav(['programme','quiz','les100','checklist','chat']);
+  buildNav(['programme','quiz','les100','checklist','projet','chat']);
   loadUnlocked(); refreshStreak();
   showTab('programme');
 }
@@ -55,6 +55,7 @@ function logout(){ location.reload(); }
 const TABS = {
   programme:{icon:'📅',label:'Programme'}, quiz:{icon:'🧠',label:'Quiz'},
   les100:{icon:'🏆',label:'Les 100'}, checklist:{icon:'✅',label:'Checklist'},
+  projet:{icon:'💻',label:'Mon projet'},
   chat:{icon:'💬',label:'Questions'}, dashboard:{icon:'📊',label:'Tableau de bord'},
 };
 function buildNav(tabs){
@@ -64,7 +65,7 @@ function showTab(t){
   tab = t;
   document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
   const nb = $('#nav-'+t); if(nb) nb.classList.add('active');
-  ({programme:renderProgramme, quiz:renderQuizList, les100:renderGallery, checklist:renderChecklist, chat:renderChat, dashboard:renderDashboard}[t])();
+  ({programme:renderProgramme, quiz:renderQuizList, les100:renderGallery, checklist:renderChecklist, projet:renderProjet, chat:renderChat, dashboard:renderDashboard}[t])();
 }
 
 /* ---------- programme ---------- */
@@ -76,7 +77,26 @@ function renderProgramme(){
     ${w.days.map((d,i)=>`<div class="day-item" onclick="renderDay(${currentWeek},${i})">
       <div class="emoji">${d.emoji}</div>
       <div><div class="di-title">${esc(d.title)}</div><div class="di-sub">${esc(d.dow)} ${esc(d.date)} · ${esc(d.theme)}</div></div>
-    </div>`).join('')}`;
+    </div>`).join('')}
+    ${w.rhetorique ? `<div class="card"><h3>🎤 Rhétorique — Marche ${w.rhetorique.marche} : ${esc(w.rhetorique.titre)}</h3>
+      <p style="font-size:14px;line-height:1.55;">${esc(w.rhetorique.texte)}</p>
+      <div class="ecrit-box"><b>🏋️ Exercice :</b> ${esc(w.rhetorique.exercice)}</div>
+    </div>` : ''}`;
+}
+function renderCases(cases){
+  if(!cases || !cases.length) return '';
+  return cases.map(c=>`
+    <div class="card" style="${c.sensible?'border-left:4px solid #c9636a;':''}">
+      <h3>${c.emoji} ${esc(c.titre)}</h3>
+      ${c.sensible?'<div style="font-size:12px;color:#b04a4a;font-weight:700;margin-bottom:4px;">👪 Sujet sensible — à lire avec un parent</div>':''}
+      <p style="font-size:14px;line-height:1.55;"><b>D'où ça vient ?</b> ${esc(c.origine)}</p>
+      <div style="margin-top:8px;">${c.arguments.map(a=>`
+        <div style="margin-bottom:8px;padding:8px 10px;background:#f7f8fb;border-radius:8px;">
+          <div style="font-size:13.5px;font-weight:700;">💬 ${esc(a.a)}</div>
+          <div style="font-size:13.5px;color:#444;margin-top:3px;">↳ ${esc(a.r)}</div>
+        </div>`).join('')}</div>
+      <p style="font-size:13.5px;line-height:1.5;color:#555;margin-top:6px;"><b>Pourquoi ça marche quand même ?</b> ${esc(c.psycho)}</p>
+    </div>`).join('');
 }
 function renderDay(wi, di){
   const d = D.weeks[wi].days[di];
@@ -88,6 +108,7 @@ function renderDay(wi, di){
       <p style="font-size:14.5px;line-height:1.55;">${esc(d.summary)}</p>
       <div class="ecrit-box"><b>✍️ Écriture :</b> ${esc(d.ecrit)}</div>
     </div>
+    ${renderCases(d.cases)}
     <div class="card"><h3>🔗 À explorer</h3><div class="links">${d.links.map(l=>`<a href="${l.u}" target="_blank" rel="noopener">${esc(l.t)} ↗</a>`).join('')}</div></div>
     <div class="card"><h3>👤 Personnalités du jour</h3>
       <div style="font-size:13px;color:#888;">Clique pour découvrir — et les débloquer dans ta collection !</div>
@@ -221,6 +242,7 @@ function drawChecklist(){
 }
 async function toggleItem(id){
   if(id==='ecriture' && !todayItems[id]){ openJournal(); return; }
+  if(id==='projet' && !todayItems[id]){ showTab('projet'); return; }
   todayItems[id] = !todayItems[id];
   drawChecklist(); saveChecklist();
 }
@@ -261,6 +283,60 @@ async function refreshStreak(){
     }
   }
   $('#hdr-streak').textContent = '🔥 ' + streak;
+}
+
+/* ---------- projet du mois ---------- */
+let projetState = null;
+async function renderProjet(){
+  $('#main').innerHTML = '<div class="card">Chargement…</div>';
+  const P = D.projet;
+  const mine = P[child] || P.adam;
+  const {data} = await db.from('adalix_projet').select('*').eq('child',child).maybeSingle();
+  projetState = data || {child, idea:null, notes:'', phase:1};
+  const curPhase = currentWeek+1;
+  $('#main').innerHTML = `
+    <div class="card"><h3>💻 Ton projet du mois</h3>
+      <div style="font-size:13.5px;color:#666;line-height:1.5;">${esc(P.intro)}</div>
+    </div>
+    <div class="card"><h3>🗺️ Les 4 phases</h3>
+      ${P.phases.map(ph=>`<div style="display:flex;gap:8px;align-items:baseline;padding:4px 0;${ph.semaine===curPhase?'font-weight:700;color:var(--accent2);':'color:#888;'}">
+        <div>S${ph.semaine}</div><div style="font-size:13.5px;">${esc(ph.titre)}</div>${ph.semaine===curPhase?'<span style="font-size:12px;">← cette semaine</span>':''}
+      </div>`).join('')}
+    </div>
+    <div class="card"><h3>💡 6 idées, 1 choix</h3>
+      <div style="font-size:12.5px;color:#888;margin-bottom:6px;">Clique sur ton idée (ou change d'avis à tout moment).</div>
+      ${mine.ideas.map((idea,i)=>`<div class="chk-item ${projetState.idea===idea.titre?'done':''}" onclick="chooseIdea('${esc(idea.titre).replace(/'/g,"\\'")}')">
+        <div class="box">${projetState.idea===idea.titre?'✓':''}</div>
+        <div><div class="di-title" style="font-size:14px;">${esc(idea.titre)}</div><div class="di-sub">${esc(idea.desc)}</div></div>
+      </div>`).join('')}
+      <div style="font-size:12.5px;color:#888;margin-top:8px;">${esc(P.astuce)}</div>
+    </div>
+    <div class="card"><h3>📝 Où j'en suis</h3>
+      <textarea id="proj-notes" rows="4" placeholder="Note ce que tu as fait aujourd'hui sur ton projet…">${esc(projetState.notes||'')}</textarea>
+      <div class="actions"><button class="btn" onclick="saveProjetNotes()">Enregistrer</button></div>
+    </div>`;
+}
+async function chooseIdea(titre){
+  projetState.idea = titre;
+  await db.from('adalix_projet').upsert({child, idea:titre, notes:projetState.notes||'', phase:currentWeek+1, updated_at:new Date().toISOString()});
+  renderProjet();
+}
+async function saveProjetNotes(){
+  const notes = $('#proj-notes').value.trim();
+  projetState.notes = notes;
+  await db.from('adalix_projet').upsert({child, idea:projetState.idea||null, notes, phase:currentWeek+1, updated_at:new Date().toISOString()});
+  await markChecklistItemDone('projet');
+  toast('Projet enregistré ! 🌟');
+}
+// coche un item de la checklist du jour sans écraser les autres (utile depuis un autre onglet que "checklist")
+async function markChecklistItemDone(id){
+  const {data} = await db.from('adalix_checklist').select('*').eq('child',child).eq('day',todayStr()).maybeSingle();
+  const items = (data && data.items) || {};
+  items[id] = true;
+  const completed = D.checklist.filter(it=>items[it.id]).length;
+  await db.from('adalix_checklist').upsert({child, day:todayStr(), items, completed, updated_at:new Date().toISOString()});
+  todayItems = items;
+  refreshStreak();
 }
 
 /* ---------- chat ---------- */
@@ -319,14 +395,15 @@ async function genImage(){
 /* ---------- parent dashboard ---------- */
 async function renderDashboard(){
   $('#main').innerHTML = '<div class="card">Chargement…</div>';
-  const [scores, checks, persos, journal, chats] = await Promise.all([
+  const [scores, checks, persos, journal, chats, projets] = await Promise.all([
     db.from('adalix_qcm_scores').select('*').order('created_at',{ascending:false}).limit(30),
     db.from('adalix_checklist').select('*').order('day',{ascending:false}).limit(60),
     db.from('adalix_personalities').select('*'),
     db.from('adalix_journal').select('*').order('created_at',{ascending:false}).limit(30),
     db.from('adalix_chat').select('*').order('created_at',{ascending:false}).limit(60),
+    db.from('adalix_projet').select('*'),
   ]);
-  const S = scores.data||[], C = checks.data||[], P = persos.data||[], J = journal.data||[], CH = chats.data||[];
+  const S = scores.data||[], C = checks.data||[], P = persos.data||[], J = journal.data||[], CH = chats.data||[], PR = projets.data||[];
   const kids = ['adam','alix'];
   const kidName = k => k==='adam'?'🚀 Adam':'🎨 Alix';
   const streakOf = k => {
@@ -336,11 +413,19 @@ async function renderDashboard(){
   $('#main').innerHTML = `
     <div class="stat-row">${kids.map(k=>`
       <div class="stat"><div class="v">${kidName(k)}</div>
-        <div style="margin-top:8px;font-size:13px;">🔥 Série : <b>${streakOf(k)} j</b> · 🏆 Cartes : <b>${P.filter(p=>p.child===k).length}/99</b></div>
+        <div style="margin-top:8px;font-size:13px;">🔥 Série : <b>${streakOf(k)} j</b> · 🏆 Cartes : <b>${P.filter(p=>p.child===k).length}/${D.persons.length}</b></div>
         <div style="font-size:13px;">✅ Aujourd'hui : <b>${(C.find(r=>r.child===k&&r.day===todayStr())||{}).completed||0}/12</b></div>
       </div>`).join('')}</div>
     <div class="card"><h3>🧠 Derniers quiz</h3><table class="ptable"><tr><th>Qui</th><th>Quiz</th><th>Score</th><th>Date</th></tr>
       ${S.slice(0,12).map(r=>`<tr><td>${kidName(r.child)}</td><td>${esc(quizTitle(r.quiz_id))}</td><td><b>${r.score}/${r.total}</b></td><td>${new Date(r.created_at).toLocaleDateString('fr-FR')}</td></tr>`).join('')||'<tr><td colspan=4 style="color:#999;">Aucun quiz encore</td></tr>'}</table></div>
+    <div class="card"><h3>💻 Leur projet du mois</h3>
+      ${kids.map(k=>{
+        const pr = PR.find(r=>r.child===k);
+        if(!pr || !pr.idea) return `<div class="jentry"><div class="jd">${kidName(k)}</div><span style="color:#999;font-size:13px;">Pas encore choisi</span></div>`;
+        return `<div class="jentry"><div class="jd">${kidName(k)} · Semaine ${pr.phase||1} · ${new Date(pr.updated_at).toLocaleDateString('fr-FR')}</div>
+          <div><b>Idée choisie :</b> ${esc(pr.idea)}</div>${pr.notes?`<div><b>Dernière note :</b> ${esc(pr.notes)}</div>`:''}</div>`;
+      }).join('')}
+    </div>
     <div class="card"><h3>✍️ Leurs réalisations — journal du soir</h3>
       ${J.map(r=>`<div class="jentry"><div class="jd">${kidName(r.child)} · ${new Date(r.created_at).toLocaleDateString('fr-FR')}</div>
         ${r.learned?`<div><b>Appris :</b> ${esc(r.learned)}</div>`:''}${r.surprised?`<div><b>Étonné :</b> ${esc(r.surprised)}</div>`:''}</div>`).join('')||'<span style="color:#999;font-size:13px;">Rien pour l\'instant</span>'}</div>
