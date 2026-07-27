@@ -87,10 +87,10 @@ function renderProgramme(){
   $('#main').innerHTML = `
     <div class="week-pills">${D.weeks.map((wk,i)=>`<button class="${i===currentWeek?'active':''}" onclick="currentWeek=${i};renderProgramme()">S${wk.num}</button>`).join('')}</div>
     <div class="card"><h3>Semaine ${w.num} — ${esc(w.title)}</h3><div style="font-size:13px;color:#888;">${esc(w.dates)}</div></div>
-    ${w.days.map((d,i)=>`<div class="day-item" onclick="renderDay(${currentWeek},${i})">
+    <div class="day-list">${w.days.map((d,i)=>`<div class="day-item" onclick="renderDay(${currentWeek},${i})">
       <div class="emoji">${d.emoji}</div>
       <div><div class="di-title">${esc(d.title)}</div><div class="di-sub">${esc(d.dow)} ${esc(d.date)} · ${esc(d.theme)}</div></div>
-    </div>`).join('')}`;
+    </div>`).join('')}</div>`;
 }
 function renderCases(cases){
   if(!cases || !cases.length) return '';
@@ -111,6 +111,7 @@ async function renderDay(wi, di){
   const d = D.weeks[wi].days[di];
   const remaining = child==='parent' ? MAX_NEW_PERSONS_PER_DAY : Math.max(0, MAX_NEW_PERSONS_PER_DAY - await countUnlockedToday());
   $('#main').innerHTML = `
+    <div class="narrow">
     <button class="back-btn" onclick="renderProgramme()">← Semaine ${D.weeks[wi].num}</button>
     <div class="card day-detail">
       <div class="theme-tag">${esc(d.dow)} ${esc(d.date)} · ${esc(d.theme)}</div>
@@ -128,6 +129,7 @@ async function renderDay(wi, di){
       <div style="font-size:13px;color:#888;">Choisis-en 2 ou 3 à découvrir aujourd'hui — clique pour ouvrir la fiche.</div>
       <div style="font-size:12.5px;color:${remaining>0?'#888':'#c9636a'};margin:3px 0 6px;">${remaining>0?`Encore ${remaining} nouvelle${remaining>1?'s':''} carte${remaining>1?'s':''} à collectionner aujourd'hui.`:"Limite du jour atteinte — tu peux encore lire les fiches, la collection continuera demain."}</div>
       <div class="persos-chips">${d.persos.map(p=>`<button class="perso-chip" onclick="openPerson('${esc(p).replace(/'/g,"\\'")}')">${personEmoji(p)} ${esc(p)}</button>`).join('')}</div>
+    </div>
     </div>`;
 }
 
@@ -216,11 +218,13 @@ function startQuiz(id){
 function renderQuizQ(){
   const s = quizState, q = s.questions[s.idx];
   $('#main').innerHTML = `
+    <div class="narrow">
     <button class="back-btn" onclick="quizState=null;renderQuizList()">← Quitter</button>
     <div class="card">
       <div class="quiz-progress">Question ${s.idx+1} / ${s.questions.length} · Score : ${s.score}</div>
       <div class="quiz-q">${esc(q.q)}</div>
       ${q.opts.map((o,i)=>`<button class="quiz-opt" id="opt-${i}" onclick="answerQ(${i})">${String.fromCharCode(65+i)}. ${esc(o)}</button>`).join('')}
+    </div>
     </div>`;
 }
 function answerQ(i){
@@ -240,6 +244,7 @@ async function finishQuiz(){
   const badge = pct===1?'🥇 PARFAIT !':pct>=0.85?'🏅 Expert':pct>=0.7?'✅ Objectif atteint':'💪 Retente ta chance';
   await db.from('adalix_qcm_scores').insert({child, quiz_id:s.id, score:s.score, total:s.questions.length, duration_s:dur});
   $('#main').innerHTML = `
+    <div class="narrow">
     <div class="card" style="text-align:center;">
       <h3>${esc(quizTitle(s.id))}</h3>
       <div class="big-score">${s.score} / ${s.questions.length}</div>
@@ -249,6 +254,7 @@ async function finishQuiz(){
         <button class="btn" onclick="startQuiz('${s.id}')">Rejouer</button>
         <button class="btn ghost" onclick="quizState=null;renderQuizList()">Retour</button>
       </div>
+    </div>
     </div>`;
 }
 
@@ -262,11 +268,13 @@ async function renderChecklist(){
 function drawChecklist(){
   const done = D.checklist.filter(it=>todayItems[it.id]).length;
   $('#main').innerHTML = `
+    <div class="narrow">
     <div class="card"><h3>✅ Ma journée — ${new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}</h3>
       <div style="font-size:14px;">${done} / ${D.checklist.length} ${done===D.checklist.length?'— journée complète, bravo ! 🎉':''}</div></div>
     ${D.checklist.map(it=>`<div class="chk-item ${todayItems[it.id]?'done':''}" onclick="toggleItem('${it.id}')">
       <div class="box">${todayItems[it.id]?'✓':''}</div><div class="emoji">${it.emoji}</div><div class="lbl">${esc(it.label)}</div>
-    </div>`).join('')}`;
+    </div>`).join('')}
+    </div>`;
 }
 async function toggleItem(id){
   if(id==='ecriture' && !todayItems[id]){ openJournal(); return; }
@@ -322,7 +330,7 @@ async function renderProjet(){
   const {data} = await db.from('adalix_projet').select('*').eq('child',child).maybeSingle();
   projetState = data || {child, idea:null, notes:'', phase:1};
   const curPhase = currentWeek+1;
-  $('#main').innerHTML = `
+  $('#main').innerHTML = `<div class="narrow">
     <div class="card"><h3>💻 Ton projet du mois</h3>
       <div style="font-size:13.5px;color:#666;line-height:1.5;">${esc(P.intro)}</div>
     </div>
@@ -342,7 +350,8 @@ async function renderProjet(){
     <div class="card"><h3>📝 Où j'en suis</h3>
       <textarea id="proj-notes" rows="4" placeholder="Note ce que tu as fait aujourd'hui sur ton projet…">${esc(projetState.notes||'')}</textarea>
       <div class="actions"><button class="btn" onclick="saveProjetNotes()">Enregistrer</button></div>
-    </div>`;
+    </div>
+  </div>`;
 }
 async function chooseIdea(titre){
   projetState.idea = titre;
@@ -370,7 +379,7 @@ async function markChecklistItemDone(id){
 /* ---------- chat ---------- */
 function renderChat(){
   if(!assistantName){ askAssistantName(); return; }
-  $('#main').innerHTML = `
+  $('#main').innerHTML = `<div class="narrow">
     <div class="card"><h3>💬 Pose toutes tes questions à ${esc(assistantName)}</h3>
       <div style="font-size:13px;color:#888;">Je suis ${esc(assistantName)}, ton assistant du Grand Été. Histoire, sciences, économie, mots compliqués… demande-moi tout !</div>
       <div id="chat-box"></div>
@@ -382,7 +391,8 @@ function renderChat(){
         <button class="btn ghost" onclick="openImagine()">🎨 Atelier d'images</button>
         <button class="btn ghost" onclick="askAssistantName()">✏️ Renommer ${esc(assistantName)}</button>
       </div>
-    </div>`;
+    </div>
+  </div>`;
   drawChat();
 }
 function askAssistantName(){
@@ -461,7 +471,7 @@ async function renderDashboard(){
     const map = Object.fromEntries(C.filter(r=>r.child===k).map(r=>[r.day,r.completed]));
     let s=0; for(let i=0;i<60;i++){ const d=new Date(); d.setDate(d.getDate()-i); const key=d.toISOString().slice(0,10);
       if((map[key]||0)>=8) s++; else if(i===0) continue; else break; } return s; };
-  $('#main').innerHTML = `
+  $('#main').innerHTML = `<div class="narrow" style="max-width:900px;">
     <div class="stat-row">${kids.map(k=>`
       <div class="stat"><div class="v">${kidName(k)}</div>
         <div style="margin-top:8px;font-size:13px;">🔥 Série : <b>${streakOf(k)} j</b> · 🏆 Cartes : <b>${P.filter(p=>p.child===k).length}/${D.persons.length}</b></div>
@@ -483,7 +493,8 @@ async function renderDashboard(){
     <div class="card"><h3>💬 Leurs conversations</h3>
       <div style="font-size:12px;color:#888;margin-bottom:4px;">${kids.map(k=>`${kidName(k)} a baptisé son assistant : <b>${esc(assistantOf(k)||'pas encore choisi')}</b>`).join(' · ')}</div>
       ${CH.slice(0,30).reverse().map(r=>`<div style="font-size:13px;padding:4px 0;border-bottom:1px solid #f0f2f6;"><b>${kidName(r.child)}${r.role==='assistant'?` ← ${esc(assistantOf(r.child)||'assistant')}`:''} :</b> ${esc(r.content.slice(0,180))}${r.content.length>180?'…':''}</div>`).join('')||'<span style="color:#999;font-size:13px;">Aucune conversation encore</span>'}</div>
-    ${renderAdminPanel()}`;
+    ${renderAdminPanel()}
+  </div>`;
 }
 
 /* ---------- administration ---------- */

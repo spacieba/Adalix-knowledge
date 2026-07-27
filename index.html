@@ -75,13 +75,37 @@ h1,h2,h3, .who, nav button, .btn, .day-detail h2, .name { font-family:var(--font
 
 /* ---- App shell ---- */
 header { background:linear-gradient(90deg, var(--accent2), var(--accent)); color:white; padding:12px 16px; display:flex; align-items:center; gap:12px; position:sticky; top:0; z-index:10; }
+header .inner { max-width:1100px; margin:0 auto; width:100%; display:flex; align-items:center; gap:12px; }
 header .who { font-weight:800; font-size:18px; flex:1; letter-spacing:.3px; }
 header .streak { font-size:13px; background:rgba(255,255,255,.18); padding:4px 12px; border-radius:14px; font-family:var(--font-body); }
 header button { background:none; border:1.5px solid rgba(255,255,255,.5); color:white; border-radius:var(--radius-btn); padding:4px 10px; cursor:pointer; font-size:12px; font-family:var(--font-body); }
 nav { display:flex; background:var(--card-bg); box-shadow:0 2px 8px rgba(0,0,0,.1); position:sticky; top:52px; z-index:9; overflow-x:auto; border-bottom:1px solid var(--card-border); }
-nav button { flex:1; min-width:80px; border:none; background:none; padding:12px 6px; font-size:12.5px; cursor:pointer; color:var(--card-text); opacity:.65; border-bottom:3px solid transparent; white-space:nowrap; font-family:var(--font-body); font-weight:600; }
+nav .inner { display:flex; max-width:1100px; margin:0 auto; width:100%; }
+nav button { flex:1; min-width:80px; border:none; background:none; padding:12px 6px; font-size:12.5px; cursor:pointer; color:var(--card-text); opacity:.65; border-bottom:3px solid transparent; white-space:nowrap; font-family:var(--font-body); font-weight:600; transition:.15s; }
+nav button:hover { opacity:.9; background:rgba(0,0,0,.03); }
 nav button.active { color:var(--accent2); border-bottom-color:var(--accent); font-weight:800; opacity:1; }
+body.theme-adam nav button.active { color:#c9962c; }
 main { max-width:860px; margin:0 auto; padding:16px 14px 60px; }
+.narrow { max-width:760px; margin:0 auto; }
+
+/* ---- Ergonomie grand écran (PC/Mac) ---- */
+@media (min-width:900px){
+  main { max-width:1100px; padding:22px 20px 70px; }
+  .day-list { display:grid; grid-template-columns:1fr 1fr; gap:12px; align-items:start; }
+  .day-item { margin-bottom:0; }
+  .quiz-list { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .quiz-list button { margin-bottom:0; }
+  .card, .day-item, .quiz-list button, .pcard, .chk-item { cursor:pointer; }
+  .day-item:hover, .quiz-list button:hover, .pcard:not(.locked):hover { transform:translateY(-2px); box-shadow:0 6px 18px rgba(0,0,0,.12); transition:.15s; }
+  body.theme-adam .day-item:hover, body.theme-adam .quiz-list button:hover { box-shadow:0 6px 20px rgba(201,150,44,.28); }
+  .stat-row { grid-template-columns:1fr 1fr; }
+  .modal { max-width:520px; }
+  #chat-box { max-height:60vh; }
+}
+@media (min-width:1200px){
+  main { max-width:1240px; }
+  .day-list { grid-template-columns:1fr 1fr 1fr; }
+}
 
 .card { background:var(--card-bg); color:var(--card-text); border-radius:var(--radius-card); padding:16px 18px; margin-bottom:14px; box-shadow:var(--shadow); border:1px solid var(--card-border); }
 .card h3 { margin:0 0 6px; color:var(--accent2); font-family:var(--font-display); }
@@ -186,11 +210,13 @@ table.ptable td { padding:7px 8px; border-bottom:1px solid rgba(0,0,0,.05); }
 <!-- APP -->
 <div id="screen-app" class="hidden">
   <header>
-    <div class="who" id="hdr-who"></div>
-    <div class="streak" id="hdr-streak">🔥 0</div>
-    <button onclick="logout()">changer</button>
+    <div class="inner">
+      <div class="who" id="hdr-who"></div>
+      <div class="streak" id="hdr-streak">🔥 0</div>
+      <button onclick="logout()">changer</button>
+    </div>
   </header>
-  <nav id="navbar"></nav>
+  <nav><div class="inner" id="navbar"></div></nav>
   <main id="main"></main>
 </div>
 
