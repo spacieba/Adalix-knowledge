@@ -313,6 +313,8 @@ function renderQuizList(){
   $('#main').innerHTML = `
     <div class="card"><h3>🧠 Les quiz du Grand Été</h3><div style="font-size:13px;color:#888;">Chronométré, noté, enregistré. Objectif : 7/10 minimum. Le grand quiz final pioche dans tout le mois !</div></div>
     <div class="quiz-list">
+      <button onclick="startMapGame('europe')" style="border-left-color:#3e9c7a;">🗺️ LA CARTE D'EUROPE — clique sur les ${window.MAPS?window.MAPS.europe.targets.length:42} pays</button>
+      <button onclick="startMapGame('monde')" style="border-left-color:#3e9c7a;">🌍 LA CARTE DU MONDE — ${window.MAPS?window.MAPS.monde.targets.length:55} pays à situer</button>
       ${Object.entries(D.quizzes).map(([id,qz])=>`<button onclick="startQuiz('${id}')">📝 ${esc(qz.title)}</button>`).join('')}
       <button onclick="startQuiz('final')" style="border-left-color:#c98f2f;">🏆 LE GRAND QUIZ FINAL — 20 questions sur tout le mois</button>
     </div>
@@ -325,7 +327,12 @@ async function loadScores(){
   if(!data || !data.length){ el.innerHTML = '<span style="color:#888;font-size:13px;">Aucun quiz encore — lance-toi !</span>'; return; }
   el.innerHTML = data.map(r=>`<div style="font-size:13.5px;padding:4px 0;">${r.score>=Math.ceil(r.total*0.7)?'🏅':'📝'} ${esc(quizTitle(r.quiz_id))} — <b>${r.score}/${r.total}</b> <span style="color:#999;">(${new Date(r.created_at).toLocaleDateString('fr-FR')})</span></div>`).join('');
 }
-function quizTitle(id){ return id==='final' ? 'Grand quiz final' : (D.quizzes[id]?D.quizzes[id].title.split('—')[0].trim():id); }
+function quizTitle(id){
+  if(id==='final') return 'Grand quiz final';
+  if(id==='carte_europe') return "Carte d'Europe";
+  if(id==='carte_monde') return 'Carte du monde';
+  return D.quizzes[id] ? D.quizzes[id].title.split('—')[0].trim() : id;
+}
 function startQuiz(id){
   let questions;
   if(id==='final'){
@@ -375,6 +382,90 @@ async function finishQuiz(){
       <div class="actions" style="justify-content:center;">
         <button class="btn" onclick="startQuiz('${s.id}')">Rejouer</button>
         <button class="btn ghost" onclick="quizState=null;renderQuizList()">Retour</button>
+      </div>
+    </div>
+    </div>`;
+}
+
+/* ---------- jeu de la carte ---------- */
+let mapGame = null;
+function startMapGame(mode){
+  const M = window.MAPS && window.MAPS[mode];
+  if(!M){ toast('Carte indisponible — recharge la page'); return; }
+  const order = M.targets.map((t,i)=>i).sort(()=>Math.random()-0.5);
+  mapGame = { mode, M, order, idx:0, score:0, tries:0, found:{}, t0:Date.now() };
+  mapGame.timer = setInterval(()=>{
+    if(!mapGame){ return; }
+    const el = $('#map-timer');
+    if(el){ const s = Math.round((Date.now()-mapGame.t0)/1000); el.textContent = '⏱️ ' + Math.floor(s/60) + 'm' + String(s%60).padStart(2,'0'); }
+  }, 1000);
+  renderMapGame();
+}
+function stopMapGame(){ if(mapGame && mapGame.timer) clearInterval(mapGame.timer); mapGame = null; }
+function renderMapGame(){
+  const g = mapGame; if(!g) return;
+  const M = g.M;
+  const target = M.targets[g.order[g.idx]];
+  $('#main').innerHTML = `
+    <button class="back-btn" onclick="stopMapGame();renderQuizList()">← Quitter</button>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div class="quiz-progress">Pays ${g.idx+1} / ${M.targets.length} · Score : ${g.score}</div>
+        <div class="quiz-progress" id="map-timer">⏱️</div>
+      </div>
+      <div class="quiz-q">Clique sur : <span style="color:var(--accent2);">${esc(target.n)}</span></div>
+      <div id="map-feedback" style="font-size:13px;height:18px;color:#c9636a;"></div>
+      <svg viewBox="0 0 ${M.w} ${M.h}" style="width:100%;background:#dde8f2;border-radius:10px;display:block;overflow:hidden;">
+        ${M.context.map(d=>`<path d="${d}" fill="#c8cfd8" stroke="#ffffff" stroke-width="0.6"></path>`).join('')}
+        ${M.targets.map((t,i)=>`<path d="${t.d}" id="mp-${i}" fill="${g.found[i]==='ok'?'#3e9c7a':g.found[i]==='miss'?'#e8963f':'#f0e6c8'}" stroke="#8a8f98" stroke-width="0.7" style="cursor:pointer;" onclick="mapClick(${i})"></path>`).join('')}
+      </svg>
+      <div style="font-size:12px;color:#888;margin-top:6px;">3 points du premier coup, 2 au deuxième, 1 au troisième. Les pays trouvés passent en vert, ceux révélés en orange.</div>
+    </div>`;
+}
+function mapClick(i){
+  const g = mapGame; if(!g) return;
+  const targetIdx = g.order[g.idx];
+  if(g.found[i] !== undefined && i !== targetIdx) return;
+  if(i === targetIdx){
+    g.score += Math.max(1, 3 - g.tries);
+    g.found[i] = 'ok'; g.tries = 0; g.idx++;
+    if(g.idx >= g.M.targets.length){ finishMapGame(); return; }
+    renderMapGame();
+  } else {
+    g.tries++;
+    const el = $('#mp-'+i);
+    if(el){ const old = el.getAttribute('fill'); el.setAttribute('fill','#c9636a'); setTimeout(()=>{ if(el.isConnected) el.setAttribute('fill', old); }, 450); }
+    const fb = $('#map-feedback');
+    if(g.tries >= 3){
+      g.found[targetIdx] = 'miss'; g.tries = 0;
+      const good = $('#mp-'+targetIdx); if(good) good.setAttribute('fill','#e8963f');
+      if(fb) fb.textContent = "C'était là, en orange ! On continue…";
+      g.idx++;
+      setTimeout(()=>{ if(!mapGame) return; if(g.idx >= g.M.targets.length) finishMapGame(); else renderMapGame(); }, 1200);
+    } else if(fb){ fb.textContent = `Non — plus que ${3-g.tries} essai${3-g.tries>1?'s':''}…`; }
+  }
+}
+async function finishMapGame(){
+  const g = mapGame; if(!g) return;
+  clearInterval(g.timer);
+  const dur = Math.round((Date.now()-g.t0)/1000);
+  const total = g.M.targets.length * 3;
+  const pct = g.score/total;
+  const badge = pct>=0.9?'🥇 Géographe hors pair !':pct>=0.7?'🏅 Très solide !':pct>=0.5?'✅ Bonne base — rejoue pour progresser':'💪 La carte se dompte en rejouant !';
+  await db.from('adalix_qcm_scores').insert({child, quiz_id:'carte_'+g.mode, score:g.score, total, duration_s:dur});
+  checkBadges();
+  const mode = g.mode;
+  mapGame = null;
+  $('#main').innerHTML = `
+    <div class="narrow">
+    <div class="card" style="text-align:center;">
+      <h3>${mode==='europe'?"🗺️ Carte d'Europe":'🌍 Carte du monde'}</h3>
+      <div class="big-score">${g.score} / ${total}</div>
+      <div style="font-size:20px;">${badge}</div>
+      <div style="font-size:13px;color:#888;margin-top:6px;">⏱️ ${Math.floor(dur/60)}m${String(dur%60).padStart(2,'0')}s</div>
+      <div class="actions" style="justify-content:center;">
+        <button class="btn" onclick="startMapGame('${mode}')">Rejouer</button>
+        <button class="btn ghost" onclick="renderQuizList()">Retour</button>
       </div>
     </div>
     </div>`;
