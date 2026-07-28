@@ -5,6 +5,11 @@ const REPO = 'Adalix-knowledge';
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return; }
+  const fam = process.env.FAMILY_CODE;
+  if (fam && ((req.body || {}).code || '') !== fam) {
+    res.status(200).json({ error: 'code_famille', reply: "🔐 Code famille manquant ou incorrect — clique sur OK et saisis le code que papa t'a donné !" });
+    return;
+  }
   const token = process.env.GITHUB_FABRIQUE_TOKEN;
   if (!token) {
     res.status(200).json({ error: "La publication n'est pas encore branchée — demande à papa d'ajouter la clé GITHUB_FABRIQUE_TOKEN dans les réglages Vercel !" });

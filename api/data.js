@@ -36,6 +36,12 @@ module.exports = async (req, res) => {
       if (!a || !k) { res.status(400).json({ error: 'app et key obligatoires (lettres, chiffres, tirets)' }); return; }
       const body = JSON.stringify(value === undefined ? null : value);
       if (body.length > 100000) { res.status(400).json({ error: 'valeur trop grosse (100 Ko max)' }); return; }
+      // plafond anti-abus : 300 clés max par appli
+      const cur = await fetch(`${SUPA_URL}/rest/v1/adalix_appdata?app=eq.${a}&select=k`, { headers: HEADERS });
+      const keys = await cur.json();
+      if (Array.isArray(keys) && keys.length >= 300 && !keys.some(x => x.k === k)) {
+        res.status(400).json({ error: 'limite de 300 clés atteinte pour cette appli' }); return;
+      }
       const r = await fetch(`${SUPA_URL}/rest/v1/adalix_appdata?on_conflict=app,k`, {
         method: 'POST',
         headers: { ...HEADERS, 'Prefer': 'resolution=merge-duplicates' },

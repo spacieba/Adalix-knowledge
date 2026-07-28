@@ -12,6 +12,26 @@ let chatMsgs = [];         // {role, content}
 let currentWeek = 0;
 let assistantName = null;
 let childProfile = '';
+/* code famille : demandé une fois par appareil, exigé par les fonctions IA du serveur */
+let familyCode = localStorage.getItem('adalix_family_code') || '';
+function askFamilyCode(){
+  modal(`<h3>🔐 Code famille</h3>
+    <p style="font-size:13.5px;color:#666;">Pour protéger l'app, les fonctions magiques (assistant, Fabrique, images) demandent le code de la maison. Demande-le à papa — tu ne le saisis qu'une seule fois sur cet appareil.</p>
+    <input type="password" id="famcode-input" inputmode="text">
+    <div class="actions"><button class="btn" onclick="saveFamilyCode()">Valider</button><button class="btn ghost" onclick="closeModal()">Plus tard</button></div>`);
+  setTimeout(()=>{ const el=$('#famcode-input'); if(el) el.focus(); },50);
+}
+function saveFamilyCode(){
+  const el = $('#famcode-input'); if(!el) return;
+  familyCode = el.value.trim();
+  localStorage.setItem('adalix_family_code', familyCode);
+  closeModal(); toast('Code enregistré 🔐 — relance ta demande !');
+}
+function badFamilyCode(){
+  familyCode = '';
+  localStorage.removeItem('adalix_family_code');
+  askFamilyCode();
+}
 const MAX_NEW_PERSONS_PER_DAY = 3;
 let earnedBadges = new Set();
 let pendingRareBadges = [];
@@ -885,10 +905,11 @@ async function sendFab(){
   drawFab();
   try {
     const r = await fetch('/api/fabrique', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({child, currentCode: fabCode, messages: fabMsgs.slice(0,-1).slice(-10)})});
+      body: JSON.stringify({child, currentCode: fabCode, code: familyCode, messages: fabMsgs.slice(0,-1).slice(-10)})});
     const j = await r.json();
     const reply = j.reply || j.error || 'Oups, réessaie !';
     fabMsgs[fabMsgs.length-1] = {role:'assistant', content: reply};
+    if(j.error === 'code_famille'){ badFamilyCode(); }
     const m = reply.match(/```html\s*([\s\S]*?)```/);
     if(m && m[1].trim()){
       fabCode = m[1].trim();
@@ -906,8 +927,9 @@ async function publishFab(){
   const pub = $('#fab-pub'); if(pub) pub.innerHTML = '🚀 Publication en cours…';
   try {
     const r = await fetch('/api/publish', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({child, html: fabCode})});
+      body: JSON.stringify({child, html: fabCode, code: familyCode})});
     const j = await r.json();
+    if(j.error === 'code_famille'){ badFamilyCode(); if(pub) pub.innerHTML = '🔐 Saisis le code famille puis republie.'; return; }
     if(j.url){
       fabUrl = j.url; fabStep = 4; saveFab();
       if(pub) pub.innerHTML = `🎉 <b>Publié !</b> Ton code est sur <a href="${j.fileUrl}" target="_blank" rel="noopener">GitHub</a> — comme un vrai dev.<br>🔗 Ta page sera en ligne dans ~1 minute : <a href="${j.url}" target="_blank" rel="noopener">${j.url}</a>`;
@@ -1046,10 +1068,11 @@ async function sendChat(){
     const hist = chatMsgs.slice(0,-1).slice(-12);
     const payload = hist.map((m,i)=>({ role:m.role, content:m.content, image: (i===hist.length-1 && m.image) ? m.image : undefined }));
     const r = await fetch('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({child, assistantName, profile: childProfile, messages: payload})});
+      body: JSON.stringify({child, assistantName, profile: childProfile, code: familyCode, messages: payload})});
     const j = await r.json();
     chatMsgs[chatMsgs.length-1] = {role:'assistant', content: j.reply || j.error || 'Oups, réessaie !'};
-    db.from('adalix_chat').insert({child, role:'assistant', content: chatMsgs[chatMsgs.length-1].content}).then(()=>{});
+    if(j.error === 'code_famille'){ badFamilyCode(); }
+    else db.from('adalix_chat').insert({child, role:'assistant', content: chatMsgs[chatMsgs.length-1].content}).then(()=>{});
   } catch(e){
     chatMsgs[chatMsgs.length-1] = {role:'assistant', content:'Erreur de connexion — réessaie dans un instant.'};
   }
@@ -1066,9 +1089,10 @@ async function genImage(){
   const prompt = $('#img-prompt').value.trim(); if(!prompt) return;
   $('#img-go').textContent='✨ En cours…'; $('#img-go').disabled=true;
   try {
-    const r = await fetch('/api/image', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({prompt})});
+    const r = await fetch('/api/image', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({prompt, code: familyCode})});
     const j = await r.json();
-    $('#img-out').innerHTML = j.url ? `<img class="img-result" src="${j.url}">` : `<p style="color:#c9636a;font-size:13px;">${esc(j.error||'Erreur')}</p>`;
+    if(j.error === 'code_famille'){ badFamilyCode(); }
+    $('#img-out').innerHTML = j.url ? `<img class="img-result" src="${j.url}">` : `<p style="color:#c9636a;font-size:13px;">${esc(j.reply||j.error||'Erreur')}</p>`;
   } catch(e){ $('#img-out').innerHTML = '<p style="color:#c9636a;font-size:13px;">Erreur de connexion.</p>'; }
   $('#img-go').textContent='Générer'; $('#img-go').disabled=false;
 }

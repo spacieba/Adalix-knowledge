@@ -15,6 +15,11 @@ Règles :
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return; }
+  const fam = process.env.FAMILY_CODE;
+  if (fam && ((req.body || {}).code || '') !== fam) {
+    res.status(200).json({ error: 'code_famille', reply: "🔐 Code famille manquant ou incorrect — clique sur OK et saisis le code que papa t'a donné !" });
+    return;
+  }
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) {
     res.status(200).json({ reply: "Le chat n'est pas encore activé — demande à papa d'ajouter la clé API Anthropic dans les réglages ! En attendant, note ta question dans ton carnet. 📝" });
