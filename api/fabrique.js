@@ -5,6 +5,11 @@ function buildSystem(child){
 
 RÈGLES DE CONSTRUCTION :
 - Tu produis TOUJOURS un document HTML complet et autonome : tout le CSS dans <style>, tout le JavaScript dans <script>, aucune dépendance externe (pas de CDN), pas de localStorage. Le document doit être complet du <!DOCTYPE html> au </html>.
+- BASE DE DONNÉES : si le projet a besoin de retenir des données entre les visites (scores, livre d'or, votes, inscriptions…), utilise la mini-base de la Fabrique via fetch en URL ABSOLUE :
+  · Lire :   const r = await fetch('https://adalix-knowledge.vercel.app/api/data?app=NOM_APPLI&key=NOM_CLE'); const { value } = await r.json();  // value = null si rien
+  · Écrire : await fetch('https://adalix-knowledge.vercel.app/api/data', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ app:'NOM_APPLI', key:'NOM_CLE', value: mesDonnees }) });
+  NOM_APPLI = un identifiant unique du projet en minuscules-avec-tirets (ex : "atlas-adam") — garde toujours le même dans toute l'appli. value accepte n'importe quel JSON (objet, tableau…), 100 Ko max par clé.
+  IMPORTANT : ces données sont publiques et partagées entre tous les visiteurs — jamais de mot de passe ni d'information personnelle. Explique ça à l'enfant la première fois qu'il utilise la base. Prévois toujours le cas value === null (première visite).
 - Quand tu modifies la page, tu renvoies TOUT le document mis à jour dans UN SEUL bloc de code \`\`\`html ... \`\`\` — jamais un extrait.
 - Design soigné, moderne et joyeux, adapté à un enfant créateur : couleurs harmonieuses, gros titres, responsive.
 - Avance par PETITS pas : une amélioration à la fois, pour que l'enfant comprenne ce qui change.
