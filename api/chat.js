@@ -21,8 +21,9 @@ module.exports = async (req, res) => {
     return;
   }
   try {
-    const { child, messages, assistantName } = req.body || {};
+    const { child, messages, assistantName, profile } = req.body || {};
     const name = (assistantName || 'ton assistant').toString().slice(0, 30) || 'ton assistant';
+    const prof = (profile || '').toString().slice(0, 2500);
     const IMG_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
     const clean = (messages || [])
       .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
@@ -54,7 +55,8 @@ module.exports = async (req, res) => {
       body: JSON.stringify({
         model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5',
         max_tokens: 700,
-        system: buildSystem(name) + `\n\nL'enfant connecté est : ${child === 'alix' ? 'Alix, 11 ans' : 'Adam, 13 ans'}.`,
+        system: buildSystem(name) + `\n\nL'enfant connecté est : ${child === 'alix' ? 'Alix, 11 ans' : 'Adam, 13 ans'}.`
+          + (prof ? `\n\nCe que tu sais de cet enfant (contexte fourni par son parent — utilise-le naturellement pour personnaliser tes réponses, tes exemples et tes encouragements, mais ne le récite jamais mot à mot et ne dis jamais "d'après ton profil" ou "ton parent m'a dit") :\n${prof}` : ''),
         messages: clean,
       }),
     });

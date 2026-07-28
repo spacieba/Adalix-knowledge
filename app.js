@@ -11,6 +11,7 @@ let unlocked = new Set();  // person names
 let chatMsgs = [];         // {role, content}
 let currentWeek = 0;
 let assistantName = null;
+let childProfile = '';
 const MAX_NEW_PERSONS_PER_DAY = 3;
 let earnedBadges = new Set();
 let pendingRareBadges = [];
@@ -40,6 +41,8 @@ function selectProfile(c){
 async function loadAssistantName(){
   const {data} = await db.from('adalix_assistant').select('name').eq('child',child).maybeSingle();
   assistantName = (data && data.name) || null;
+  const {data: prof} = await db.from('adalix_profiles').select('profile').eq('child',child).maybeSingle();
+  childProfile = (prof && prof.profile) || '';
 }
 function askParentPin(){
   modal(`<h3>Espace parent</h3><p style="font-size:14px;">Code d'accès :</p>
@@ -397,7 +400,8 @@ function drawChecklist(){
 }
 async function toggleItem(id){
   if(id==='ecriture' && !todayItems[id]){ openJournal(); return; }
-  if(id==='projet' && !todayItems[id]){ showTab('projet'); return; }
+  // 'projet' se coche directement comme les autres (avant : redirection vers l'onglet projet
+  // sans jamais cocher — l'enfant croyait avoir validé et retrouvait la case vide)
   todayItems[id] = !todayItems[id];
   drawChecklist(); saveChecklist();
 }
@@ -522,6 +526,7 @@ function renderChat(){
         <button class="btn" onclick="sendChat()">➤</button>
       </div>
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn ghost" onclick="openGems()">⭐ Mes pépites</button>
         <button class="btn ghost" onclick="openImagine()">🎨 Atelier d'images</button>
         <button class="btn ghost" onclick="askAssistantName()">✏️ Renommer ${esc(assistantName)}</button>
       </div>
@@ -548,8 +553,38 @@ async function saveAssistantName(){
 }
 function drawChat(){
   const box = $('#chat-box'); if(!box) return;
-  box.innerHTML = chatMsgs.map(m=>`<div class="msg ${m.role==='user'?'user':'bot'}">${m.dataUrl?`<img src="${m.dataUrl}" style="max-width:100%;border-radius:10px;display:block;margin-bottom:${m.content?'6px':'0'};">`:''}${esc(m.content)}</div>`).join('') || '<div style="color:#999;font-size:13px;text-align:center;margin-top:30px;">Aucun message — pose ta première question ! Tu peux aussi m\'envoyer une image ou une capture d\'écran. 🖼️</div>';
+  box.innerHTML = chatMsgs.map((m,i)=>`<div class="msg ${m.role==='user'?'user':'bot'}">${m.dataUrl?`<img src="${m.dataUrl}" style="max-width:100%;border-radius:10px;display:block;margin-bottom:${m.content?'6px':'0'};">`:''}${esc(m.content)}${m.role==='assistant' && m.content && m.content!=='…' ? `<div style="text-align:right;margin-top:4px;"><button onclick="saveGem(${i})" title="Garder cette réponse dans mes pépites" style="background:none;border:none;cursor:pointer;font-size:15px;opacity:${m.saved?'1':'.45'};">${m.saved?'⭐ gardé':'⭐'}</button></div>`:''}</div>`).join('') || '<div style="color:#999;font-size:13px;text-align:center;margin-top:30px;">Aucun message — pose ta première question ! Tu peux aussi m\'envoyer une image ou une capture d\'écran. 🖼️</div>';
   box.scrollTop = box.scrollHeight;
+}
+/* ---- pépites : garder ses meilleures questions/réponses ---- */
+async function saveGem(i){
+  const m = chatMsgs[i];
+  if(!m || m.role!=='assistant' || m.saved) return;
+  // retrouve la question qui précède cette réponse
+  let q = '';
+  for(let j=i-1;j>=0;j--){ if(chatMsgs[j].role==='user'){ q = chatMsgs[j].content || '(image)'; break; } }
+  const {error} = await db.from('adalix_saved').insert({child, question:q, answer:m.content});
+  if(error){ toast('Erreur — réessaie'); return; }
+  m.saved = true; drawChat();
+  toast('⭐ Gardé dans tes pépites !');
+}
+async function openGems(){
+  const {data} = await db.from('adalix_saved').select('*').eq('child',child).order('created_at',{ascending:false});
+  const gems = data||[];
+  modal(`<h3>⭐ Mes pépites</h3>
+    <div style="font-size:12.5px;color:#888;margin-bottom:8px;">${gems.length ? 'Tes questions-réponses préférées, gardées pour toujours.' : 'Rien pour l\'instant — clique sur la petite étoile ⭐ sous une réponse de ton assistant pour la garder ici.'}</div>
+    <div style="max-height:52vh;overflow:auto;">
+    ${gems.map(g=>`<div style="background:#f7f8fb;border-radius:10px;padding:9px 12px;margin-bottom:8px;">
+      <div style="font-size:11px;color:#999;">${new Date(g.created_at).toLocaleDateString('fr-FR')} <button onclick="deleteGem(${g.id})" style="float:right;background:none;border:none;cursor:pointer;">🗑️</button></div>
+      ${g.question?`<div style="font-size:13px;font-weight:700;margin:2px 0;">${esc(g.question)}</div>`:''}
+      <div style="font-size:13px;line-height:1.5;white-space:pre-wrap;">${esc(g.answer)}</div>
+    </div>`).join('')}
+    </div>
+    <div class="actions"><button class="btn" onclick="closeModal()">Fermer</button></div>`);
+}
+async function deleteGem(id){
+  await db.from('adalix_saved').delete().eq('id',id).eq('child',child);
+  openGems();
 }
 /* ---- images dans le chat (les "yeux" de l'assistant) ---- */
 let pendingImage = null;   // {media_type, data, dataUrl}
@@ -604,7 +639,7 @@ async function sendChat(){
     const hist = chatMsgs.slice(0,-1).slice(-12);
     const payload = hist.map((m,i)=>({ role:m.role, content:m.content, image: (i===hist.length-1 && m.image) ? m.image : undefined }));
     const r = await fetch('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({child, assistantName, messages: payload})});
+      body: JSON.stringify({child, assistantName, profile: childProfile, messages: payload})});
     const j = await r.json();
     chatMsgs[chatMsgs.length-1] = {role:'assistant', content: j.reply || j.error || 'Oups, réessaie !'};
     db.from('adalix_chat').insert({child, role:'assistant', content: chatMsgs[chatMsgs.length-1].content}).then(()=>{});
@@ -762,7 +797,7 @@ function openBadges(){ modal(renderBadgesHTML()); }
 /* ---------- parent dashboard ---------- */
 async function renderDashboard(){
   $('#main').innerHTML = '<div class="card">Chargement…</div>';
-  const [scores, checks, persos, journal, chats, projets, assistants, badges, expoNotes] = await Promise.all([
+  const [scores, checks, persos, journal, chats, projets, assistants, badges, expoNotes, profiles] = await Promise.all([
     db.from('adalix_qcm_scores').select('*').order('created_at',{ascending:false}).limit(30),
     db.from('adalix_checklist').select('*').order('day',{ascending:false}).limit(60),
     db.from('adalix_personalities').select('*'),
@@ -772,7 +807,9 @@ async function renderDashboard(){
     db.from('adalix_assistant').select('*'),
     db.from('adalix_badges').select('*'),
     db.from('adalix_expose_notes').select('*'),
+    db.from('adalix_profiles').select('*'),
   ]);
+  profilesCache = profiles.data||[];
   const S = scores.data||[], C = checks.data||[], P = persos.data||[], J = journal.data||[], CH = chats.data||[], PR = projets.data||[], AS = assistants.data||[], BD = badges.data||[];
   expoNotesCache = expoNotes.data||[];
   expoStars = {};
@@ -793,6 +830,7 @@ async function renderDashboard(){
       </div>`).join('')}</div>
     <div class="card"><h3>🧠 Derniers quiz</h3><table class="ptable"><tr><th>Qui</th><th>Quiz</th><th>Score</th><th>Date</th></tr>
       ${S.slice(0,12).map(r=>`<tr><td>${kidName(r.child)}</td><td>${esc(quizTitle(r.quiz_id))}</td><td><b>${r.score}/${r.total}</b></td><td>${new Date(r.created_at).toLocaleDateString('fr-FR')}</td></tr>`).join('')||'<tr><td colspan=4 style="color:#999;">Aucun quiz encore</td></tr>'}</table></div>
+    ${renderProfilesCard()}
     ${renderExpoNotationCard()}
     <div class="card"><h3>💻 Leur projet du mois</h3>
       ${kids.map(k=>{
@@ -810,6 +848,35 @@ async function renderDashboard(){
       ${CH.slice(0,30).reverse().map(r=>`<div style="font-size:13px;padding:4px 0;border-bottom:1px solid #f0f2f6;"><b>${kidName(r.child)}${r.role==='assistant'?` ← ${esc(assistantOf(r.child)||'assistant')}`:''} :</b> ${esc(r.content.slice(0,180))}${r.content.length>180?'…':''}</div>`).join('')||'<span style="color:#999;font-size:13px;">Aucune conversation encore</span>'}</div>
     ${renderAdminPanel()}
   </div>`;
+}
+
+/* ---------- profils enfants pour l'assistant (parent) ---------- */
+let profilesCache = [];
+function renderProfilesCard(){
+  const kids = ['adam','alix'];
+  const kidName = k => k==='adam'?'🚀 Adam':'🎨 Alix';
+  return `<div class="card"><h3>👤 Profils pour l'assistant IA</h3>
+    <div style="font-size:12.5px;color:#888;margin-bottom:8px;">Tout ce que tu écris ici est transmis (discrètement) à l'assistant de chaque enfant : centres d'intérêt, caractère, ce qui le motive, ses difficultés, son niveau… Plus c'est riche, plus les réponses seront personnalisées. L'assistant ne révèle jamais qu'il a ce contexte.</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;">
+      ${kids.map(k=>{
+        const p = profilesCache.find(r=>r.child===k);
+        return `<div>
+          <div style="font-weight:800;color:var(--accent2);margin-bottom:4px;">${kidName(k)}</div>
+          <textarea id="prof-${k}" rows="6" placeholder="Décris ${k==='adam'?'Adam':'Alix'}…">${esc(p?p.profile:'')}</textarea>
+          <button class="btn" style="font-size:12.5px;padding:7px 14px;" onclick="saveProfile('${k}')">Enregistrer</button>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+async function saveProfile(k){
+  const el = $('#prof-'+k); if(!el) return;
+  const profile = el.value.trim();
+  const {error} = await db.from('adalix_profiles').upsert({child:k, profile, updated_at:new Date().toISOString()});
+  if(error){ toast('Erreur — réessaie'); return; }
+  const idx = profilesCache.findIndex(r=>r.child===k);
+  if(idx>=0) profilesCache[idx].profile = profile; else profilesCache.push({child:k, profile});
+  toast('Profil enregistré 👤');
 }
 
 /* ---------- notation des exposés (parent) ---------- */
@@ -873,6 +940,7 @@ const RESET_TABLES = [
   {key:'assistant', table:'adalix_assistant', label:'Nom de l\'assistant'},
   {key:'badges', table:'adalix_badges', label:'Badges débloqués'},
   {key:'exposes', table:'adalix_expose_notes', label:'Notes des exposés'},
+  {key:'pepites', table:'adalix_saved', label:'Pépites du chat'},
 ];
 function renderAdminPanel(){
   return `<div class="card" style="border-left:4px solid #c9636a;">
