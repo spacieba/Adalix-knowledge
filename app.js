@@ -32,8 +32,9 @@ function selectProfile(c){
   $('#screen-app').classList.remove('hidden');
   $('#hdr-who').textContent = c === 'adam' ? '🐉 Adam' : '🦊 Alix';
   localStorage.setItem('adalix_child', c);
-  buildNav(['programme','quiz','les100','checklist','projet','chat','guide']);
+  buildNav(['programme','quiz','les100','checklist','projet','fabrique','chat','guide']);
   assistantName = null;
+  fabMsgs = []; fabCode = ''; fabUrl = ''; fabLoaded = false; fabStep = 0;
   loadUnlocked(); refreshStreak(); loadAssistantName();
   loadBadges().then(checkBadges);
   showTab('programme');
@@ -69,13 +70,13 @@ function logout(){ location.reload(); }
 const TABS = {
   programme:{icon:'📅',label:'Programme'}, quiz:{icon:'🧠',label:'Quiz'},
   les100:{icon:'🏆',label:'Les 100'}, checklist:{icon:'✅',label:'Checklist'},
-  projet:{icon:'💻',label:'Mon projet'},
+  projet:{icon:'💻',label:'Mon projet'}, fabrique:{icon:'🏭',label:'Fabrique'},
   chat:{icon:'💬',label:'Questions'}, guide:{icon:'📖',label:'Guide'}, dashboard:{icon:'📊',label:'Tableau de bord'},
 };
 // icônes réhabillées selon le profil — mêmes intitulés, juste l'esprit visuel qui change
 const THEME_ICONS = {
-  adam: {programme:'🗺️', quiz:'🐲', les100:'🏆', checklist:'📜', projet:'⚒️', chat:'🔮', guide:'🧭'},
-  alix: {programme:'🌿', quiz:'🦊', les100:'🦋', checklist:'🐣', projet:'🎨', chat:'🐰', guide:'📖'},
+  adam: {programme:'🗺️', quiz:'🐲', les100:'🏆', checklist:'📜', projet:'⚒️', fabrique:'🏭', chat:'🔮', guide:'🧭'},
+  alix: {programme:'🌿', quiz:'🦊', les100:'🦋', checklist:'🐣', projet:'🎨', fabrique:'🏭', chat:'🐰', guide:'📖'},
 };
 function tabIcon(t){ return (THEME_ICONS[child] && THEME_ICONS[child][t]) || TABS[t].icon; }
 function buildNav(tabs){
@@ -85,7 +86,7 @@ function showTab(t){
   tab = t;
   document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
   const nb = $('#nav-'+t); if(nb) nb.classList.add('active');
-  ({programme:renderProgramme, quiz:renderQuizList, les100:renderGallery, checklist:renderChecklist, projet:renderProjet, chat:renderChat, guide:renderGuide, dashboard:renderDashboard}[t])();
+  ({programme:renderProgramme, quiz:renderQuizList, les100:renderGallery, checklist:renderChecklist, projet:renderProjet, fabrique:renderFabrique, chat:renderChat, guide:renderGuide, dashboard:renderDashboard}[t])();
 }
 
 /* ---------- guide ---------- */
@@ -111,6 +112,8 @@ function renderGuide(){
       `Tes 12 gestes quotidiens : lit fait, lecture, balade, programme du jour, projet, écriture du soir… Chaque journée complète allume ta série 🔥 en haut de l'écran. L'<b>écriture du soir</b> (ce que j'ai appris / ce qui m'a étonné) construit jour après jour ton journal du mois — tu seras fier(e) de le relire en septembre.`)}
     ${gcard('💻', "L'onglet Mon projet",
       `Un vrai projet personnel, mené sur tout le mois, <b>guidé jour par jour</b> : chaque jour, l'app te donne l'étape à faire. Semaine 1 : tu ne fabriques rien — tu <b>brainstormes avec ton assistant</b>, tu choisis ton idée et tu poses ton plan. Semaine 2 : première version complète, même moche. Semaine 3 : amélioration et finitions. Semaine 4 : préparation de la présentation. Le <b>rendu final</b> se montre à la fête du 22 août, avec une mini-présentation de 2-3 minutes. Six idées te sont proposées, mais tu peux inventer la tienne.`)}
+    ${gcard('🏭', "L'onglet Fabrique — ton atelier de création",
+      `Le grand atelier : tu y fabriques une <b>vraie page web</b> avec le Bâtisseur, une IA spécialisée dans la construction. Cinq étapes de pro : imagine, fabrique (par petites améliorations successives), teste, <b>publie ton code sur GitHub</b> — le coffre-fort mondial du code — et ta page est mise <b>en ligne sur le vrai internet</b>, avec un lien à partager. C'est l'endroit idéal pour construire ton projet du mois s'il est numérique. Tu peux même regarder et modifier le code toi-même (bouton « Voir le code »).`)}
     ${gcard('💬', "L'onglet Questions",
       `Ton assistant IA personnel — c'est toi qui l'as baptisé ! Pose-lui TOUTES tes questions : un mot compliqué, un point d'histoire, une idée d'exposé. Règle d'or (tu la verras dans le fil IA) : utilise-le pour <b>comprendre plus</b>, jamais pour réfléchir à ta place. Il y a aussi l'atelier d'images pour illustrer tes projets et exposés.`)}
     ${gcard('🎤', "Les exposés du vendredi",
@@ -574,7 +577,8 @@ async function renderProjet(){
     </div>
     <div class="card"><h3>📝 Où j'en suis</h3>
       <textarea id="proj-notes" rows="4" placeholder="Note ce que tu as fait aujourd'hui sur ton projet…">${esc(projetState.notes||'')}</textarea>
-      <div class="actions"><button class="btn" onclick="saveProjetNotes()">Enregistrer</button></div>
+      <div class="actions"><button class="btn" onclick="saveProjetNotes()">Enregistrer</button>
+      <button class="btn ghost" onclick="showTab('fabrique')">🏭 Construire dans la Fabrique</button></div>
     </div>
   </div>`;
 }
@@ -600,6 +604,119 @@ async function markChecklistItemDone(id){
   todayItems = items;
   refreshStreak();
   checkBadges();
+}
+
+/* ---------- La Fabrique ---------- */
+let fabMsgs = [];
+let fabCode = '';
+let fabUrl = '';
+let fabLoaded = false;
+const FAB_STEPS = [
+  {e:'💡', t:'Imagine', d:"Décris ton idée au Bâtisseur : c'est quoi ta page, pour qui, qu'est-ce qu'on doit y voir ? (Ton projet du mois est le candidat idéal !)"},
+  {e:'🔨', t:'Fabrique', d:"Demande au Bâtisseur, regarde l'aperçu changer, puis améliore petit à petit : un titre, des couleurs, un bouton… Une chose à la fois, comme les pros."},
+  {e:'🧪', t:'Teste', d:"Clique partout dans l'aperçu, cherche ce qui cloche, fais tester quelqu'un d'autre. Un bug trouvé = une victoire."},
+  {e:'🚀', t:'Publie', d:"Ton code part sur GitHub (le coffre-fort mondial du code, celui des vrais développeurs) et ta page est mise en ligne automatiquement."},
+  {e:'🔗', t:'Partage', d:"Envoie ton lien à la famille — ta page est sur le vrai internet, visible depuis n'importe où dans le monde."},
+];
+let fabStep = 0;
+async function renderFabrique(){
+  if(child==='parent'){ renderDashboard(); return; }
+  if(!fabLoaded){
+    $('#main').innerHTML = '<div class="card">Ouverture de l\'atelier…</div>';
+    const {data} = await db.from('adalix_fabrique').select('*').eq('child',child).maybeSingle();
+    fabCode = (data && data.code) || '';
+    fabUrl = (data && data.published_url) || '';
+    fabLoaded = true;
+  }
+  $('#main').innerHTML = `
+    <div class="card"><h3>🏭 La Fabrique — ton atelier de création</h3>
+      <div style="font-size:13px;color:#888;">Ici tu fabriques une vraie page web avec le Bâtisseur, ton IA d'atelier — puis tu la publies sur le vrai internet, comme un vrai développeur. Suis les 5 étapes :</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+        ${FAB_STEPS.map((s,i)=>`<button class="btn ${i===fabStep?'':'ghost'}" style="font-size:12px;padding:6px 10px;" onclick="fabStep=${i};renderFabrique()">${s.e} ${i+1}. ${s.t}</button>`).join('')}
+      </div>
+      <div style="font-size:13.5px;line-height:1.5;margin-top:8px;background:#fdf6ec;border-radius:8px;padding:8px 12px;"><b>${FAB_STEPS[fabStep].e} Étape ${fabStep+1} — ${FAB_STEPS[fabStep].t} :</b> ${FAB_STEPS[fabStep].d}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;align-items:start;">
+      <div class="card">
+        <h3>🤖 Le Bâtisseur</h3>
+        <div id="fab-box" style="display:flex;flex-direction:column;gap:8px;max-height:44vh;min-height:120px;overflow-y:auto;padding:4px 2px;"></div>
+        <div class="chat-input" style="margin-top:8px;">
+          <input type="text" id="fab-in" placeholder="Ex : fabrique-moi la première page de mon atlas imaginaire…" onkeydown="if(event.key==='Enter')sendFab()">
+          <button class="btn" onclick="sendFab()">🔨</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>👀 L'aperçu de ta page</h3>
+        <iframe id="fab-preview" sandbox="allow-scripts" style="width:100%;height:44vh;border:1.5px solid #ccd4e0;border-radius:10px;background:white;"></iframe>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+          <button class="btn ghost" style="font-size:12.5px;" onclick="toggleFabCode()">👨‍💻 Voir le code</button>
+          <button class="btn" style="font-size:12.5px;background:#3e9c7a;" onclick="publishFab()">🚀 Publier ma page</button>
+        </div>
+        <div id="fab-code-wrap" class="hidden" style="margin-top:8px;">
+          <textarea id="fab-code" rows="10" spellcheck="false" style="font-family:monospace;font-size:11.5px;"></textarea>
+          <button class="btn ghost" style="font-size:12px;margin-top:4px;" onclick="applyFabCode()">Appliquer mes modifications</button>
+        </div>
+        <div id="fab-pub" style="font-size:13px;margin-top:8px;">${fabUrl?`🔗 Dernière publication : <a href="${fabUrl}" target="_blank" rel="noopener">${fabUrl}</a>`:''}</div>
+      </div>
+    </div>`;
+  drawFab(); updateFabPreview();
+}
+function drawFab(){
+  const box = $('#fab-box'); if(!box) return;
+  const visible = fabMsgs.map(m => ({...m, content: m.role==='assistant' ? m.content.replace(/```html[\s\S]*?```/g, '🔧 [code mis à jour → regarde l\'aperçu !]') : m.content}));
+  box.innerHTML = visible.map(m=>`<div class="msg ${m.role==='user'?'user':'bot'}" style="font-size:13.5px;">${esc(m.content)}</div>`).join('')
+    || '<div style="color:#999;font-size:13px;text-align:center;margin-top:20px;">Décris ta page de rêve au Bâtisseur — il la construit sous tes yeux. 🏗️</div>';
+  box.scrollTop = box.scrollHeight;
+}
+function updateFabPreview(){
+  const f = $('#fab-preview'); if(!f) return;
+  f.srcdoc = fabCode || '<body style="font-family:sans-serif;color:#999;display:flex;align-items:center;justify-content:center;height:90vh;text-align:center;">Ta page apparaîtra ici.<br>Commence par en parler au Bâtisseur !</body>';
+  const ta = $('#fab-code'); if(ta) ta.value = fabCode;
+}
+function toggleFabCode(){ const w = $('#fab-code-wrap'); if(w){ w.classList.toggle('hidden'); const ta=$('#fab-code'); if(ta) ta.value = fabCode; } }
+function applyFabCode(){ const ta = $('#fab-code'); if(!ta) return; fabCode = ta.value; updateFabPreview(); saveFab(); toast('Code appliqué 👨‍💻'); }
+async function saveFab(){
+  await db.from('adalix_fabrique').upsert({child, code:fabCode, published_url:fabUrl, updated_at:new Date().toISOString()});
+}
+async function sendFab(){
+  const inp = $('#fab-in'); const text = inp ? inp.value.trim() : ''; if(!text) return;
+  inp.value='';
+  fabMsgs.push({role:'user', content:text});
+  fabMsgs.push({role:'assistant', content:'🔨 Le Bâtisseur travaille…'});
+  drawFab();
+  try {
+    const r = await fetch('/api/fabrique', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({child, currentCode: fabCode, messages: fabMsgs.slice(0,-1).slice(-10)})});
+    const j = await r.json();
+    const reply = j.reply || j.error || 'Oups, réessaie !';
+    fabMsgs[fabMsgs.length-1] = {role:'assistant', content: reply};
+    const m = reply.match(/```html\s*([\s\S]*?)```/);
+    if(m && m[1].trim()){
+      fabCode = m[1].trim();
+      updateFabPreview(); saveFab();
+      if(fabStep < 1){ fabStep = 1; }
+    }
+  } catch(e){
+    fabMsgs[fabMsgs.length-1] = {role:'assistant', content:'Erreur de connexion — réessaie dans un instant.'};
+  }
+  drawFab();
+  if($('#fab-code') && !$('#fab-code-wrap').classList.contains('hidden')) $('#fab-code').value = fabCode;
+}
+async function publishFab(){
+  if(!fabCode.trim()){ toast('Fabrique d\'abord ta page avec le Bâtisseur !'); return; }
+  const pub = $('#fab-pub'); if(pub) pub.innerHTML = '🚀 Publication en cours…';
+  try {
+    const r = await fetch('/api/publish', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({child, html: fabCode})});
+    const j = await r.json();
+    if(j.url){
+      fabUrl = j.url; fabStep = 4; saveFab();
+      if(pub) pub.innerHTML = `🎉 <b>Publié !</b> Ton code est sur <a href="${j.fileUrl}" target="_blank" rel="noopener">GitHub</a> — comme un vrai dev.<br>🔗 Ta page sera en ligne dans ~1 minute : <a href="${j.url}" target="_blank" rel="noopener">${j.url}</a>`;
+      toast('🚀 Publié sur GitHub !');
+    } else {
+      if(pub) pub.innerHTML = '😕 ' + esc(j.error || 'Erreur de publication');
+    }
+  } catch(e){ if(pub) pub.innerHTML = '😕 Erreur de connexion — réessaie.'; }
 }
 
 /* ---------- chat ---------- */
