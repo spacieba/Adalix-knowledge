@@ -39,7 +39,7 @@ module.exports = async (req, res) => {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
-        model: process.env.ANTHROPIC_MODEL_FABRIQUE || 'claude-sonnet-4-5',
+        model: process.env.ANTHROPIC_MODEL_FABRIQUE || 'claude-sonnet-5',
         max_tokens: 8000,
         system: buildSystem(child),
         messages: clean,
