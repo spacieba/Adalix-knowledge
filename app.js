@@ -465,6 +465,13 @@ async function renderGeo(){
 }
 
 /* ---- jeux « clique sur la zone » (pays, régions, départements) ---- */
+const GEO_PALETTE = ['#ffd166','#f4a261','#ef8354','#8ecae6','#95d5b2','#f9c74f','#b5e48c','#f4978e','#bdb2ff','#a8dadc','#ffb4a2','#e9c46a','#90be6d','#f8ad9d','#9bf6ff','#caffbf','#fdffb6','#ffc6ff','#84dcc6','#ffadad'];
+function geoFill(g, i){
+  if(g.found[i]==='ok') return '#2d9d78';
+  if(g.found[i]==='miss') return '#ff8f1f';
+  if(!g.included.has(i)) return '#dde2d6';
+  return GEO_PALETTE[i % GEO_PALETTE.length];
+}
 let mapGame = null;
 function startMapGame(gameId){
   const cfg = GEO_GAMES.find(g=>g.id===gameId);
@@ -494,13 +501,19 @@ function renderMapGame(){
         <div class="quiz-progress">${g.idx+1} / ${g.order.length} · Score : ${g.score}</div>
         <div class="quiz-progress" id="map-timer">⏱️</div>
       </div>
-      <div class="quiz-q">${g.cfg.icon} Clique sur : <span style="color:var(--accent2);">${esc(target.n)}</span></div>
+      <div class="quiz-q">${g.cfg.icon} Clique sur : <span style="background:var(--accent);color:white;border-radius:12px;padding:2px 14px;">${esc(target.n)}</span></div>
       <div id="map-feedback" style="font-size:13px;height:18px;color:#c9636a;"></div>
-      <svg viewBox="0 0 ${M.w} ${M.h}" style="width:100%;background:#dde8f2;border-radius:10px;display:block;overflow:hidden;">
-        ${(M.context||[]).map(d=>`<path d="${d}" fill="#c8cfd8" stroke="#ffffff" stroke-width="0.6"></path>`).join('')}
-        ${M.targets.map((t,i)=>`<path d="${t.d}" id="mp-${i}" fill="${g.found[i]==='ok'?'#3e9c7a':g.found[i]==='miss'?'#e8963f':(g.included.has(i)?'#f0e6c8':'#c8cfd8')}" stroke="#8a8f98" stroke-width="0.7" style="cursor:pointer;" onclick="mapClick(${i})"></path>`).join('')}
+      <svg viewBox="0 0 ${M.w} ${M.h}" style="width:100%;border-radius:12px;display:block;overflow:hidden;box-shadow:inset 0 0 30px rgba(20,60,110,.15);">
+        <defs>
+          <radialGradient id="sea" cx="30%" cy="22%" r="95%">
+            <stop offset="0%" stop-color="#c3e5f8"/><stop offset="55%" stop-color="#94c8ec"/><stop offset="100%" stop-color="#6aa9d8"/>
+          </radialGradient>
+        </defs>
+        <rect x="0" y="0" width="${M.w}" height="${M.h}" fill="url(#sea)"/>
+        ${(M.context||[]).map(d=>`<path d="${d}" fill="#dde2d6" stroke="#ffffff" stroke-width="0.7"></path>`).join('')}
+        ${M.targets.map((t,i)=>`<path d="${t.d}" id="mp-${i}" class="geo-t" fill="${geoFill(g,i)}" stroke="#ffffff" stroke-width="0.9" style="cursor:pointer;" onclick="mapClick(${i})"></path>`).join('')}
       </svg>
-      <div style="font-size:12px;color:#888;margin-top:6px;">3 points du premier coup, 2 au deuxième, 1 au troisième. Vert = trouvé, orange = révélé.</div>
+      <div style="font-size:12px;color:#888;margin-top:6px;">3 points du premier coup, 2 au deuxième, 1 au troisième. ✅ Vert foncé = trouvé, 🔶 orange = révélé.</div>
     </div>`;
 }
 function mapClick(i){
@@ -519,7 +532,7 @@ function mapClick(i){
     const fb = $('#map-feedback');
     if(g.tries >= 3){
       g.found[targetIdx] = 'miss'; g.tries = 0;
-      const good = $('#mp-'+targetIdx); if(good) good.setAttribute('fill','#e8963f');
+      const good = $('#mp-'+targetIdx); if(good) good.setAttribute('fill','#ff8f1f');
       if(fb) fb.textContent = "C'était là, en orange ! On continue…";
       g.idx++;
       setTimeout(()=>{ if(!mapGame) return; if(g.idx >= g.order.length) finishMapGame(); else renderMapGame(); }, 1200);
@@ -564,10 +577,19 @@ function renderCityGame(){
         <div class="quiz-progress">${g.idx+1} / ${g.order.length} · Score : ${g.score}</div>
         <div class="quiz-progress" id="map-timer">⏱️</div>
       </div>
-      <div class="quiz-q">${g.cfg.icon} Place : <span style="color:var(--accent2);">${esc(city.n)}</span></div>
+      <div class="quiz-q">${g.cfg.icon} Place : <span style="background:var(--accent);color:white;border-radius:12px;padding:2px 14px;">${esc(city.n)}</span></div>
       <div id="map-feedback" style="font-size:13.5px;height:20px;font-weight:700;"></div>
-      <svg id="city-svg" viewBox="0 0 ${g.bg.w} ${g.bg.h}" style="width:100%;background:#dde8f2;border-radius:10px;display:block;overflow:hidden;cursor:crosshair;" onclick="cityClick(event)">
-        ${g.bg.paths.map(d=>`<path d="${d}" fill="#e6e0cc" stroke="#9aa2b0" stroke-width="0.6"></path>`).join('')}
+      <svg id="city-svg" viewBox="0 0 ${g.bg.w} ${g.bg.h}" style="width:100%;border-radius:12px;display:block;overflow:hidden;cursor:crosshair;box-shadow:inset 0 0 30px rgba(20,60,110,.15);" onclick="cityClick(event)">
+        <defs>
+          <radialGradient id="sea2" cx="30%" cy="22%" r="95%">
+            <stop offset="0%" stop-color="#c3e5f8"/><stop offset="55%" stop-color="#94c8ec"/><stop offset="100%" stop-color="#6aa9d8"/>
+          </radialGradient>
+          <linearGradient id="landg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#b9e29a"/><stop offset="60%" stop-color="#93cd7f"/><stop offset="100%" stop-color="#79b96f"/>
+          </linearGradient>
+        </defs>
+        <rect x="0" y="0" width="${g.bg.w}" height="${g.bg.h}" fill="url(#sea2)"/>
+        ${g.bg.paths.map(d=>`<path d="${d}" fill="url(#landg)" stroke="#ffffff" stroke-width="0.8"></path>`).join('')}
         <g id="city-markers"></g>
       </svg>
       <div style="font-size:12px;color:#888;margin-top:6px;">Clique à l'endroit exact : 100 points si tu tombes dessus, moins il y a de kilomètres d'écart, plus tu marques !</div>
@@ -585,11 +607,15 @@ function cityClick(evt){
   const points = Math.max(0, 100 - Math.round(km / g.C.D));
   g.score += points;
   g.locked = true;
+  const pin = (px, py, color, dark) => `
+    <ellipse cx="${px}" cy="${py+1}" rx="4" ry="1.6" fill="rgba(0,0,0,.25)"></ellipse>
+    <line x1="${px}" y1="${py}" x2="${px}" y2="${py-14}" stroke="${dark}" stroke-width="2"></line>
+    <circle cx="${px}" cy="${py-16}" r="6.5" fill="${color}" stroke="#ffffff" stroke-width="2"></circle>`;
   const mk = $('#city-markers');
   if(mk) mk.innerHTML = `
-    <line x1="${x}" y1="${y}" x2="${city.x}" y2="${city.y}" stroke="#c9636a" stroke-width="1.2" stroke-dasharray="4 3"></line>
-    <circle cx="${x}" cy="${y}" r="5" fill="#c9636a" stroke="white" stroke-width="1.5"></circle>
-    <circle cx="${city.x}" cy="${city.y}" r="5" fill="#3e9c7a" stroke="white" stroke-width="1.5"></circle>`;
+    <line x1="${x}" y1="${y}" x2="${city.x}" y2="${city.y}" stroke="#7d3540" stroke-width="1.4" stroke-dasharray="5 4"></line>
+    ${pin(x, y, '#e63946', '#7d3540')}
+    ${pin(city.x, city.y, '#2d9d78', '#1b5e46')}`;
   const fb = $('#map-feedback');
   if(fb) fb.innerHTML = km <= 15 ? `🎯 En plein dessus ! <span style="color:#3e9c7a;">+${points} pts</span>`
     : `📍 À ${km} km — <span style="color:${points>50?'#3e9c7a':'#c9636a'};">+${points} pts</span>`;
