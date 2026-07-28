@@ -32,7 +32,7 @@ function selectProfile(c){
   $('#screen-app').classList.remove('hidden');
   $('#hdr-who').textContent = c === 'adam' ? '🐉 Adam' : '🦊 Alix';
   localStorage.setItem('adalix_child', c);
-  buildNav(['programme','quiz','les100','checklist','projet','fabrique','chat','guide']);
+  buildNav(['programme','quiz','geo','les100','checklist','projet','fabrique','chat','guide']);
   assistantName = null;
   fabMsgs = []; fabCode = ''; fabUrl = ''; fabLoaded = false; fabStep = 0;
   loadUnlocked(); refreshStreak(); loadAssistantName();
@@ -68,15 +68,15 @@ function logout(){ location.reload(); }
 
 /* ---------- nav ---------- */
 const TABS = {
-  programme:{icon:'📅',label:'Programme'}, quiz:{icon:'🧠',label:'Quiz'},
+  programme:{icon:'📅',label:'Programme'}, quiz:{icon:'🧠',label:'Quiz'}, geo:{icon:'🌍',label:'Jeux géo'},
   les100:{icon:'🏆',label:'Les 100'}, checklist:{icon:'✅',label:'Checklist'},
   projet:{icon:'💻',label:'Mon projet'}, fabrique:{icon:'🏭',label:'Fabrique'},
   chat:{icon:'💬',label:'Questions'}, guide:{icon:'📖',label:'Guide'}, dashboard:{icon:'📊',label:'Tableau de bord'},
 };
 // icônes réhabillées selon le profil — mêmes intitulés, juste l'esprit visuel qui change
 const THEME_ICONS = {
-  adam: {programme:'🗺️', quiz:'🐲', les100:'🏆', checklist:'📜', projet:'⚒️', fabrique:'🏭', chat:'🔮', guide:'🧭'},
-  alix: {programme:'🌿', quiz:'🦊', les100:'🦋', checklist:'🐣', projet:'🎨', fabrique:'🏭', chat:'🐰', guide:'📖'},
+  adam: {programme:'🗺️', quiz:'🐲', geo:'🌍', les100:'🏆', checklist:'📜', projet:'⚒️', fabrique:'🏭', chat:'🔮', guide:'🧭'},
+  alix: {programme:'🌿', quiz:'🦊', geo:'🌍', les100:'🦋', checklist:'🐣', projet:'🎨', fabrique:'🏭', chat:'🐰', guide:'📖'},
 };
 function tabIcon(t){ return (THEME_ICONS[child] && THEME_ICONS[child][t]) || TABS[t].icon; }
 function buildNav(tabs){
@@ -86,7 +86,7 @@ function showTab(t){
   tab = t;
   document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
   const nb = $('#nav-'+t); if(nb) nb.classList.add('active');
-  ({programme:renderProgramme, quiz:renderQuizList, les100:renderGallery, checklist:renderChecklist, projet:renderProjet, fabrique:renderFabrique, chat:renderChat, guide:renderGuide, dashboard:renderDashboard}[t])();
+  ({programme:renderProgramme, quiz:renderQuizList, geo:renderGeo, les100:renderGallery, checklist:renderChecklist, projet:renderProjet, fabrique:renderFabrique, chat:renderChat, guide:renderGuide, dashboard:renderDashboard}[t])();
 }
 
 /* ---------- guide ---------- */
@@ -106,6 +106,8 @@ function renderGuide(){
       `Chaque jour aussi, une notion sur l'intelligence artificielle. En 24 jours tu sauras : d'où vient l'IA (Turing 1950, Dartmouth 1956), comment fonctionne vraiment un assistant comme celui de l'onglet Questions, pourquoi il peut se tromper, ce que l'IA peut apporter à l'humanité (médecine, science, climat), quels métiers elle menace, lesquels elle va créer — et comment garder ton cerveau aux commandes. Tu vis la révolution de TON siècle : autant la comprendre de l'intérieur.`)}
     ${gcard('🧠', "L'onglet Quiz",
       `Un QCM par semaine (13 questions sur tout ce que tu as vu, dont 3 sur l'IA) — objectif : <b>70% minimum</b>, tu peux rejouer autant que tu veux. Le <b>quiz des capitales</b> (20 questions, difficulté croissante) se joue dès le premier lundi — note ton score, tu le rejoueras en fin de mois pour mesurer tes progrès. Et le dernier samedi : le <b>grand quiz final</b>, 20 questions piochées dans tout le mois. Tous tes scores sont enregistrés.`)}
+    ${gcard('🌍', "L'onglet Jeux géo",
+      `Douze jeux de géographie à records : cliquer les <b>pays</b> (Europe, monde, Union européenne), les <b>régions</b> et <b>départements</b> français, placer les <b>villes</b> (France, Europe, monde, USA) au kilomètre près, la <b>géo physique</b> (Everest, Amazone, Sahara…), les <b>capitales</b> et les <b>drapeaux</b>. Chaque jeu affiche TON record et celui d’${child==='adam'?'Alix':'Adam'} — le petit 🔥 signale qu'il faut reprendre la couronne !`)}
     ${gcard('🏆', "L'onglet Les 100 — ta collection",
       `103 personnalités qui ont changé le monde : scientifiques, résistants, artistes, sportifs, explorateurs… <b>C'est toi qui choisis</b> qui découvrir : parcours la galerie, clique sur les cartes qui t'intriguent. Tu peux en ajouter <b>3 nouvelles par jour</b> à ta collection (la lecture, elle, est illimitée). Chaque fiche propose un lien vidéo vers la chaîne <b>« Quelle Histoire »</b> pour aller plus loin. La fiche du jour te suggère des personnalités en lien avec le thème, mais rien n'est imposé. Objectif du mois : la collection complète ?`)}
     ${gcard('✅', "L'onglet Checklist",
@@ -316,8 +318,7 @@ function renderQuizList(){
   $('#main').innerHTML = `
     <div class="card"><h3>🧠 Les quiz du Grand Été</h3><div style="font-size:13px;color:#888;">Chronométré, noté, enregistré. Objectif : 7/10 minimum. Le grand quiz final pioche dans tout le mois !</div></div>
     <div class="quiz-list">
-      <button onclick="startMapGame('europe')" style="border-left-color:#3e9c7a;">🗺️ LA CARTE D'EUROPE — clique sur les ${window.MAPS?window.MAPS.europe.targets.length:42} pays</button>
-      <button onclick="startMapGame('monde')" style="border-left-color:#3e9c7a;">🌍 LA CARTE DU MONDE — ${window.MAPS?window.MAPS.monde.targets.length:55} pays à situer</button>
+      <button onclick="showTab('geo')" style="border-left-color:#3e9c7a;">🌍 LES JEUX DE GÉOGRAPHIE — cartes, villes, drapeaux… avec records !</button>
       ${Object.entries(D.quizzes).map(([id,qz])=>`<button onclick="startQuiz('${id}')">📝 ${esc(qz.title)}</button>`).join('')}
       <button onclick="startQuiz('final')" style="border-left-color:#c98f2f;">🏆 LE GRAND QUIZ FINAL — 20 questions sur tout le mois</button>
     </div>
@@ -332,8 +333,8 @@ async function loadScores(){
 }
 function quizTitle(id){
   if(id==='final') return 'Grand quiz final';
-  if(id==='carte_europe') return "Carte d'Europe";
-  if(id==='carte_monde') return 'Carte du monde';
+  const geo = (typeof GEO_GAMES !== 'undefined') && GEO_GAMES.find(g=>(g.qid||'capitales')===id && id!=='capitales');
+  if(geo) return geo.label;
   return D.quizzes[id] ? D.quizzes[id].title.split('—')[0].trim() : id;
 }
 function startQuiz(id){
@@ -390,15 +391,72 @@ async function finishQuiz(){
     </div>`;
 }
 
-/* ---------- jeu de la carte ---------- */
+/* ---------- Jeux géo ---------- */
+const GEO_GAMES = [
+  {id:'europe',       icon:'🇪🇺', label:"Pays d'Europe",            sub:'42 pays à cliquer',            type:'shape', map:'europe', qid:'carte_europe'},
+  {id:'ue',           icon:'💙', label:"Pays de l'Union européenne", sub:'les 27, sauras-tu les trouver ?', type:'shape', map:'europe', qid:'carte_ue',
+    subset:['Allemagne','Autriche','Belgique','Bulgarie','Chypre','Croatie','Danemark','Espagne','Estonie','Finlande','France','Grèce','Hongrie','Irlande','Italie','Lettonie','Lituanie','Luxembourg','Malte','Pays-Bas','Pologne','Portugal','Roumanie','Slovaquie','Slovénie','Suède','Tchéquie']},
+  {id:'monde',        icon:'🌍', label:'Pays du monde',              sub:'55 pays à situer',             type:'shape', map:'monde', qid:'carte_monde'},
+  {id:'regions',      icon:'🧭', label:'Régions de France',          sub:'les 13 régions métropolitaines', type:'shape', map:'regions', qid:'carte_regions'},
+  {id:'departements', icon:'🧩', label:'Départements français',      sub:'25 départements tirés au sort', type:'shape', map:'departements', qid:'carte_departements', sample:25},
+  {id:'vf',           icon:'📍', label:'Villes de France',           sub:'place 30 villes sur la carte', type:'city', qid:'villes_france'},
+  {id:'ve',           icon:'🏰', label:"Villes d'Europe",            sub:'30 capitales et grandes villes', type:'city', qid:'villes_europe'},
+  {id:'vm',           icon:'🌐', label:'Villes du monde',            sub:'30 mégapoles à placer',        type:'city', qid:'villes_monde'},
+  {id:'vusa',         icon:'🗽', label:'Villes des USA',             sub:'25 villes américaines',        type:'city', qid:'villes_usa'},
+  {id:'phys',         icon:'🏔️', label:'Géo physique du monde',      sub:'fleuves, monts, déserts…',     type:'city', qid:'geo_physique'},
+  {id:'capitales',    icon:'🏛️', label:'Capitales du monde',         sub:'le QCM à refaire en S4 !',     type:'qcm'},
+  {id:'drapeaux',     icon:'🚩', label:'Drapeaux du monde',          sub:'20 drapeaux à reconnaître',    type:'flags', qid:'drapeaux'},
+];
+const GEO_QIDS = GEO_GAMES.map(g=>g.qid).filter(Boolean).concat(['capitales']);
+function geoRun(id){
+  const g = GEO_GAMES.find(x=>x.id===id);
+  if(g.type==='shape') startMapGame(id);
+  else if(g.type==='city') startCityGame(id);
+  else if(g.type==='flags') startFlagsGame();
+  else startQuiz('capitales');
+}
+async function renderGeo(){
+  $('#main').innerHTML = `
+    <div class="card"><h3>🌍 Les jeux de géographie</h3>
+      <div style="font-size:13px;color:#888;">Clique, place, devine — chaque jeu garde ton record ET celui de ${child==='adam'?'Alix':'Adam'}. À vous deux de faire monter la barre !</div></div>
+    <div class="quiz-list" id="geo-list">
+      ${GEO_GAMES.map(g=>`<button onclick="geoRun('${g.id}')">
+        <div style="font-weight:700;">${g.icon} ${esc(g.label)}</div>
+        <div style="font-size:12px;color:#888;">${esc(g.sub)}</div>
+        <div style="font-size:12px;margin-top:4px;" id="rec-${g.id}">…</div>
+      </button>`).join('')}
+    </div>`;
+  // records des deux enfants
+  const qids = GEO_GAMES.map(g=>g.qid || 'capitales');
+  const {data} = await db.from('adalix_qcm_scores').select('child,quiz_id,score,total,duration_s').in('quiz_id', qids);
+  const rows = data||[];
+  const bestOf = (k, qid) => rows.filter(r=>r.child===k && r.quiz_id===qid)
+    .sort((a,b)=> b.score-a.score || (a.duration_s||1e9)-(b.duration_s||1e9))[0];
+  const fmt = r => r ? `${r.score}${r.duration_s?' · '+Math.floor(r.duration_s/60)+'m'+String(r.duration_s%60).padStart(2,'0'):''}` : '—';
+  const other = child==='adam' ? 'alix' : 'adam';
+  const otherName = other==='adam' ? 'Adam' : 'Alix';
+  GEO_GAMES.forEach(g=>{
+    const el = $('#rec-'+g.id); if(!el) return;
+    const qid = g.qid || 'capitales';
+    const mine = bestOf(child, qid), theirs = bestOf(other, qid);
+    el.innerHTML = `🥇 Toi : <b>${fmt(mine)}</b> &nbsp;·&nbsp; ${otherName} : <b>${fmt(theirs)}</b>`;
+    if(mine && theirs && theirs.score > mine.score) el.innerHTML += ' 🔥';
+  });
+}
+
+/* ---- jeux « clique sur la zone » (pays, régions, départements) ---- */
 let mapGame = null;
-function startMapGame(mode){
-  const M = window.MAPS && window.MAPS[mode];
+function startMapGame(gameId){
+  const cfg = GEO_GAMES.find(g=>g.id===gameId);
+  const M = window.MAPS && window.MAPS[cfg.map];
   if(!M){ toast('Carte indisponible — recharge la page'); return; }
-  const order = M.targets.map((t,i)=>i).sort(()=>Math.random()-0.5);
-  mapGame = { mode, M, order, idx:0, score:0, tries:0, found:{}, t0:Date.now() };
+  let idxs = M.targets.map((t,i)=>i);
+  if(cfg.subset){ const s = new Set(cfg.subset); idxs = idxs.filter(i=>s.has(M.targets[i].n)); }
+  let order = idxs.sort(()=>Math.random()-0.5);
+  if(cfg.sample) order = order.slice(0, cfg.sample);
+  mapGame = { cfg, M, order, included:new Set(order), idx:0, score:0, tries:0, found:{}, t0:Date.now() };
   mapGame.timer = setInterval(()=>{
-    if(!mapGame){ return; }
+    if(!mapGame) return;
     const el = $('#map-timer');
     if(el){ const s = Math.round((Date.now()-mapGame.t0)/1000); el.textContent = '⏱️ ' + Math.floor(s/60) + 'm' + String(s%60).padStart(2,'0'); }
   }, 1000);
@@ -410,19 +468,19 @@ function renderMapGame(){
   const M = g.M;
   const target = M.targets[g.order[g.idx]];
   $('#main').innerHTML = `
-    <button class="back-btn" onclick="stopMapGame();renderQuizList()">← Quitter</button>
+    <button class="back-btn" onclick="stopMapGame();renderGeo()">← Quitter</button>
     <div class="card">
       <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-        <div class="quiz-progress">Pays ${g.idx+1} / ${M.targets.length} · Score : ${g.score}</div>
+        <div class="quiz-progress">${g.idx+1} / ${g.order.length} · Score : ${g.score}</div>
         <div class="quiz-progress" id="map-timer">⏱️</div>
       </div>
-      <div class="quiz-q">Clique sur : <span style="color:var(--accent2);">${esc(target.n)}</span></div>
+      <div class="quiz-q">${g.cfg.icon} Clique sur : <span style="color:var(--accent2);">${esc(target.n)}</span></div>
       <div id="map-feedback" style="font-size:13px;height:18px;color:#c9636a;"></div>
       <svg viewBox="0 0 ${M.w} ${M.h}" style="width:100%;background:#dde8f2;border-radius:10px;display:block;overflow:hidden;">
-        ${M.context.map(d=>`<path d="${d}" fill="#c8cfd8" stroke="#ffffff" stroke-width="0.6"></path>`).join('')}
-        ${M.targets.map((t,i)=>`<path d="${t.d}" id="mp-${i}" fill="${g.found[i]==='ok'?'#3e9c7a':g.found[i]==='miss'?'#e8963f':'#f0e6c8'}" stroke="#8a8f98" stroke-width="0.7" style="cursor:pointer;" onclick="mapClick(${i})"></path>`).join('')}
+        ${(M.context||[]).map(d=>`<path d="${d}" fill="#c8cfd8" stroke="#ffffff" stroke-width="0.6"></path>`).join('')}
+        ${M.targets.map((t,i)=>`<path d="${t.d}" id="mp-${i}" fill="${g.found[i]==='ok'?'#3e9c7a':g.found[i]==='miss'?'#e8963f':(g.included.has(i)?'#f0e6c8':'#c8cfd8')}" stroke="#8a8f98" stroke-width="0.7" style="cursor:pointer;" onclick="mapClick(${i})"></path>`).join('')}
       </svg>
-      <div style="font-size:12px;color:#888;margin-top:6px;">3 points du premier coup, 2 au deuxième, 1 au troisième. Les pays trouvés passent en vert, ceux révélés en orange.</div>
+      <div style="font-size:12px;color:#888;margin-top:6px;">3 points du premier coup, 2 au deuxième, 1 au troisième. Vert = trouvé, orange = révélé.</div>
     </div>`;
 }
 function mapClick(i){
@@ -432,7 +490,7 @@ function mapClick(i){
   if(i === targetIdx){
     g.score += Math.max(1, 3 - g.tries);
     g.found[i] = 'ok'; g.tries = 0; g.idx++;
-    if(g.idx >= g.M.targets.length){ finishMapGame(); return; }
+    if(g.idx >= g.order.length){ finishMapGame(); return; }
     renderMapGame();
   } else {
     g.tries++;
@@ -444,7 +502,7 @@ function mapClick(i){
       const good = $('#mp-'+targetIdx); if(good) good.setAttribute('fill','#e8963f');
       if(fb) fb.textContent = "C'était là, en orange ! On continue…";
       g.idx++;
-      setTimeout(()=>{ if(!mapGame) return; if(g.idx >= g.M.targets.length) finishMapGame(); else renderMapGame(); }, 1200);
+      setTimeout(()=>{ if(!mapGame) return; if(g.idx >= g.order.length) finishMapGame(); else renderMapGame(); }, 1200);
     } else if(fb){ fb.textContent = `Non — plus que ${3-g.tries} essai${3-g.tries>1?'s':''}…`; }
   }
 }
@@ -452,27 +510,168 @@ async function finishMapGame(){
   const g = mapGame; if(!g) return;
   clearInterval(g.timer);
   const dur = Math.round((Date.now()-g.t0)/1000);
-  const total = g.M.targets.length * 3;
-  const pct = g.score/total;
-  const badge = pct>=0.9?'🥇 Géographe hors pair !':pct>=0.7?'🏅 Très solide !':pct>=0.5?'✅ Bonne base — rejoue pour progresser':'💪 La carte se dompte en rejouant !';
-  await db.from('adalix_qcm_scores').insert({child, quiz_id:'carte_'+g.mode, score:g.score, total, duration_s:dur});
-  checkBadges();
-  const mode = g.mode;
+  const total = g.order.length * 3;
   mapGame = null;
+  await geoEndScreen(g.cfg.label, g.cfg.qid, g.score, total, dur, `geoRun('${g.cfg.id}')`);
+}
+
+/* ---- jeux « place la ville » (distance en km) ---- */
+let cityGame = null;
+function startCityGame(gameId){
+  const cfg = GEO_GAMES.find(g=>g.id===gameId);
+  const C = window.MAPS && window.MAPS.cities && window.MAPS.cities[gameId];
+  if(!C){ toast('Carte indisponible — recharge la page'); return; }
+  const bgMap = C.bg==='france' ? {w:window.MAPS.france_bg.w, h:window.MAPS.france_bg.h, paths:window.MAPS.france_bg.paths}
+    : C.bg==='usa' ? {w:window.MAPS.usa_bg.w, h:window.MAPS.usa_bg.h, paths:window.MAPS.usa_bg.paths}
+    : {w:window.MAPS[C.bg].w, h:window.MAPS[C.bg].h, paths:(window.MAPS[C.bg].context||[]).concat(window.MAPS[C.bg].targets.map(t=>t.d))};
+  const order = C.list.map((c,i)=>i).sort(()=>Math.random()-0.5);
+  cityGame = { cfg, C, bg:bgMap, order, idx:0, score:0, locked:false, t0:Date.now() };
+  cityGame.timer = setInterval(()=>{
+    if(!cityGame) return;
+    const el = $('#map-timer');
+    if(el){ const s = Math.round((Date.now()-cityGame.t0)/1000); el.textContent = '⏱️ ' + Math.floor(s/60) + 'm' + String(s%60).padStart(2,'0'); }
+  }, 1000);
+  renderCityGame();
+}
+function stopCityGame(){ if(cityGame && cityGame.timer) clearInterval(cityGame.timer); cityGame = null; }
+function renderCityGame(){
+  const g = cityGame; if(!g) return;
+  const city = g.C.list[g.order[g.idx]];
+  $('#main').innerHTML = `
+    <button class="back-btn" onclick="stopCityGame();renderGeo()">← Quitter</button>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div class="quiz-progress">${g.idx+1} / ${g.order.length} · Score : ${g.score}</div>
+        <div class="quiz-progress" id="map-timer">⏱️</div>
+      </div>
+      <div class="quiz-q">${g.cfg.icon} Place : <span style="color:var(--accent2);">${esc(city.n)}</span></div>
+      <div id="map-feedback" style="font-size:13.5px;height:20px;font-weight:700;"></div>
+      <svg id="city-svg" viewBox="0 0 ${g.bg.w} ${g.bg.h}" style="width:100%;background:#dde8f2;border-radius:10px;display:block;overflow:hidden;cursor:crosshair;" onclick="cityClick(event)">
+        ${g.bg.paths.map(d=>`<path d="${d}" fill="#e6e0cc" stroke="#9aa2b0" stroke-width="0.6"></path>`).join('')}
+        <g id="city-markers"></g>
+      </svg>
+      <div style="font-size:12px;color:#888;margin-top:6px;">Clique à l'endroit exact : 100 points si tu tombes dessus, moins il y a de kilomètres d'écart, plus tu marques !</div>
+    </div>`;
+}
+function cityClick(evt){
+  const g = cityGame; if(!g || g.locked) return;
+  const svg = $('#city-svg'); if(!svg) return;
+  const r = svg.getBoundingClientRect();
+  const x = (evt.clientX - r.left) * g.bg.w / r.width;
+  const y = (evt.clientY - r.top) * g.bg.h / r.height;
+  const city = g.C.list[g.order[g.idx]];
+  const dpx = Math.hypot(x - city.x, y - city.y);
+  const km = Math.round(dpx * city.k);
+  const points = Math.max(0, 100 - Math.round(km / g.C.D));
+  g.score += points;
+  g.locked = true;
+  const mk = $('#city-markers');
+  if(mk) mk.innerHTML = `
+    <line x1="${x}" y1="${y}" x2="${city.x}" y2="${city.y}" stroke="#c9636a" stroke-width="1.2" stroke-dasharray="4 3"></line>
+    <circle cx="${x}" cy="${y}" r="5" fill="#c9636a" stroke="white" stroke-width="1.5"></circle>
+    <circle cx="${city.x}" cy="${city.y}" r="5" fill="#3e9c7a" stroke="white" stroke-width="1.5"></circle>`;
+  const fb = $('#map-feedback');
+  if(fb) fb.innerHTML = km <= 15 ? `🎯 En plein dessus ! <span style="color:#3e9c7a;">+${points} pts</span>`
+    : `📍 À ${km} km — <span style="color:${points>50?'#3e9c7a':'#c9636a'};">+${points} pts</span>`;
+  setTimeout(()=>{
+    if(!cityGame) return;
+    cityGame.locked = false; cityGame.idx++;
+    if(cityGame.idx >= cityGame.order.length){ finishCityGame(); } else { renderCityGame(); }
+  }, 1400);
+}
+async function finishCityGame(){
+  const g = cityGame; if(!g) return;
+  clearInterval(g.timer);
+  const dur = Math.round((Date.now()-g.t0)/1000);
+  const total = g.order.length * 100;
+  cityGame = null;
+  await geoEndScreen(g.cfg.label, g.cfg.qid, g.score, total, dur, `geoRun('${g.cfg.id}')`);
+}
+
+/* ---- jeu des drapeaux (images flagcdn) ---- */
+const FLAGS = [['France','fr'],['Allemagne','de'],['Italie','it'],['Espagne','es'],['Portugal','pt'],['Royaume-Uni','gb'],['Irlande','ie'],['Belgique','be'],['Pays-Bas','nl'],['Suisse','ch'],['Autriche','at'],['Grèce','gr'],['Suède','se'],['Norvège','no'],['Finlande','fi'],['Danemark','dk'],['Pologne','pl'],['Ukraine','ua'],['Russie','ru'],['Turquie','tr'],['États-Unis','us'],['Canada','ca'],['Mexique','mx'],['Brésil','br'],['Argentine','ar'],['Chili','cl'],['Colombie','co'],['Pérou','pe'],['Chine','cn'],['Japon','jp'],['Corée du Sud','kr'],['Inde','in'],['Indonésie','id'],['Australie','au'],['Nouvelle-Zélande','nz'],['Maroc','ma'],['Algérie','dz'],['Tunisie','tn'],['Égypte','eg'],['Sénégal','sn'],["Côte d'Ivoire",'ci'],['Nigéria','ng'],['Afrique du Sud','za'],['Kenya','ke'],['Israël','il'],['Liban','lb'],['Arabie saoudite','sa'],['Iran','ir'],['Vietnam','vn'],['Thaïlande','th']];
+let flagGame = null;
+function startFlagsGame(){
+  const qs = FLAGS.slice().sort(()=>Math.random()-0.5).slice(0,20).map(([name,iso])=>{
+    const wrong = FLAGS.filter(f=>f[1]!==iso).sort(()=>Math.random()-0.5).slice(0,3);
+    const opts = [[name,iso]].concat(wrong).sort(()=>Math.random()-0.5);
+    return { name, iso, opts };
+  });
+  flagGame = { qs, idx:0, score:0, locked:false, t0:Date.now() };
+  renderFlagGame();
+}
+function renderFlagGame(){
+  const g = flagGame; if(!g) return;
+  const q = g.qs[g.idx];
   $('#main').innerHTML = `
     <div class="narrow">
-    <div class="card" style="text-align:center;">
-      <h3>${mode==='europe'?"🗺️ Carte d'Europe":'🌍 Carte du monde'}</h3>
-      <div class="big-score">${g.score} / ${total}</div>
-      <div style="font-size:20px;">${badge}</div>
-      <div style="font-size:13px;color:#888;margin-top:6px;">⏱️ ${Math.floor(dur/60)}m${String(dur%60).padStart(2,'0')}s</div>
-      <div class="actions" style="justify-content:center;">
-        <button class="btn" onclick="startMapGame('${mode}')">Rejouer</button>
-        <button class="btn ghost" onclick="renderQuizList()">Retour</button>
+    <button class="back-btn" onclick="flagGame=null;renderGeo()">← Quitter</button>
+    <div class="card">
+      <div class="quiz-progress">Drapeau ${g.idx+1} / ${g.qs.length} · Score : ${g.score}</div>
+      <div class="quiz-q">🚩 Quel est le drapeau ${q.name.match(/^(États|Pays)/)?'des':q.name.match(/^[AEIOUÉÈ]/)?"de l'":['France','Allemagne','Italie','Espagne','Grèce','Suède','Norvège','Finlande','Pologne','Ukraine','Russie','Turquie','Chine','Inde','Nouvelle-Zélande','Tunisie','Colombie','Thaïlande','Argentine','Belgique','Suisse','Autriche','Hongrie','Corée du Sud',"Côte d'Ivoire",'Arabie saoudite'].includes(q.name)?'de la ':'du '}<span style="color:var(--accent2);">${esc(q.name)}</span> ?</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        ${q.opts.map(([n,iso],i)=>`<button id="flag-${i}" onclick="flagClick(${i})" style="border:2.5px solid #ccd4e0;border-radius:12px;background:white;padding:10px;cursor:pointer;">
+          <img src="https://flagcdn.com/w160/${iso}.png" alt="?" style="width:100%;max-width:150px;border:1px solid #eee;border-radius:4px;">
+        </button>`).join('')}
       </div>
     </div>
     </div>`;
 }
+function flagClick(i){
+  const g = flagGame; if(!g || g.locked) return;
+  g.locked = true;
+  const q = g.qs[g.idx];
+  const ok = q.opts[i][1] === q.iso;
+  if(ok) g.score++;
+  const el = $('#flag-'+i); if(el) el.style.borderColor = ok ? '#3e9c7a' : '#c9636a';
+  const goodIdx = q.opts.findIndex(o=>o[1]===q.iso);
+  const good = $('#flag-'+goodIdx); if(good) good.style.borderColor = '#3e9c7a';
+  setTimeout(()=>{
+    if(!flagGame) return;
+    flagGame.locked = false; flagGame.idx++;
+    if(flagGame.idx >= flagGame.qs.length){ finishFlagGame(); } else { renderFlagGame(); }
+  }, 900);
+}
+async function finishFlagGame(){
+  const g = flagGame; if(!g) return;
+  const dur = Math.round((Date.now()-g.t0)/1000);
+  flagGame = null;
+  await geoEndScreen('Drapeaux du monde', 'drapeaux', g.score, g.qs.length, dur, 'startFlagsGame()');
+}
+
+/* ---- écran de fin commun aux jeux géo ---- */
+async function geoEndScreen(label, qid, score, total, dur, replay){
+  const pct = score/total;
+  const badge = pct>=0.9?'🥇 Champion(ne) !':pct>=0.7?'🏅 Très solide !':pct>=0.5?'✅ Bonne base — rejoue pour battre ton record':'💪 Ça se dompte en rejouant !';
+  await db.from('adalix_qcm_scores').insert({child, quiz_id:qid, score, total, duration_s:dur});
+  checkBadges();
+  // record battu ?
+  let recordMsg = '';
+  try {
+    const {data} = await db.from('adalix_qcm_scores').select('child,score').eq('quiz_id',qid);
+    const rows = data||[];
+    const myBest = Math.max(...rows.filter(r=>r.child===child).map(r=>r.score));
+    const other = child==='adam'?'alix':'adam';
+    const otherBest = Math.max(0, ...rows.filter(r=>r.child===other).map(r=>r.score));
+    if(score >= myBest && score > 0) recordMsg = '🎉 Nouveau record personnel !';
+    if(otherBest && score > otherBest) recordMsg += ` Et tu passes devant ${other==='adam'?'Adam':'Alix'} ! 👑`;
+  } catch(e){}
+  $('#main').innerHTML = `
+    <div class="narrow">
+    <div class="card" style="text-align:center;">
+      <h3>${esc(label)}</h3>
+      <div class="big-score">${score} / ${total}</div>
+      <div style="font-size:20px;">${badge}</div>
+      ${recordMsg?`<div style="font-size:15px;color:#b06a1a;font-weight:700;margin-top:6px;">${recordMsg}</div>`:''}
+      <div style="font-size:13px;color:#888;margin-top:6px;">⏱️ ${Math.floor(dur/60)}m${String(dur%60).padStart(2,'0')}s</div>
+      <div class="actions" style="justify-content:center;">
+        <button class="btn" onclick="${replay}">Rejouer</button>
+        <button class="btn ghost" onclick="renderGeo()">Tous les jeux</button>
+      </div>
+    </div>
+    </div>`;
+}
+
 
 /* ---------- checklist ---------- */
 let todayItems = {};
