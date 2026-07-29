@@ -131,7 +131,7 @@ function renderGuide(){
     ${gcard('🏆', "L'onglet Les 100 — ta collection",
       `103 personnalités qui ont changé le monde : scientifiques, résistants, artistes, sportifs, explorateurs… <b>C'est toi qui choisis</b> qui découvrir : parcours la galerie, clique sur les cartes qui t'intriguent. Tu peux en ajouter <b>3 nouvelles par jour</b> à ta collection (la lecture, elle, est illimitée). Chaque fiche propose un lien vidéo vers la chaîne <b>« Quelle Histoire »</b> pour aller plus loin. La fiche du jour te suggère des personnalités en lien avec le thème, mais rien n'est imposé. Objectif du mois : la collection complète ?`)}
     ${gcard('✅', "L'onglet Checklist",
-      `Tes 12 gestes quotidiens : lit fait, lecture, balade, programme du jour, projet, écriture du soir… Chaque journée complète allume ta série 🔥 en haut de l'écran. L'<b>écriture du soir</b> (ce que j'ai appris / ce qui m'a étonné) construit jour après jour ton journal du mois — tu seras fier(e) de le relire en septembre.`)}
+      `Tes ${D.checklist.length} gestes quotidiens : lit fait, lecture, balade, programme du jour, projet, nettoyage, chambre, écriture du soir… Chaque journée complète allume ta série 🔥 en haut de l'écran. L'<b>écriture du soir</b> (ce que j'ai appris / ce qui m'a étonné) construit jour après jour ton journal du mois — tu seras fier(e) de le relire en septembre.`)}
     ${gcard('💻', "L'onglet Mon projet",
       `Un vrai projet personnel, mené sur tout le mois, <b>guidé jour par jour</b> : chaque jour, l'app te donne l'étape à faire. Semaine 1 : tu ne fabriques rien — tu <b>brainstormes avec ton assistant</b>, tu choisis ton idée et tu poses ton plan. Semaine 2 : première version complète, même moche. Semaine 3 : amélioration et finitions. Semaine 4 : préparation de la présentation. Le <b>rendu final</b> se montre à la fête du 22 août, avec une mini-présentation de 2-3 minutes. Six idées te sont proposées, mais tu peux inventer la tienne.`)}
     ${gcard('🏭', "L'onglet Fabrique — ton atelier de création",
@@ -1150,7 +1150,7 @@ const BADGES = [
   {id:'journal_week', cat:'creativite', emoji:'📖', label:"Semaine d'écriture", desc:'7 entrées de journal.'},
   {id:'chat_first', cat:'curiosite', emoji:'💬', label:'Première question', desc:"Ta première question posée à l'assistant."},
   {id:'chat_10', cat:'curiosite', emoji:'🔬', label:'10 questions', desc:"10 questions posées à l'assistant."},
-  {id:'checklist_full', cat:'discipline', emoji:'✅', label:'Journée complète', desc:'Une première journée 12/12.'},
+  {id:'checklist_full', cat:'discipline', emoji:'✅', label:'Journée complète', desc:`Une première journée ${D.checklist.length}/${D.checklist.length}.`},
 ];
 async function computeStreak(){
   if(child==='parent') return 0;
@@ -1283,7 +1283,7 @@ async function renderDashboard(){
     <div class="stat-row">${kids.map(k=>`
       <div class="stat"><div class="v">${kidName(k)}</div>
         <div style="margin-top:8px;font-size:13px;">🔥 Série : <b>${streakOf(k)} j</b> · 🏆 Cartes : <b>${P.filter(p=>p.child===k).length}/${D.persons.length}</b></div>
-        <div style="font-size:13px;">✅ Aujourd'hui : <b>${(C.find(r=>r.child===k&&r.day===todayStr())||{}).completed||0}/12</b> · 🎖️ Badges : <b>${badgeCountOf(k)}/${BADGES.length}</b></div>
+        <div style="font-size:13px;">✅ Aujourd'hui : <b>${(C.find(r=>r.child===k&&r.day===todayStr())||{}).completed||0}/${D.checklist.length}</b> · 🎖️ Badges : <b>${badgeCountOf(k)}/${BADGES.length}</b></div>
       </div>`).join('')}</div>
     <div class="card"><h3>🧠 Derniers quiz</h3><table class="ptable"><tr><th>Qui</th><th>Quiz</th><th>Score</th><th>Date</th></tr>
       ${S.slice(0,12).map(r=>`<tr><td>${kidName(r.child)}</td><td>${esc(quizTitle(r.quiz_id))}</td><td><b>${r.score}/${r.total}</b></td><td>${new Date(r.created_at).toLocaleDateString('fr-FR')}</td></tr>`).join('')||'<tr><td colspan=4 style="color:#999;">Aucun quiz encore</td></tr>'}</table></div>
