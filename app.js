@@ -777,7 +777,7 @@ async function refreshStreak(){
       const d = new Date(); d.setDate(d.getDate()-i);
       const key = d.toISOString().slice(0,10);
       const c = map[key]||0;
-      if(c >= 8) streak++;
+      if(c >= 10) streak++;
       else if(i===0) continue;   // today not finished yet doesn't break the streak
       else break;
     }
@@ -1162,7 +1162,7 @@ async function computeStreak(){
       const d = new Date(); d.setDate(d.getDate()-i);
       const key = d.toISOString().slice(0,10);
       const c = map[key]||0;
-      if(c >= 8) streak++;
+      if(c >= 10) streak++;
       else if(i===0) continue;
       else break;
     }
@@ -1278,7 +1278,7 @@ async function renderDashboard(){
   const streakOf = k => {
     const map = Object.fromEntries(C.filter(r=>r.child===k).map(r=>[r.day,r.completed]));
     let s=0; for(let i=0;i<60;i++){ const d=new Date(); d.setDate(d.getDate()-i); const key=d.toISOString().slice(0,10);
-      if((map[key]||0)>=8) s++; else if(i===0) continue; else break; } return s; };
+      if((map[key]||0)>=10) s++; else if(i===0) continue; else break; } return s; };
   $('#main').innerHTML = `<div class="narrow" style="max-width:900px;">
     <div class="stat-row">${kids.map(k=>`
       <div class="stat"><div class="v">${kidName(k)}</div>
