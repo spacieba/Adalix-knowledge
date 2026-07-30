@@ -91,7 +91,7 @@ const TABS = {
   programme:{icon:'📅',label:'Programme'}, quiz:{icon:'🧠',label:'Quiz'}, geo:{icon:'🌍',label:'Jeux géo'},
   les100:{icon:'🏆',label:'Les 100'}, checklist:{icon:'✅',label:'Checklist'},
   projet:{icon:'💻',label:'Mon projet'}, fabrique:{icon:'🏭',label:'Fabrique'},
-  chat:{icon:'💬',label:'Questions'}, guide:{icon:'📖',label:'Guide'}, dashboard:{icon:'📊',label:'Tableau de bord'},
+  chat:{icon:'💬',label:'Mon assistant'}, guide:{icon:'📖',label:'Guide'}, dashboard:{icon:'📊',label:'Tableau de bord'},
 };
 // icônes réhabillées selon le profil — mêmes intitulés, juste l'esprit visuel qui change
 const THEME_ICONS = {
@@ -123,7 +123,7 @@ function renderGuide(){
       La <b>logique</b>, c'est le solfège de la pensée : savoir distinguer un raisonnement qui tient debout d'un raisonnement qui triche (les fameux <b>sophismes</b> — homme de paille, faux dilemme, appel à la popularité…). Une fois que tu sais les nommer, tu les vois PARTOUT. Personne ne pourra plus te vendre n'importe quoi.<br><br>
       Les samedis « esprit critique » assemblent le tout : démonter un complot, détecter les sophismes, vérifier une info comme un pro.`)}
     ${gcard('🤖', "Le fil rouge « IA du jour »",
-      `Chaque jour aussi, une notion sur l'intelligence artificielle. En 24 jours tu sauras : d'où vient l'IA (Turing 1950, Dartmouth 1956), comment fonctionne vraiment un assistant comme celui de l'onglet Questions, pourquoi il peut se tromper, ce que l'IA peut apporter à l'humanité (médecine, science, climat), quels métiers elle menace, lesquels elle va créer — et comment garder ton cerveau aux commandes. Tu vis la révolution de TON siècle : autant la comprendre de l'intérieur.`)}
+      `Chaque jour aussi, une notion sur l'intelligence artificielle. En 24 jours tu sauras : d'où vient l'IA (Turing 1950, Dartmouth 1956), comment fonctionne vraiment un assistant comme celui de l'onglet Mon assistant, pourquoi il peut se tromper, ce que l'IA peut apporter à l'humanité (médecine, science, climat), quels métiers elle menace, lesquels elle va créer — et comment garder ton cerveau aux commandes. Tu vis la révolution de TON siècle : autant la comprendre de l'intérieur.`)}
     ${gcard('🧠', "L'onglet Quiz",
       `Un QCM par semaine (13 questions sur tout ce que tu as vu, dont 3 sur l'IA) — objectif : <b>70% minimum</b>, tu peux rejouer autant que tu veux. Le <b>quiz des capitales</b> (20 questions, difficulté croissante) se joue dès le premier lundi — note ton score, tu le rejoueras en fin de mois pour mesurer tes progrès. Et le dernier samedi : le <b>grand quiz final</b>, 20 questions piochées dans tout le mois. Tous tes scores sont enregistrés.`)}
     ${gcard('🌍', "L'onglet Jeux géo",
@@ -132,12 +132,12 @@ function renderGuide(){
       `103 personnalités qui ont changé le monde : scientifiques, résistants, artistes, sportifs, explorateurs… <b>C'est toi qui choisis</b> qui découvrir : parcours la galerie, clique sur les cartes qui t'intriguent. Tu peux en ajouter <b>3 nouvelles par jour</b> à ta collection (la lecture, elle, est illimitée). Chaque fiche propose un lien vidéo vers la chaîne <b>« Quelle Histoire »</b> pour aller plus loin. La fiche du jour te suggère des personnalités en lien avec le thème, mais rien n'est imposé. Objectif du mois : la collection complète ?`)}
     ${gcard('✅', "L'onglet Checklist",
       `Tes ${D.checklist.length} gestes quotidiens : lit fait, lecture, balade, programme du jour, projet, nettoyage, chambre, écriture du soir… Chaque journée complète allume ta série 🔥 en haut de l'écran. L'<b>écriture du soir</b> (ce que j'ai appris / ce qui m'a étonné) construit jour après jour ton journal du mois — tu seras fier(e) de le relire en septembre.`)}
-    ${gcard('💻', "L'onglet Mon projet",
-      `Un vrai projet personnel, mené sur tout le mois, <b>guidé jour par jour</b> : chaque jour, l'app te donne l'étape à faire. Semaine 1 : tu ne fabriques rien — tu <b>brainstormes avec ton assistant</b>, tu choisis ton idée et tu poses ton plan. Semaine 2 : première version complète, même moche. Semaine 3 : amélioration et finitions. Semaine 4 : préparation de la présentation. Le <b>rendu final</b> se montre à la fête du 22 août, avec une mini-présentation de 2-3 minutes. Six idées te sont proposées, mais tu peux inventer la tienne.`)}
+    ${gcard('💻', "L'onglet Mon projet — ton poste de pilotage",
+      `Un vrai projet personnel, mené sur tout le mois, avec un <b>coach IA</b> qui t'accompagne de l'idée jusqu'au produit fini. En haut : ton idée et ta barre d'avancement. Le coach te pose <b>une question à la fois</b> — tu réponds, et il ajuste automatiquement ta <b>feuille de route</b> (la liste des étapes jusqu'à la démo finale). Il te fait aussi des <b>suggestions</b> : à toi de décider « je garde » ✓ ou « j'élimine » ✕ — c'est TON projet, c'est toi le chef. Tout est sauvegardé : tes réponses, tes choix, tes étapes cochées. En bas de la page, l'<b>École du code</b> : 8 mini-leçons pour comprendre comment on fabrique une vraie appli (code, langages, internet, bases de données…). Le <b>rendu final</b> se montre à la fête du 22 août, avec une mini-présentation de 2-3 minutes.`)}
     ${gcard('🏭', "L'onglet Fabrique — ton atelier de création",
       `Le grand atelier : tu y fabriques une <b>vraie page web</b> avec le Bâtisseur, une IA spécialisée dans la construction. Cinq étapes de pro : imagine, fabrique (par petites améliorations successives), teste, <b>publie ton code sur GitHub</b> — le coffre-fort mondial du code — et ta page est mise <b>en ligne sur le vrai internet</b>, avec un lien à partager. C'est l'endroit idéal pour construire ton projet du mois s'il est numérique. Tu peux même regarder et modifier le code toi-même (bouton « Voir le code »).`)}
-    ${gcard('💬', "L'onglet Questions",
-      `Ton assistant IA personnel — c'est toi qui l'as baptisé ! Pose-lui TOUTES tes questions : un mot compliqué, un point d'histoire, une idée d'exposé. Règle d'or (tu la verras dans le fil IA) : utilise-le pour <b>comprendre plus</b>, jamais pour réfléchir à ta place. Il y a aussi l'atelier d'images pour illustrer tes projets et exposés.`)}
+    ${gcard('💬', "L'onglet Mon assistant",
+      `Ton assistant IA personnel — c'est toi qui l'as baptisé ! Pose-lui TOUTES tes questions : un mot compliqué, un point d'histoire, une idée d'exposé. Tu peux aussi lui <b>coller une image ou une capture d'écran</b> pour l'interroger dessus, garder tes meilleures réponses en <b>pépites</b> 💎, et créer des images dans l'atelier. Règle d'or (tu la verras dans le fil IA) : utilise-le pour <b>comprendre plus</b>, jamais pour réfléchir à ta place.`)}
     ${gcard('🎤', "Les exposés du vendredi",
       `Chaque vendredi, 5 à 10 minutes devant la famille, avec un support créé avec les outils de la semaine. La règle du jeu : le thème est <b>au choix, mais connexe à quelque chose vu dans la semaine</b> — et tu <b>brainstormes d'abord tes idées avec ton assistant</b> avant de choisir. Un outil différent chaque semaine, avec son mode d'emploi sur la page du vendredi : <b>Gamma</b> (S1), <b>Claude</b> (S2), <b>Canva</b> (S3), <b>PowerPoint et son IA</b> (S4). La recette apprise en rhétorique : une <b>accroche</b>, <b>3 idées</b>, une <b>chute</b>. Après ton passage, papa note ton exposé (étoiles + commentaire) — tu verras son avis apparaître sur la page du jour. Le dernier samedi : l'exposé final, le grand quiz… et la fête !`)}
     ${gcard('🎖️', 'Les badges',
@@ -785,60 +785,213 @@ async function refreshStreak(){
   $('#hdr-streak').textContent = '🔥 ' + streak;
 }
 
-/* ---------- projet du mois ---------- */
-let projetState = null;
+/* ---------- projet du mois : poste de pilotage ---------- */
+let board = null;
+let boardLoaded = false;
+let boardBusy = false;
+async function loadBoard(){
+  const {data} = await db.from('adalix_projet_board').select('*').eq('child',child).maybeSingle();
+  board = data ? {
+    idea: data.idea || '',
+    steps: Array.isArray(data.steps) ? data.steps : [],
+    qa: Array.isArray(data.qa) ? data.qa : [],
+    suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
+    current_q: data.current_q || '',
+    last_msg: data.last_msg || '',
+    progress: data.progress || 0,
+  } : null;
+  boardLoaded = true;
+}
+async function saveBoard(){
+  if(!board) return;
+  await db.from('adalix_projet_board').upsert({child,
+    idea: board.idea, steps: board.steps, qa: board.qa, suggestions: board.suggestions,
+    current_q: board.current_q, last_msg: board.last_msg, progress: board.progress,
+    updated_at: new Date().toISOString()});
+}
 async function renderProjet(){
-  $('#main').innerHTML = '<div class="card">Chargement…</div>';
+  if(child==='parent'){ renderDashboard(); return; }
+  if(!boardLoaded){
+    $('#main').innerHTML = '<div class="card">Ouverture du projet…</div>';
+    await loadBoard();
+  }
   const P = D.projet;
-  const mine = P[child] || P.adam;
-  const {data} = await db.from('adalix_projet').select('*').eq('child',child).maybeSingle();
-  projetState = data || {child, idea:null, notes:'', phase:1};
-  const t = todayInProgramme();
-  const stepIdx = t ? t.wi*6 + t.di : 23;
-  const curPhase = (t ? t.wi : 3) + 1;
-  const weekSteps = (P.steps||[]).slice((curPhase-1)*6, (curPhase-1)*6+6);
+  // pas encore d'idée : écran de choix
+  if(!board || !board.idea){
+    const mine = P[child] || P.adam;
+    $('#main').innerHTML = `<div class="narrow">
+      <div class="card"><h3>💻 Ton projet du mois</h3>
+        <div style="font-size:13.5px;color:#666;line-height:1.5;">${esc(P.intro)}</div>
+        ${P.rendu?`<div class="ecrit-box" style="margin-top:10px;">${esc(P.rendu)}</div>`:''}
+      </div>
+      <div class="card"><h3>💡 Choisis ton idée</h3>
+        ${mine.ideas.map(idea=>`<div class="chk-item" onclick="chooseIdea('${esc(idea.titre).replace(/'/g,"\\'")}')">
+          <div class="box"></div>
+          <div><div class="di-title" style="font-size:14px;">${esc(idea.titre)}</div><div class="di-sub">${esc(idea.desc)}</div></div>
+        </div>`).join('')}
+        <div style="margin-top:10px;">
+          <input type="text" id="idea-custom" placeholder="…ou ta propre idée !">
+          <button class="btn" style="margin-top:4px;" onclick="chooseIdea(document.getElementById('idea-custom').value.trim())">C'est parti !</button>
+        </div>
+      </div>
+    </div>`;
+    return;
+  }
+  const pending = board.suggestions.filter(s=>!s.status || s.status==='pending');
+  const kept = board.suggestions.filter(s=>s.status==='kept');
+  const doneCount = board.steps.filter(s=>s.done).length;
   $('#main').innerHTML = `<div class="narrow">
-    <div class="card"><h3>💻 Ton projet du mois</h3>
-      <div style="font-size:13.5px;color:#666;line-height:1.5;">${esc(P.intro)}</div>
-      ${P.rendu?`<div class="ecrit-box" style="margin-top:10px;">${esc(P.rendu)}</div>`:''}
+    <div class="card">
+      <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:1px;">Ton projet du mois</div>
+      <h2 style="color:var(--accent2);margin:2px 0 8px;">🚀 ${esc(board.idea)}</h2>
+      <div style="background:rgba(0,0,0,.08);border-radius:10px;height:14px;overflow:hidden;">
+        <div style="width:${board.progress}%;height:100%;background:linear-gradient(90deg,var(--accent),#3e9c7a);border-radius:10px;transition:width .5s;"></div>
+      </div>
+      <div style="font-size:12.5px;color:#888;margin-top:4px;">Avancement estimé : <b>${board.progress}%</b> · Étapes : <b>${doneCount}/${board.steps.length||'—'}</b></div>
+      <div class="actions" style="margin-top:8px;">
+        <button class="btn" onclick="showTab('fabrique')">🏭 Construire dans la Fabrique</button>
+        <button class="btn ghost" style="font-size:12px;" onclick="resetBoardConfirm()">✏️ Changer d'idée</button>
+      </div>
     </div>
-    ${P.steps && P.steps[stepIdx] ? `<div class="card" style="border-left:4px solid #c98f2f;"><h3>🪜 L'étape du jour (jour ${stepIdx+1}/24)</h3>
-      <p style="font-size:14.5px;line-height:1.6;margin:4px 0;">${esc(P.steps[stepIdx])}</p>
-      <div style="font-size:12px;color:#888;margin-top:8px;">Les étapes de la semaine ${curPhase} :</div>
-      <ol style="margin:4px 0 0 20px;padding:0;" start="${(curPhase-1)*6+1}">${weekSteps.map((s,i)=>`<li style="font-size:12.5px;line-height:1.5;margin-bottom:4px;${(curPhase-1)*6+i===stepIdx?'font-weight:700;color:var(--accent2);':'color:#888;'}">${esc(s.split('.')[0])}.</li>`).join('')}</ol>
-    </div>` : ''}
-    <div class="card"><h3>🗺️ Les 4 phases</h3>
-      ${P.phases.map(ph=>`<div style="display:flex;gap:8px;align-items:baseline;padding:4px 0;${ph.semaine===curPhase?'font-weight:700;color:var(--accent2);':'color:#888;'}">
-        <div>S${ph.semaine}</div><div style="font-size:13.5px;">${esc(ph.titre)}</div>${ph.semaine===curPhase?'<span style="font-size:12px;">← cette semaine</span>':''}
-      </div>`).join('')}
+    <div class="card" style="border-left:4px solid #c98f2f;">
+      <h3>🎤 Ton coach te demande…</h3>
+      ${board.last_msg?`<div style="font-size:13.5px;color:#666;line-height:1.5;margin-bottom:6px;">${esc(board.last_msg)}</div>`:''}
+      <div id="coach-q" style="font-size:15px;font-weight:700;line-height:1.5;">${board.current_q?esc(board.current_q):'Clique sur « Lancer l\'accompagnement » pour recevoir ta première question !'}</div>
+      ${board.current_q?`
+      <textarea id="coach-answer" rows="3" placeholder="Ta réponse… (plus tu en dis, mieux ton coach t'aide)"></textarea>
+      <div class="actions"><button class="btn" id="coach-send" onclick="answerCoach()">Répondre</button>
+        ${board.qa.length?`<button class="btn ghost" style="font-size:12px;" onclick="openCoachHistory()">🗂️ Historique (${board.qa.length})</button>`:''}
+      </div>`:`
+      <div class="actions"><button class="btn" id="coach-send" onclick="kickoffCoach()">🚀 Lancer l'accompagnement</button></div>`}
     </div>
-    <div class="card"><h3>💡 6 idées, 1 choix</h3>
-      <div style="font-size:12.5px;color:#888;margin-bottom:6px;">Clique sur ton idée (ou change d'avis à tout moment).</div>
-      ${mine.ideas.map((idea,i)=>`<div class="chk-item ${projetState.idea===idea.titre?'done':''}" onclick="chooseIdea('${esc(idea.titre).replace(/'/g,"\\'")}')">
-        <div class="box">${projetState.idea===idea.titre?'✓':''}</div>
-        <div><div class="di-title" style="font-size:14px;">${esc(idea.titre)}</div><div class="di-sub">${esc(idea.desc)}</div></div>
-      </div>`).join('')}
-      <div style="font-size:12.5px;color:#888;margin-top:8px;">${esc(P.astuce)}</div>
+    <div class="card"><h3>🗺️ Ta feuille de route</h3>
+      ${board.steps.length ? board.steps.map((s,i)=>`<div class="chk-item ${s.done?'done':''}" onclick="toggleStep(${i})">
+        <div class="box">${s.done?'✓':''}</div><div class="lbl" style="font-size:13.5px;">${esc(s.t)}</div>
+      </div>`).join('') : '<div style="font-size:13px;color:#888;">Ta feuille de route apparaîtra dès ta première réponse au coach.</div>'}
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <input type="text" id="step-add" placeholder="Ajouter une étape à toi…" style="flex:1;margin:0;">
+        <button class="btn ghost" onclick="addStep()">＋</button>
+      </div>
     </div>
-    <div class="card"><h3>📝 Où j'en suis</h3>
-      <textarea id="proj-notes" rows="4" placeholder="Note ce que tu as fait aujourd'hui sur ton projet…">${esc(projetState.notes||'')}</textarea>
-      <div class="actions"><button class="btn" onclick="saveProjetNotes()">Enregistrer</button>
-      <button class="btn ghost" onclick="showTab('fabrique')">🏭 Construire dans la Fabrique</button></div>
+    <div class="card"><h3>💡 Suggestions du coach</h3>
+      ${pending.length ? pending.map(s=>{
+        const idx = board.suggestions.indexOf(s);
+        return `<div style="display:flex;gap:8px;align-items:center;background:#fdf6ec;border-radius:10px;padding:8px 12px;margin-bottom:6px;">
+          <div style="flex:1;font-size:13.5px;">${esc(s.t)}</div>
+          <button class="btn" style="font-size:12px;padding:5px 10px;background:#3e9c7a;" onclick="suggestionChoice(${idx},'kept')">✓ Je garde</button>
+          <button class="btn ghost" style="font-size:12px;padding:5px 10px;" onclick="suggestionChoice(${idx},'dropped')">✕</button>
+        </div>`;
+      }).join('') : '<div style="font-size:13px;color:#888;">Pas de suggestion en attente — ton coach en proposera au fil de vos échanges.</div>'}
+      ${kept.length?`<div style="font-size:12.5px;color:#888;margin-top:8px;">Gardées : ${kept.map(s=>`<span class="badge-chip">${esc(s.t)}</span>`).join(' ')}</div>`:''}
+    </div>
+    <div class="card"><h3>🎓 L'école du code — comprendre ce que tu fabriques</h3>
+      <div style="font-size:12.5px;color:#888;margin-bottom:6px;">Huit mini-leçons pour comprendre comment marche une appli, du code jusqu'à la mise en ligne. Une par jour suffit !</div>
+      ${(ECOLE[child]||ECOLE.adam).map((l,i)=>`<details style="margin-bottom:6px;background:rgba(0,0,0,.03);border-radius:8px;padding:8px 12px;">
+        <summary style="cursor:pointer;font-size:13.5px;font-weight:700;">${i+1}. ${esc(l.t)}</summary>
+        <p style="font-size:13.5px;line-height:1.55;margin:6px 0 2px;">${esc(l.x)}</p>
+      </details>`).join('')}
     </div>
   </div>`;
 }
 async function chooseIdea(titre){
-  projetState.idea = titre;
-  await db.from('adalix_projet').upsert({child, idea:titre, notes:projetState.notes||'', phase:currentWeek+1, updated_at:new Date().toISOString()});
+  if(!titre){ toast('Choisis ou écris une idée !'); return; }
+  board = { idea:titre, steps:[], qa:[], suggestions:[], current_q:'', last_msg:'', progress:0 };
+  await saveBoard();
+  db.from('adalix_projet').upsert({child, idea:titre, notes:'', phase:currentWeek+1, updated_at:new Date().toISOString()}).then(()=>{});
   renderProjet();
 }
-async function saveProjetNotes(){
-  const notes = $('#proj-notes').value.trim();
-  projetState.notes = notes;
-  await db.from('adalix_projet').upsert({child, idea:projetState.idea||null, notes, phase:currentWeek+1, updated_at:new Date().toISOString()});
-  await markChecklistItemDone('projet');
-  toast('Projet enregistré ! 🌟');
+function resetBoardConfirm(){
+  modal(`<h3>✏️ Changer d'idée ?</h3>
+    <p style="font-size:14px;">Ton coach repartira de zéro : nouvelles questions, nouvelle feuille de route. Tes réponses actuelles seront effacées.</p>
+    <div class="actions"><button class="btn" style="background:#c9636a;" onclick="closeModal();board={idea:'',steps:[],qa:[],suggestions:[],current_q:'',last_msg:'',progress:0};saveBoard();renderProjet();">Oui, je change</button><button class="btn ghost" onclick="closeModal()">Annuler</button></div>`);
 }
+async function callCoach(answer){
+  if(boardBusy) return;
+  boardBusy = true;
+  const btn = $('#coach-send'); if(btn){ btn.disabled = true; btn.textContent = '🤔 Ton coach réfléchit…'; }
+  try {
+    const r = await fetch('/api/projet', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({child, code: familyCode, answer, board})});
+    const j = await r.json();
+    if(j.error === 'code_famille'){ badFamilyCode(); return; }
+    if(!j.board){ toast(j.error || 'Petit souci — réessaie !'); return; }
+    if(answer) board.qa.push({q: board.current_q || '(lancement)', a: answer, at: new Date().toISOString()});
+    const doneTexts = new Set(board.steps.filter(s=>s.done).map(s=>s.t));
+    board.current_q = j.board.question || board.current_q;
+    board.last_msg = j.board.message || '';
+    if(j.board.steps && j.board.steps.length){
+      const news = j.board.steps.map(s=>({t:s.t, done: s.done || doneTexts.has(s.t)}));
+      // les étapes ajoutées par l'enfant (mine) ne disparaissent jamais
+      board.steps.filter(s=>s.mine && !news.some(n=>n.t===s.t)).forEach(s=>news.push(s));
+      board.steps = news;
+    }
+    (j.board.suggestions||[]).forEach(t=>{
+      if(t && !board.suggestions.some(s=>s.t===t)) board.suggestions.push({t, status:'pending'});
+    });
+    if(typeof j.board.progress === 'number') board.progress = j.board.progress;
+    await saveBoard();
+    markChecklistItemDone('projet');
+  } catch(e){ toast('Erreur de connexion — réessaie !'); }
+  finally { boardBusy = false; renderProjet(); }
+}
+function kickoffCoach(){ callCoach(''); }
+function answerCoach(){
+  const el = $('#coach-answer'); const a = el ? el.value.trim() : '';
+  if(!a){ toast('Écris ta réponse d\'abord !'); return; }
+  callCoach(a);
+}
+function openCoachHistory(){
+  modal(`<h3>🗂️ Ton carnet de projet</h3>
+    <div style="max-height:55vh;overflow:auto;">
+    ${board.qa.slice().reverse().map(x=>`<div style="background:#f7f8fb;border-radius:10px;padding:8px 12px;margin-bottom:8px;">
+      <div style="font-size:11px;color:#999;">${new Date(x.at).toLocaleDateString('fr-FR')}</div>
+      <div style="font-size:13px;font-weight:700;">${esc(x.q)}</div>
+      <div style="font-size:13px;">↳ ${esc(x.a)}</div>
+    </div>`).join('')}
+    </div>
+    <div class="actions"><button class="btn" onclick="closeModal()">Fermer</button></div>`);
+}
+function toggleStep(i){
+  if(!board || !board.steps[i]) return;
+  board.steps[i].done = !board.steps[i].done;
+  saveBoard(); renderProjet();
+  if(board.steps[i].done) markChecklistItemDone('projet');
+}
+function addStep(){
+  const el = $('#step-add'); const t = el ? el.value.trim() : '';
+  if(!t) return;
+  board.steps.push({t, done:false, mine:true});
+  saveBoard(); renderProjet();
+}
+function suggestionChoice(idx, status){
+  if(!board || !board.suggestions[idx]) return;
+  board.suggestions[idx].status = status;
+  saveBoard(); renderProjet();
+  toast(status==='kept' ? '💡 Gardée — elle rejoindra ta feuille de route !' : 'Éliminée — ton coach n\'insistera pas.');
+}
+/* L'école du code — 8 mini-leçons par enfant */
+const ECOLE = {
+  adam: [
+    {t:"C'est quoi une appli, au fond ?", x:"Toute appli a trois organes : un ÉCRAN (ce que tu vois — boutons, textes, couleurs), un CERVEAU (la logique : que se passe-t-il quand tu cliques ?) et une MÉMOIRE (les données qui survivent quand tu fermes). Le Grand Été lui-même est fait comme ça : l'écran que tu regardes, la logique des quiz, et une base de données qui retient tes scores. Quand tu fabriques dans la Fabrique, tu assembles exactement ces trois organes."},
+    {t:"C'est quoi, le code ?", x:"Du texte qui donne des ordres à la machine — mais des ordres d'une précision absolue. Une recette de cuisine dit « fais revenir l'oignon » ; un ordinateur exigerait : « prends l'oignon n°1, coupe-le en 24 morceaux de 5 mm, chauffe la poêle à 140° pendant 180 secondes ». L'ordinateur ne devine JAMAIS : il fait exactement ce qui est écrit — c'est pour ça qu'un point-virgule oublié peut tout casser, et c'est pour ça qu'un bug est toujours logique."},
+    {t:"Les langages : HTML, CSS, JavaScript", x:"Une page web parle trois langues en même temps. HTML = le squelette (« ici un titre, là un bouton »). CSS = les vêtements (couleurs, tailles, polices). JavaScript = les muscles (ce qui BOUGE : cliquer, calculer, réagir). Ouvre le code dans la Fabrique et tu les verras tous les trois : <h1> c'est du HTML, color: teal c'est du CSS, onclick c'est du JavaScript. Il existe des centaines d'autres langages (Python pour la science et l'IA, Swift pour les iPhone…) mais le trio du web est le meilleur point de départ."},
+    {t:"Comment ton navigateur lit une page", x:"Quand tu ouvres un site, ton navigateur (Chrome, Firefox…) télécharge le code HTML/CSS/JavaScript depuis un serveur, puis le TRADUIT en pixels sur ton écran, en quelques millisecondes. Astuce de dev : sur n'importe quel site, clic droit → « Inspecter » — tu verras le vrai code de la page. Oui, même celui du Grand Été. Rien n'est magique : tout est écrit quelque part."},
+    {t:"Mettre en ligne : serveurs et déploiement", x:"Ton code sur ton ordi, personne ne le voit. Pour qu'il soit sur internet, il faut le copier sur un SERVEUR : un ordinateur allumé 24h/24 dans un centre de données, qui envoie ta page à quiconque tape ton adresse. C'est le « déploiement ». Quand tu cliques 🚀 Publier dans la Fabrique, ton code part sur GitHub (le coffre-fort mondial du code) puis un service nommé Vercel le met en ligne — exactement le circuit qu'utilisent les vrais développeurs."},
+    {t:"Les bases de données : la mémoire qui survit", x:"Sans base de données, ta page oublie tout à chaque rechargement. Une base de données, c'est un grand classeur rangé sur un serveur : ton appli y écrit (« nouveau score : 42 ») et y relit (« donne-moi les 10 meilleurs scores »). Le Grand Été utilise une base nommée Supabase pour tes scores, tes cartes, ta checklist. Et ta création de la Fabrique peut en utiliser une aussi — demande au Bâtisseur un livre d'or ou un tableau des scores, tu verras."},
+    {t:"Le vocabulaire du dev", x:"BUG : un comportement non voulu (le mot vient d'un vrai papillon coincé dans un ordinateur en 1947 !). DÉBUGGER : enquêter jusqu'à trouver la ligne coupable. COMMIT : une sauvegarde datée de ton code, avec un petit message — GitHub en garde l'historique complet, on peut toujours revenir en arrière. VERSION : v1, v2… chaque amélioration numérotée. Ces mots, tu vas les vivre dans la Fabrique."},
+    {t:"L'IA et le code : ta nouvelle équipe", x:"Le Bâtisseur écrit du code à ta demande — comme les assistants qu'utilisent les vrais développeurs aujourd'hui. Mais retiens la règle d'or du fil IA : l'IA écrit VITE, toi tu dois comprendre ce qu'elle écrit. Un dev qui copie sans comprendre est prisonnier de son outil ; un dev qui comprend peut vérifier, corriger, améliorer. C'est toute la différence entre subir l'IA et la piloter — et c'est exactement ce que tu apprends ce mois-ci."},
+  ],
+  alix: [
+    {t:"C'est quoi une appli ?", x:"Une appli, c'est trois choses qui travaillent ensemble : un ÉCRAN (ce que tu vois), un CERVEAU (ce qui se passe quand tu cliques) et une MÉMOIRE (ce qui est retenu même quand tu fermes). Ton appli du Grand Été a les trois : les jolies pages, les quiz qui comptent tes points, et la mémoire qui garde tes cartes et tes scores."},
+    {t:"C'est quoi, le code ?", x:"Le code, c'est du texte qui donne des ordres à l'ordinateur — comme une recette de cuisine, mais ultra précise. L'ordinateur fait EXACTEMENT ce qui est écrit, jamais autre chose. S'il fait une bêtise, c'est que la recette avait une erreur — on appelle ça un bug !"},
+    {t:"Les trois langues d'une page web", x:"Une page web parle trois langues : le HTML dit ce qu'il y a (« un titre, une image, un bouton »), le CSS dit comment c'est habillé (rose ! arrondi ! grand !), et le JavaScript fait bouger les choses (quand tu cliques, il se passe quelque chose). Dans la Fabrique, clique sur « Voir le code » : tu verras les trois langues mélangées."},
+    {t:"Comment l'ordinateur affiche ta page", x:"Ton navigateur (Chrome par exemple) reçoit le code, le lit à toute vitesse, et le transforme en ce que tu vois à l'écran. C'est comme un chef d'orchestre qui lit une partition et la transforme en musique. Petit secret : sur n'importe quel site, clic droit puis « Inspecter » — tu peux voir la partition !"},
+    {t:"Mettre sa page sur internet", x:"Ta page dans la Fabrique, il n'y a que toi qui la vois. Pour que mamie puisse la voir depuis chez elle, il faut l'envoyer sur un SERVEUR : un ordinateur toujours allumé qui distribue ta page au monde entier. C'est ce que fait le bouton 🚀 Publier : ta création part sur le vrai internet, avec une vraie adresse à partager !"},
+    {t:"La mémoire magique : les bases de données", x:"Sans mémoire, ta page oublie tout dès qu'on la recharge. Une base de données, c'est un grand cahier rangé sur un serveur où ton appli peut écrire et relire des choses : les messages du livre d'or, les scores… Demande au Bâtisseur d'ajouter un livre d'or à ta page : les messages resteront pour toujours !"},
+    {t:"Les mots des pros", x:"Un BUG = quelque chose qui ne marche pas comme prévu (à cause d'un vrai papillon coincé dans une machine il y a longtemps !). DÉBUGGER = jouer au détective pour trouver l'erreur. Une VERSION = chaque amélioration de ton appli (v1, v2, v3…). Toi aussi tu vas dire ces mots-là maintenant !"},
+    {t:"L'IA qui t'aide à créer", x:"Le Bâtisseur écrit le code pour toi — mais la cheffe, c'est TOI : c'est toi qui décides quoi créer, qui vérifies, qui améliores. L'IA est ton pinceau magique, pas l'artiste. L'artiste, c'est toi. 🎨"},
+  ],
+};
 // coche un item de la checklist du jour sans écraser les autres (utile depuis un autre onglet que "checklist")
 async function markChecklistItemDone(id){
   const {data} = await db.from('adalix_checklist').select('*').eq('child',child).eq('day',todayStr()).maybeSingle();
@@ -850,7 +1003,6 @@ async function markChecklistItemDone(id){
   refreshStreak();
   checkBadges();
 }
-
 /* ---------- La Fabrique ---------- */
 let fabMsgs = [];
 let fabCode = '';
@@ -1254,7 +1406,7 @@ function openBadges(){ modal(renderBadgesHTML()); }
 /* ---------- parent dashboard ---------- */
 async function renderDashboard(){
   $('#main').innerHTML = '<div class="card">Chargement…</div>';
-  const [scores, checks, persos, journal, chats, projets, assistants, badges, expoNotes, profiles] = await Promise.all([
+  const [scores, checks, persos, journal, chats, projets, assistants, badges, expoNotes, profiles, boards] = await Promise.all([
     db.from('adalix_qcm_scores').select('*').order('created_at',{ascending:false}).limit(30),
     db.from('adalix_checklist').select('*').order('day',{ascending:false}).limit(60),
     db.from('adalix_personalities').select('*'),
@@ -1265,6 +1417,7 @@ async function renderDashboard(){
     db.from('adalix_badges').select('*'),
     db.from('adalix_expose_notes').select('*'),
     db.from('adalix_profiles').select('*'),
+    db.from('adalix_projet_board').select('*'),
   ]);
   profilesCache = profiles.data||[];
   const S = scores.data||[], C = checks.data||[], P = persos.data||[], J = journal.data||[], CH = chats.data||[], PR = projets.data||[], AS = assistants.data||[], BD = badges.data||[];
@@ -1289,12 +1442,32 @@ async function renderDashboard(){
       ${S.slice(0,12).map(r=>`<tr><td>${kidName(r.child)}</td><td>${esc(quizTitle(r.quiz_id))}</td><td><b>${r.score}/${r.total}</b></td><td>${new Date(r.created_at).toLocaleDateString('fr-FR')}</td></tr>`).join('')||'<tr><td colspan=4 style="color:#999;">Aucun quiz encore</td></tr>'}</table></div>
     ${renderProfilesCard()}
     ${renderExpoNotationCard()}
-    <div class="card"><h3>💻 Leur projet du mois</h3>
+    <div class="card"><h3>🚀 Pilotage des projets</h3>
       ${kids.map(k=>{
+        const bo = (boards.data||[]).find(r=>r.child===k);
         const pr = PR.find(r=>r.child===k);
-        if(!pr || !pr.idea) return `<div class="jentry"><div class="jd">${kidName(k)}</div><span style="color:#999;font-size:13px;">Pas encore choisi</span></div>`;
-        return `<div class="jentry"><div class="jd">${kidName(k)} · Semaine ${pr.phase||1} · ${new Date(pr.updated_at).toLocaleDateString('fr-FR')}</div>
-          <div><b>Idée choisie :</b> ${esc(pr.idea)}</div>${pr.notes?`<div><b>Dernière note :</b> ${esc(pr.notes)}</div>`:''}</div>`;
+        if(!bo || !bo.idea){
+          if(pr && pr.idea) return `<div class="jentry"><div class="jd">${kidName(k)}</div><div><b>Idée choisie :</b> ${esc(pr.idea)}</div><span style="color:#999;font-size:13px;">Accompagnement pas encore lancé</span></div>`;
+          return `<div class="jentry"><div class="jd">${kidName(k)}</div><span style="color:#999;font-size:13px;">Pas encore d'idée choisie</span></div>`;
+        }
+        const steps = Array.isArray(bo.steps)?bo.steps:[];
+        const done = steps.filter(s=>s.done).length;
+        const sugg = Array.isArray(bo.suggestions)?bo.suggestions:[];
+        const kept = sugg.filter(s=>s.status==='kept');
+        const qa = Array.isArray(bo.qa)?bo.qa:[];
+        const last = qa[qa.length-1];
+        const prog = bo.progress||0;
+        return `<div class="jentry"><div class="jd">${kidName(k)} · ${new Date(bo.updated_at).toLocaleDateString('fr-FR')}</div>
+          <div><b>Idée :</b> ${esc(bo.idea)}</div>
+          <div style="margin:6px 0;display:flex;align-items:center;gap:8px;">
+            <div style="flex:1;height:8px;background:#eef1f6;border-radius:99px;overflow:hidden;"><div style="height:100%;width:${prog}%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:99px;"></div></div>
+            <b style="font-size:12.5px;">${prog}%</b>
+          </div>
+          <div style="font-size:13px;">📋 Étapes : <b>${done}/${steps.length}</b> faites${kept.length?` · 💡 Suggestions gardées : <b>${kept.length}</b>`:''}${qa.length?` · 💬 <b>${qa.length}</b> échange${qa.length>1?'s':''} avec le coach`:''}</div>
+          ${steps.length?`<div style="font-size:12.5px;color:#666;margin-top:4px;">Prochaine étape : ${esc((steps.find(s=>!s.done)||{}).t||'tout est fait 🎉')}</div>`:''}
+          ${last?`<div style="font-size:12.5px;color:#666;margin-top:4px;"><b>Dernier échange</b> — Q : ${esc(String(last.q||'').slice(0,120))}<br>R : ${esc(String(last.a||'').slice(0,160))}</div>`:''}
+          ${kept.length?`<div style="font-size:12.5px;color:#666;margin-top:4px;">Gardées : ${kept.slice(0,3).map(s=>esc(s.t)).join(' · ')}${kept.length>3?'…':''}</div>`:''}
+        </div>`;
       }).join('')}
     </div>
     <div class="card"><h3>✍️ Leurs réalisations — journal du soir</h3>
