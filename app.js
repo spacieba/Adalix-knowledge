@@ -1134,6 +1134,7 @@ function renderChat(){
       </div>
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn ghost" onclick="openGems()">⭐ Mes pépites</button>
+        <button class="btn ghost" onclick="openHistory()">🕘 Mon historique</button>
         <button class="btn ghost" onclick="openImagine()">🎨 Atelier d'images</button>
         <button class="btn ghost" onclick="askAssistantName()">✏️ Renommer ${esc(assistantName)}</button>
       </div>
@@ -1192,6 +1193,66 @@ async function openGems(){
 async function deleteGem(id){
   await db.from('adalix_saved').delete().eq('id',id).eq('child',child);
   openGems();
+}
+/* ---- historique complet : retrouver TOUT ce qu'on s'est dit, même les échanges jamais gardés en pépite ---- */
+let historyPairs = [];        // [{q:{content,created_at}, a:{content,created_at}|null}]
+let historySavedKeys = new Set();
+let historySearch = '';
+async function openHistory(){
+  modal(`<h3>🕘 Mon historique</h3>
+    <div style="font-size:12.5px;color:#888;margin-bottom:8px;">Toutes tes questions à ${esc(assistantName||'ton assistant')} depuis le début, même celles que tu n'as pas gardées en pépite. Clique sur ⭐ pour en garder une maintenant.</div>
+    <input type="text" id="history-search" placeholder="🔎 Rechercher dans mon historique…" oninput="filterHistory(this.value)">
+    <div id="history-list" style="max-height:50vh;overflow:auto;margin-top:6px;"><div style="text-align:center;color:#999;font-size:13px;margin-top:20px;">Chargement…</div></div>
+    <div class="actions"><button class="btn ghost" onclick="closeModal()">Fermer</button></div>`);
+  historySearch = '';
+  const [{data:rows}, {data:gems}] = await Promise.all([
+    db.from('adalix_chat').select('*').eq('child',child).order('created_at',{ascending:true}),
+    db.from('adalix_saved').select('question,answer').eq('child',child)
+  ]);
+  historySavedKeys = new Set((gems||[]).map(g=>(g.question||'')+'|||'+(g.answer||'')));
+  const list = rows||[];
+  const pairs = [];
+  for(let i=0;i<list.length;i++){
+    if(list[i].role!=='user') continue;
+    const next = list[i+1];
+    pairs.push({ q:list[i], a:(next && next.role==='assistant') ? next : null });
+  }
+  historyPairs = pairs.reverse(); // plus récent d'abord
+  drawHistoryList();
+}
+function filterHistory(v){ historySearch = v||''; drawHistoryList(); }
+function drawHistoryList(){
+  const el = $('#history-list'); if(!el) return;
+  const term = historySearch.trim().toLowerCase();
+  let lastDay = ''; let html = ''; let shown = 0;
+  historyPairs.forEach((p,i)=>{
+    const qtext = p.q.content||''; const atext = p.a ? (p.a.content||'') : '';
+    if(term && !qtext.toLowerCase().includes(term) && !atext.toLowerCase().includes(term)) return;
+    shown++;
+    const day = new Date(p.q.created_at).toLocaleDateString('fr-FR');
+    if(day!==lastDay){ html += `<div style="font-size:11px;color:#aaa;font-weight:700;margin:12px 0 4px;">${day}</div>`; lastDay = day; }
+    const already = p.a && historySavedKeys.has(qtext+'|||'+atext);
+    html += `<div style="background:#f7f8fb;border-radius:10px;padding:9px 12px;margin-bottom:8px;">
+      <div style="font-size:13px;font-weight:700;">${esc(qtext)||'<i>(image envoyée)</i>'}</div>
+      ${p.a
+        ? `<div style="font-size:13px;line-height:1.5;white-space:pre-wrap;margin-top:4px;">↳ ${esc(atext)}</div>
+           <div style="text-align:right;margin-top:2px;"><button onclick="saveHistoryGem(${i})" title="Garder cette réponse dans mes pépites" style="background:none;border:none;cursor:${already?'default':'pointer'};font-size:15px;opacity:${already?'1':'.4'};">${already?'⭐ gardé':'⭐'}</button></div>`
+        : `<div style="font-size:12px;color:#bbb;font-style:italic;margin-top:2px;">(pas de réponse suivie ici)</div>`}
+    </div>`;
+  });
+  el.innerHTML = html || `<div style="text-align:center;color:#999;font-size:13px;margin-top:20px;">${term ? 'Aucun résultat pour cette recherche.' : "Pas encore d'historique — pose une question à ton assistant !"}</div>`;
+}
+async function saveHistoryGem(i){
+  const p = historyPairs[i];
+  if(!p || !p.a) return;
+  const qtext = p.q.content||''; const atext = p.a.content||'';
+  const key = qtext+'|||'+atext;
+  if(historySavedKeys.has(key)) return;
+  const {error} = await db.from('adalix_saved').insert({child, question:qtext, answer:atext});
+  if(error){ toast('Erreur — réessaie'); return; }
+  historySavedKeys.add(key);
+  toast('⭐ Gardé dans tes pépites !');
+  drawHistoryList();
 }
 /* ---- images dans le chat (les "yeux" de l'assistant) ---- */
 let pendingImage = null;   // {media_type, data, dataUrl}
