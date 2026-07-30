@@ -195,6 +195,71 @@ table.ptable td { padding:7px 8px; border-bottom:1px solid rgba(0,0,0,.05); }
 /* jeux géo : survol des zones cliquables */
 .geo-t { transition: filter .12s; }
 .geo-t:hover { filter: brightness(1.13) saturate(1.2); }
+
+/* ---- Coup de frais (round 18) : plus vivant, plus coloré ---- */
+@keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
+@keyframes popIn { from { opacity:0; transform:scale(.94); } to { opacity:1; transform:scale(1); } }
+.card, .day-item, .chk-item, .quiz-list button, .stat { animation: fadeUp .3s ease both; }
+.card:nth-child(2) { animation-delay:.05s; } .card:nth-child(3) { animation-delay:.1s; }
+.card:nth-child(4) { animation-delay:.15s; } .card:nth-child(5) { animation-delay:.2s; }
+.modal { animation: popIn .22s ease both; }
+/* fond par défaut plus chaleureux */
+body { background:
+  radial-gradient(circle at 8% 10%, rgba(126,181,244,.20) 0, transparent 34%),
+  radial-gradient(circle at 92% 16%, rgba(255,196,110,.18) 0, transparent 30%),
+  radial-gradient(circle at 88% 88%, rgba(140,209,184,.18) 0, transparent 36%),
+  linear-gradient(165deg, #f3f6fc 0%, #eef2fa 100%); background-attachment:fixed; }
+body.theme-adam, body.theme-alix, body.theme-parent { background:var(--bg); background-attachment:fixed; }
+body.theme-parent { --bg:
+  radial-gradient(circle at 10% 12%, rgba(62,156,122,.12) 0, transparent 34%),
+  radial-gradient(circle at 90% 85%, rgba(62,156,122,.10) 0, transparent 36%),
+  linear-gradient(165deg, #eef4f1 0%, #e8f0ec 100%); }
+/* en-têtes de cartes soulignés d'un trait coloré */
+.card h3 { padding-bottom:6px; position:relative; }
+.card h3::after { content:''; position:absolute; left:0; bottom:0; width:52px; height:3.5px; border-radius:99px;
+  background:linear-gradient(90deg, var(--accent), var(--accent2)); opacity:.85; }
+body.theme-alix .card h3::after { background:linear-gradient(90deg, #e8798f, #f0a35a, #ffd166); }
+body.theme-adam .card h3::after { background:linear-gradient(90deg, #c9962c, #8a6a1e); }
+/* boutons plus joyeux */
+.btn { background:linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow:0 3px 10px rgba(0,0,0,.14);
+  transition:transform .12s, box-shadow .12s, filter .12s; }
+body.theme-alix .btn { background:linear-gradient(135deg, #e8798f, #f0a35a); }
+body.theme-adam .btn { background:linear-gradient(135deg, #d8a63a, #a87c22); color:#1d1607; text-shadow:none; }
+.btn:hover { transform:translateY(-1.5px); box-shadow:0 6px 16px rgba(0,0,0,.18); filter:saturate(1.1); }
+.btn:active { transform:scale(.97); }
+.btn.ghost, body.theme-alix .btn.ghost, body.theme-adam .btn.ghost { background:rgba(0,0,0,.07); color:var(--card-text); box-shadow:none; text-shadow:none; }
+.btn.ghost:hover, body.theme-alix .btn.ghost:hover, body.theme-adam .btn.ghost:hover { background:rgba(0,0,0,.11); transform:translateY(-1px); box-shadow:none; }
+/* navigation : onglet actif en pastille */
+nav button { border-bottom:none; border-radius:12px; margin:6px 2px; padding:9px 8px; }
+nav button.active { background:linear-gradient(135deg, var(--accent), var(--accent2)); color:#fff; opacity:1; box-shadow:0 3px 10px rgba(0,0,0,.16); }
+body.theme-adam nav button.active { color:#fff8e8; background:linear-gradient(135deg, #c9962c, #8a6a1e); }
+body.theme-alix nav button.active { background:linear-gradient(135deg, #e8798f, #f0a35a); }
+nav button:hover:not(.active) { background:rgba(0,0,0,.05); border-radius:12px; }
+/* header : reflet doux + compteurs chaleureux */
+header { background:linear-gradient(100deg, var(--accent2) 0%, var(--accent) 78%, color-mix(in srgb, var(--accent) 70%, #ffd166) 100%); }
+header .streak { background:rgba(255,255,255,.22); border:1px solid rgba(255,255,255,.25); }
+/* bulles de chat */
+.msg.user { background:linear-gradient(135deg, var(--accent), var(--accent2)); }
+body.theme-alix .msg.user { background:linear-gradient(135deg, #e8798f, #f0a35a); }
+/* journal parent + tableaux */
+.jentry { border-left:4px solid #f0a35a; }
+table.ptable th { color:var(--accent2); opacity:.85; }
+/* toast plus gai */
+.toast { background:linear-gradient(135deg, #2b3345, #3d4a66); box-shadow:0 6px 20px rgba(0,0,0,.3); animation: popIn .2s ease both; }
+/* checklist cochée : petite fête */
+.chk-item.done .box { background:linear-gradient(135deg, var(--accent), var(--accent2)); border-color:transparent; }
+.chk-item .box { transition:background .15s, transform .15s; }
+.chk-item:active .box { transform:scale(1.15); }
+/* puces de l'atelier d'images */
+.imgchips { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 2px; }
+.imgchip { border:1.5px solid rgba(0,0,0,.14); background:rgba(0,0,0,.03); color:var(--card-text);
+  border-radius:99px; padding:6px 12px; font-size:12.5px; cursor:pointer; font-family:var(--font-body); font-weight:600; transition:.12s; }
+.imgchip:hover { background:rgba(0,0,0,.07); transform:translateY(-1px); }
+.imgchip.sel { background:linear-gradient(135deg, var(--accent), var(--accent2)); color:#fff; border-color:transparent; box-shadow:0 2px 8px rgba(0,0,0,.18); }
+body.theme-alix .imgchip.sel { background:linear-gradient(135deg, #e8798f, #f0a35a); }
+/* cartes de profil à l'accueil : petite vie */
+.profile-card .avatar { transition:transform .25s; }
+.profile-card:hover .avatar { transform:scale(1.15) rotate(-4deg); }
 </style>
 </head>
 <body>

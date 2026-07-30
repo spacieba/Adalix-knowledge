@@ -26,9 +26,34 @@ module.exports = async (req, res) => {
     return;
   }
   try {
-    const { child, messages, assistantName, profile } = req.body || {};
+    const { child, messages, assistantName, profile, memory, mode, quizContext } = req.body || {};
     const name = (assistantName || 'ton assistant').toString().slice(0, 30) || 'ton assistant';
     const prof = (profile || '').toString().slice(0, 2500);
+    const memo = (memory || '').toString().slice(0, 1800);
+    // mode "memoire" : condenser la conversation récente + l'ancienne mémoire en un résumé glissant
+    if (mode === 'memoire') {
+      const transcript = (messages || [])
+        .filter(m => m && typeof m.content === 'string')
+        .slice(-16)
+        .map(m => `${m.role === 'user' ? 'Enfant' : 'Assistant'}: ${m.content.slice(0, 400)}`)
+        .join('\n');
+      if (!transcript) { res.status(200).json({ memory: memo }); return; }
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({
+          model: process.env.ANTHROPIC_MODEL_LIGHT || 'claude-haiku-4-5',
+          max_tokens: 400,
+          system: "Tu tiens la mémoire d'un assistant pédagogique pour un enfant. À partir de l'ancienne mémoire et des nouveaux échanges, écris la nouvelle mémoire : ce que l'enfant a demandé, ses centres d'intérêt, ce qu'il a compris ou pas, ses projets en cours, ce qu'il faudrait suivre. Français, 120 mots max, phrases télégraphiques, uniquement la mémoire sans texte autour.",
+          messages: [{ role: 'user', content: `ANCIENNE MÉMOIRE :\n${memo || '(vide)'}\n\nNOUVEAUX ÉCHANGES :\n${transcript}` }],
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) { console.error('anthropic memoire error', j); res.status(200).json({ memory: memo }); return; }
+      const text = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join(' ').trim();
+      res.status(200).json({ memory: text.slice(0, 1800) || memo });
+      return;
+    }
     const IMG_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
     const clean = (messages || [])
       .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
@@ -61,7 +86,9 @@ module.exports = async (req, res) => {
         model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5',
         max_tokens: 700,
         system: buildSystem(name) + `\n\nL'enfant connecté est : ${child === 'alix' ? 'Alix, 11 ans' : 'Adam, 13 ans'}.`
-          + (prof ? `\n\nCe que tu sais de cet enfant (contexte fourni par son parent — utilise-le naturellement pour personnaliser tes réponses, tes exemples et tes encouragements, mais ne le récite jamais mot à mot et ne dis jamais "d'après ton profil" ou "ton parent m'a dit") :\n${prof}` : ''),
+          + (prof ? `\n\nCe que tu sais de cet enfant (contexte fourni par son parent — utilise-le naturellement pour personnaliser tes réponses, tes exemples et tes encouragements, mais ne le récite jamais mot à mot et ne dis jamais "d'après ton profil" ou "ton parent m'a dit") :\n${prof}` : '')
+          + (memo ? `\n\nTa mémoire des conversations passées avec cet enfant (utilise-la naturellement pour assurer la continuité — "la dernière fois tu me demandais…" — sans la réciter) :\n${memo}` : '')
+          + (quizContext ? `\n\nMODE INTERROGE-MOI ACTIVÉ : l'enfant veut réviser en jouant. Pose UNE question de révision à la fois sur ce qu'il a vu (thèmes ci-dessous), attends sa réponse, corrige avec bienveillance et enthousiasme (donne la bonne réponse s'il se trompe, félicite s'il réussit), puis enchaîne sur la question suivante. Varie les thèmes et la difficulté, compte ses points (score sur le nombre de questions posées). Thèmes vus :\n${String(quizContext).slice(0, 1500)}` : ''),
         messages: clean,
       }),
     });

@@ -12,6 +12,9 @@ let chatMsgs = [];         // {role, content}
 let currentWeek = 0;
 let assistantName = null;
 let childProfile = '';
+let assistantMemory = '';
+let quizMode = false;
+let msgsSinceMemo = 0;
 /* code famille : demandé une fois par appareil, exigé par les fonctions IA du serveur */
 let familyCode = localStorage.getItem('adalix_family_code') || '';
 function askFamilyCode(){
@@ -60,8 +63,9 @@ function selectProfile(c){
   showTab('programme');
 }
 async function loadAssistantName(){
-  const {data} = await db.from('adalix_assistant').select('name').eq('child',child).maybeSingle();
+  const {data} = await db.from('adalix_assistant').select('*').eq('child',child).maybeSingle();
   assistantName = (data && data.name) || null;
+  assistantMemory = (data && data.memory) || '';
   const {data: prof} = await db.from('adalix_profiles').select('profile').eq('child',child).maybeSingle();
   childProfile = (prof && prof.profile) || '';
 }
@@ -137,7 +141,7 @@ function renderGuide(){
     ${gcard('🏭', "L'onglet Fabrique — ton atelier de création",
       `Le grand atelier : tu y fabriques une <b>vraie page web</b> avec le Bâtisseur, une IA spécialisée dans la construction. Cinq étapes de pro : imagine, fabrique (par petites améliorations successives), teste, <b>publie ton code sur GitHub</b> — le coffre-fort mondial du code — et ta page est mise <b>en ligne sur le vrai internet</b>, avec un lien à partager. C'est l'endroit idéal pour construire ton projet du mois s'il est numérique. Tu peux même regarder et modifier le code toi-même (bouton « Voir le code »).`)}
     ${gcard('💬', "L'onglet Mon assistant",
-      `Ton assistant IA personnel — c'est toi qui l'as baptisé ! Pose-lui TOUTES tes questions : un mot compliqué, un point d'histoire, une idée d'exposé. Tu peux aussi lui <b>coller une image ou une capture d'écran</b> pour l'interroger dessus, garder tes meilleures réponses en <b>pépites</b> 💎, et créer des images dans l'atelier. Règle d'or (tu la verras dans le fil IA) : utilise-le pour <b>comprendre plus</b>, jamais pour réfléchir à ta place.`)}
+      `Ton assistant IA personnel — c'est toi qui l'as baptisé, et il a de la <b>mémoire</b> : il se souvient de vos conversations passées au fil du mois. Pose-lui TOUTES tes questions, colle-lui une <b>image ou une capture d'écran</b>, garde tes meilleures réponses en <b>pépites</b> ⭐, et lance le mode <b>🎓 Interroge-moi</b> pour réviser en jouant : il te pose des questions sur ce que tu as vu et compte tes points. L'<b>atelier d'images</b> propose 11 styles (Ghibli, manga, pixel art, fantasy…), 4 formats, la baguette 🪄 qui enrichit ta description, une image de départ à transformer — et tu peux enregistrer tes créations sur le disque. Règle d'or : utilise-le pour <b>comprendre plus</b>, jamais pour réfléchir à ta place.`)}
     ${gcard('🎤', "Les exposés du vendredi",
       `Chaque vendredi, 5 à 10 minutes devant la famille, avec un support créé avec les outils de la semaine. La règle du jeu : le thème est <b>au choix, mais connexe à quelque chose vu dans la semaine</b> — et tu <b>brainstormes d'abord tes idées avec ton assistant</b> avant de choisir. Un outil différent chaque semaine, avec son mode d'emploi sur la page du vendredi : <b>Gamma</b> (S1), <b>Claude</b> (S2), <b>Canva</b> (S3), <b>PowerPoint et son IA</b> (S4). La recette apprise en rhétorique : une <b>accroche</b>, <b>3 idées</b>, une <b>chute</b>. Après ton passage, papa note ton exposé (étoiles + commentaire) — tu verras son avis apparaître sur la page du jour. Le dernier samedi : l'exposé final, le grand quiz… et la fête !`)}
     ${gcard('🎖️', 'Les badges',
@@ -1133,6 +1137,7 @@ function renderChat(){
         <button class="btn" onclick="sendChat()">➤</button>
       </div>
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn ghost" id="quiz-toggle" onclick="toggleQuizMode()" style="${quizMode?'background:var(--accent);color:#fff;':''}">🎓 Interroge-moi${quizMode?' (actif)':''}</button>
         <button class="btn ghost" onclick="openGems()">⭐ Mes pépites</button>
         <button class="btn ghost" onclick="openHistory()">🕘 Mon historique</button>
         <button class="btn ghost" onclick="openImagine()">🎨 Atelier d'images</button>
@@ -1307,33 +1312,146 @@ async function sendChat(){
     const hist = chatMsgs.slice(0,-1).slice(-12);
     const payload = hist.map((m,i)=>({ role:m.role, content:m.content, image: (i===hist.length-1 && m.image) ? m.image : undefined }));
     const r = await fetch('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({child, assistantName, profile: childProfile, code: familyCode, messages: payload})});
+      body: JSON.stringify({child, assistantName, profile: childProfile, memory: assistantMemory, quizContext: quizMode ? buildQuizContext() : undefined, code: familyCode, messages: payload})});
     const j = await r.json();
     chatMsgs[chatMsgs.length-1] = {role:'assistant', content: j.reply || j.error || 'Oups, réessaie !'};
     if(j.error === 'code_famille'){ badFamilyCode(); }
-    else db.from('adalix_chat').insert({child, role:'assistant', content: chatMsgs[chatMsgs.length-1].content}).then(()=>{});
+    else {
+      db.from('adalix_chat').insert({child, role:'assistant', content: chatMsgs[chatMsgs.length-1].content}).then(()=>{});
+      if(++msgsSinceMemo >= 8){ msgsSinceMemo = 0; updateMemory(); }
+    }
   } catch(e){
     chatMsgs[chatMsgs.length-1] = {role:'assistant', content:'Erreur de connexion — réessaie dans un instant.'};
   }
   drawChat();
 }
+/* ---- mode Interroge-moi + mémoire de l'assistant ---- */
+function buildQuizContext(){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const seen = [];
+  let idx = 0;
+  D.weeks.forEach(w => w.days.forEach(d => {
+    if(dayDate(d) <= today){
+      seen.push(`${d.title} (${d.theme})` + (d.logique && d.logique.titre ? ` — logique/rhétorique : ${d.logique.titre}` : ''));
+      if(D.ia[idx]) seen[seen.length-1] += ` — IA : ${D.ia[idx].titre}`;
+    }
+    idx++;
+  }));
+  return seen.join('\n') || 'Le programme vient de commencer : questions de culture générale adaptées à son âge.';
+}
+function toggleQuizMode(){
+  quizMode = !quizMode;
+  const btn = $('#quiz-toggle');
+  if(btn){ btn.style.background = quizMode ? 'var(--accent)' : ''; btn.style.color = quizMode ? '#fff' : ''; btn.innerHTML = `🎓 Interroge-moi${quizMode?' (actif)':''}`; }
+  if(quizMode){
+    const inp = $('#chat-in');
+    if(inp){ inp.value = 'Interroge-moi sur ce que j\'ai vu, une question à la fois !'; sendChat(); }
+  } else {
+    toast('Mode révision terminé — bien joué ! 🎓');
+  }
+}
+async function updateMemory(){
+  try {
+    const transcript = chatMsgs.slice(-16).map(m=>({role:m.role, content:m.content}));
+    const r = await fetch('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({mode:'memoire', child, memory: assistantMemory, code: familyCode, messages: transcript})});
+    const j = await r.json();
+    if(j.memory && j.memory !== assistantMemory){
+      assistantMemory = j.memory;
+      await db.from('adalix_assistant').upsert({child, name: assistantName, memory: assistantMemory});
+    }
+  } catch(e){ /* la mémoire attendra le prochain passage */ }
+}
+const IMG_STYLES = [
+  {id:'libre', emoji:'✨', label:'Libre'},
+  {id:'ghibli', emoji:'🍃', label:'Ghibli'},
+  {id:'realiste', emoji:'📷', label:'Réaliste'},
+  {id:'cartoon', emoji:'😄', label:'Cartoon'},
+  {id:'comics', emoji:'💥', label:'Comics'},
+  {id:'aquarelle', emoji:'🖌️', label:'Aquarelle'},
+  {id:'manga', emoji:'🇯🇵', label:'Manga'},
+  {id:'pixel', emoji:'👾', label:'Pixel art'},
+  {id:'pixar', emoji:'🎬', label:'3D Pixar'},
+  {id:'fantasy', emoji:'🐉', label:'Fantasy'},
+  {id:'kawaii', emoji:'🌸', label:'Kawaii'},
+];
+const IMG_FORMATS = [
+  {id:'carre', emoji:'⬜', label:'Carré'},
+  {id:'paysage', emoji:'🖥️', label:'Paysage'},
+  {id:'portrait', emoji:'📱', label:'Portrait'},
+  {id:'affiche', emoji:'🪧', label:'Affiche'},
+];
+let imgStyle = 'libre', imgFormat = 'carre', imgRef = null;
 function openImagine(){
+  imgRef = null;
   modal(`<h3>🎨 Atelier d'images</h3>
-    <p style="font-size:13.5px;color:#666;">Décris l'image de tes rêves (un personnage de ton histoire, une planète, un gâteau fabuleux…) et l'IA la dessine.</p>
-    <textarea id="img-prompt" rows="3" placeholder="Ex : un château volant au coucher du soleil, style aquarelle"></textarea>
+    <p style="font-size:13px;color:#666;margin:4px 0 8px;">Décris l'image de tes rêves, choisis un style et un format — l'IA la dessine !</p>
+    <textarea id="img-prompt" rows="3" placeholder="Ex : un château volant au coucher du soleil"></textarea>
+    <div class="actions" style="margin:2px 0 8px;">
+      <button class="btn ghost" id="img-magic" style="font-size:12.5px;" onclick="magicPrompt()" title="L'IA enrichit ta description pour un meilleur résultat">🪄 Prompt magique</button>
+      <button class="btn ghost" style="font-size:12.5px;" onclick="document.getElementById('img-ref-file').click()" title="Partir d'une photo ou d'un dessin et le transformer">🖼️ Image de départ</button>
+      <input type="file" id="img-ref-file" accept="image/*" style="display:none;" onchange="if(this.files[0])handleImgRef(this.files[0]);this.value='';">
+    </div>
+    <div id="img-ref-preview"></div>
+    <div style="font-size:11.5px;color:#999;text-transform:uppercase;letter-spacing:1px;margin-top:6px;">Style</div>
+    <div class="imgchips">${IMG_STYLES.map(s=>`<button class="imgchip ${imgStyle===s.id?'sel':''}" data-style="${s.id}" onclick="pickImgStyle('${s.id}')">${s.emoji} ${s.label}</button>`).join('')}</div>
+    <div style="font-size:11.5px;color:#999;text-transform:uppercase;letter-spacing:1px;margin-top:8px;">Format</div>
+    <div class="imgchips">${IMG_FORMATS.map(f=>`<button class="imgchip ${imgFormat===f.id?'sel':''}" data-format="${f.id}" onclick="pickImgFormat('${f.id}')">${f.emoji} ${f.label}</button>`).join('')}</div>
     <div id="img-out"></div>
-    <div class="actions"><button class="btn" id="img-go" onclick="genImage()">Générer</button><button class="btn ghost" onclick="closeModal()">Fermer</button></div>`);
+    <div class="actions"><button class="btn" id="img-go" onclick="genImage()">🎨 Générer</button><button class="btn ghost" onclick="closeModal()">Fermer</button></div>`);
+}
+function pickImgStyle(id){ imgStyle = id; document.querySelectorAll('.imgchip[data-style]').forEach(b=>b.classList.toggle('sel', b.dataset.style===id)); }
+function pickImgFormat(id){ imgFormat = id; document.querySelectorAll('.imgchip[data-format]').forEach(b=>b.classList.toggle('sel', b.dataset.format===id)); }
+function handleImgRef(file){
+  if(!file || !file.type.startsWith('image/')){ toast('Ce fichier n\'est pas une image'); return; }
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = () => {
+    URL.revokeObjectURL(url);
+    const MAX = 1024;
+    const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(img.width*scale); cv.height = Math.round(img.height*scale);
+    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+    const dataUrl = cv.toDataURL('image/jpeg', 0.85);
+    imgRef = { media_type:'image/jpeg', data:dataUrl.split(',')[1], dataUrl };
+    const el = $('#img-ref-preview');
+    if(el) el.innerHTML = `<div style="display:flex;align-items:center;gap:10px;background:rgba(0,0,0,.05);border-radius:10px;padding:6px 10px;margin-bottom:6px;">
+      <img src="${dataUrl}" style="height:48px;border-radius:8px;">
+      <span style="font-size:12px;color:#888;flex:1;">Image de départ — elle sera transformée selon ta description et ton style</span>
+      <button class="btn ghost" style="padding:4px 10px;" onclick="imgRef=null;document.getElementById('img-ref-preview').innerHTML='';">✕</button>
+    </div>`;
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); toast('Image illisible — réessaie'); };
+  img.src = url;
+}
+async function magicPrompt(){
+  const el = $('#img-prompt'); const prompt = el ? el.value.trim() : '';
+  if(!prompt){ toast('Écris d\'abord ton idée, même en 3 mots !'); return; }
+  const btn = $('#img-magic'); if(btn){ btn.disabled = true; btn.textContent = '🪄 Un instant…'; }
+  try {
+    const r = await fetch('/api/image', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({mode:'enhance', prompt, code: familyCode})});
+    const j = await r.json();
+    if(j.error === 'code_famille'){ badFamilyCode(); }
+    else if(j.prompt){ el.value = j.prompt; toast('🪄 Description enrichie — tu peux encore la modifier !'); }
+    else if(j.error){ toast(j.error); }
+  } catch(e){ toast('Erreur de connexion — réessaie'); }
+  if(btn){ btn.disabled = false; btn.textContent = '🪄 Prompt magique'; }
 }
 async function genImage(){
   const prompt = $('#img-prompt').value.trim(); if(!prompt) return;
   $('#img-go').textContent='✨ En cours…'; $('#img-go').disabled=true;
   try {
-    const r = await fetch('/api/image', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({prompt, code: familyCode})});
+    const body = {prompt, style: imgStyle, format: imgFormat, code: familyCode};
+    if(imgRef) body.reference = {media_type: imgRef.media_type, data: imgRef.data};
+    const r = await fetch('/api/image', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
     const j = await r.json();
     if(j.error === 'code_famille'){ badFamilyCode(); }
-    $('#img-out').innerHTML = j.url ? `<img class="img-result" src="${j.url}">` : `<p style="color:#c9636a;font-size:13px;">${esc(j.reply||j.error||'Erreur')}</p>`;
+    $('#img-out').innerHTML = j.url ? `<img class="img-result" src="${j.url}">
+      <div class="actions" style="margin-top:6px;"><a class="btn" style="text-decoration:none;font-size:13px;" href="${j.url}" download="grand-ete-${Date.now()}.jpg">💾 Enregistrer sur le disque</a></div>`
+      : `<p style="color:#c9636a;font-size:13px;">${esc(j.reply||j.error||'Erreur')}</p>`;
   } catch(e){ $('#img-out').innerHTML = '<p style="color:#c9636a;font-size:13px;">Erreur de connexion.</p>'; }
-  $('#img-go').textContent='Générer'; $('#img-go').disabled=false;
+  $('#img-go').textContent='🎨 Générer'; $('#img-go').disabled=false;
 }
 
 /* ---------- badges ---------- */
