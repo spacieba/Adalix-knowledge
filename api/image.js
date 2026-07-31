@@ -99,7 +99,10 @@ module.exports = async (req, res) => {
     const base = {
       taskType: 'imageInference',
       taskUUID: crypto.randomUUID(),
-      positivePrompt: prompt.slice(0, 500) + suffix + ', adapté aux enfants',
+      // NB : on n'ajoute PLUS ", adapté aux enfants" au prompt — cette phrase poussait le
+      // modèle à glisser des enfants dans l'image (gênant pour un croquis de mode).
+      // Le garde-fou reste le filtre isBlocked() ci-dessus + la présence d'un parent.
+      positivePrompt: prompt.slice(0, 500) + suffix,
       model, width, height, numberResults: 1,
       outputType: 'dataURI', outputFormat: 'JPG',
     };
