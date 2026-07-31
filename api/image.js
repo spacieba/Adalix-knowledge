@@ -1,7 +1,30 @@
 // /api/image — atelier d'images via Runware (Seedream) : styles, formats, image de référence, prompt magique
 const crypto = require('crypto');
 
-const BLOCKLIST = /(nu|nude|naked|sexy|sang|blood|gore|violence|arme|gun|weapon|tuer|kill|mort |dead body|horreur|horror)/i;
+// Filtre de sécurité. IMPORTANT : il travaille sur des MOTS ENTIERS (l'ancienne version,
+// une simple regex de fragments, bloquait "nuage", "nuit", "menu", "sanglier", "mortier"…).
+// On ne bloque que ce qui est réellement problématique : ni "arme", ni "sang", ni "violence"
+// (un chevalier, un dragon ou une scène d'aventure sont parfaitement légitimes à 11-15 ans).
+const BLOCKED_WORDS = [
+  // sexuel
+  'nu', 'nue', 'nus', 'nues', 'nude', 'nudes', 'naked', 'topless', 'sexy', 'sexe', 'sex',
+  'porn', 'porno', 'pornographie', 'pornographique', 'erotique', 'erotic', 'nsfw',
+  'seins', 'nichons', 'fesses', 'lingerie',
+  // violence extrême / horreur graphique
+  'gore', 'sanglant', 'sanglante', 'ensanglante', 'ensanglantee', 'mutile', 'mutilee', 'mutilation',
+  'decapite', 'decapitee', 'decapitation', 'cadavre', 'cadavres', 'corpse', 'dead body',
+  'torture', 'torturer', 'massacre', 'meurtre', 'murder', 'egorge', 'egorgee',
+  // atteintes à soi / aux autres
+  'suicide', 'suicider', 'pendaison', 'automutilation', 'scarification',
+  'viol', 'violer', 'violee',
+  // drogues
+  'drogue', 'drogues', 'cocaine', 'crack', 'seringue', 'shooteuse',
+  // haine
+  'nazi', 'nazie', 'nazis', 'hitler', 'croix gammee', 'swastika', 'kkk',
+];
+const norm = s => String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const BLOCK_RE = new RegExp('(^|[^a-z0-9])(' + BLOCKED_WORDS.join('|') + ')([^a-z0-9]|$)');
+const isBlocked = s => BLOCK_RE.test(norm(s));
 
 // styles proposés aux enfants (le suffixe est ajouté au prompt)
 const STYLES = {
@@ -53,7 +76,7 @@ module.exports = async (req, res) => {
   try {
     const { prompt, mode, style, format, reference } = req.body || {};
     if (!prompt || typeof prompt !== 'string') { res.status(400).json({ error: 'prompt manquant' }); return; }
-    if (BLOCKLIST.test(prompt)) {
+    if (isBlocked(prompt)) {
       res.status(200).json({ error: "Cette description n'est pas adaptée — essaie autre chose de joyeux ou d'imaginaire !" });
       return;
     }
