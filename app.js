@@ -357,6 +357,8 @@ async function loadScores(){
 }
 function quizTitle(id){
   if(id==='final') return 'Grand quiz final';
+  if(id==='drapeaux_difficile') return '🌋 Drapeaux · Difficile';
+  if(id==='drapeaux_expert') return '🔥 Drapeaux · Expert';
   const geo = (typeof GEO_GAMES !== 'undefined') && GEO_GAMES.find(g=>(g.qid||'capitales')===id && id!=='capitales');
   if(geo) return geo.label;
   return D.quizzes[id] ? D.quizzes[id].title.split('—')[0].trim() : id;
@@ -429,14 +431,14 @@ const GEO_GAMES = [
   {id:'vusa',         icon:'🗽', label:'Villes des USA',             sub:'25 villes américaines',        type:'city', qid:'villes_usa'},
   {id:'phys',         icon:'🏔️', label:'Géo physique du monde',      sub:'fleuves, monts, déserts…',     type:'city', qid:'geo_physique'},
   {id:'capitales',    icon:'🏛️', label:'Capitales du monde',         sub:'le QCM à refaire en S4 !',     type:'qcm'},
-  {id:'drapeaux',     icon:'🚩', label:'Drapeaux du monde',          sub:'20 drapeaux à reconnaître',    type:'flags', qid:'drapeaux'},
+  {id:'drapeaux',     icon:'🚩', label:'Drapeaux du monde',          sub:'niveau au choix : 🌱 facile · 🌋 difficile · 🔥 expert', type:'flags', qid:'drapeaux'},
 ];
 const GEO_QIDS = GEO_GAMES.map(g=>g.qid).filter(Boolean).concat(['capitales']);
 function geoRun(id){
   const g = GEO_GAMES.find(x=>x.id===id);
   if(g.type==='shape') startMapGame(id);
   else if(g.type==='city') startCityGame(id);
-  else if(g.type==='flags') startFlagsGame();
+  else if(g.type==='flags') renderFlagsMenu();
   else startQuiz('capitales');
 }
 async function renderGeo(){
@@ -638,16 +640,106 @@ async function finishCityGame(){
   await geoEndScreen(g.cfg.label, g.cfg.qid, g.score, total, dur, `geoRun('${g.cfg.id}')`);
 }
 
-/* ---- jeu des drapeaux (images flagcdn) ---- */
-const FLAGS = [['France','fr'],['Allemagne','de'],['Italie','it'],['Espagne','es'],['Portugal','pt'],['Royaume-Uni','gb'],['Irlande','ie'],['Belgique','be'],['Pays-Bas','nl'],['Suisse','ch'],['Autriche','at'],['Grèce','gr'],['Suède','se'],['Norvège','no'],['Finlande','fi'],['Danemark','dk'],['Pologne','pl'],['Ukraine','ua'],['Russie','ru'],['Turquie','tr'],['États-Unis','us'],['Canada','ca'],['Mexique','mx'],['Brésil','br'],['Argentine','ar'],['Chili','cl'],['Colombie','co'],['Pérou','pe'],['Chine','cn'],['Japon','jp'],['Corée du Sud','kr'],['Inde','in'],['Indonésie','id'],['Australie','au'],['Nouvelle-Zélande','nz'],['Maroc','ma'],['Algérie','dz'],['Tunisie','tn'],['Égypte','eg'],['Sénégal','sn'],["Côte d'Ivoire",'ci'],['Nigéria','ng'],['Afrique du Sud','za'],['Kenya','ke'],['Israël','il'],['Liban','lb'],['Arabie saoudite','sa'],['Iran','ir'],['Vietnam','vn'],['Thaïlande','th']];
+/* ---- jeu des drapeaux (images flagcdn) — 3 niveaux de difficulté ---- */
+/* [nom, iso, continent] — niveau Facile : les 50 pays connus (records historiques conservés) */
+const FLAGS = [['France','fr','Europe'],['Allemagne','de','Europe'],['Italie','it','Europe'],['Espagne','es','Europe'],['Portugal','pt','Europe'],['Royaume-Uni','gb','Europe'],['Irlande','ie','Europe'],['Belgique','be','Europe'],['Pays-Bas','nl','Europe'],['Suisse','ch','Europe'],['Autriche','at','Europe'],['Grèce','gr','Europe'],['Suède','se','Europe'],['Norvège','no','Europe'],['Finlande','fi','Europe'],['Danemark','dk','Europe'],['Pologne','pl','Europe'],['Ukraine','ua','Europe'],['Russie','ru','Europe'],['Turquie','tr','Asie'],['États-Unis','us','Amériques'],['Canada','ca','Amériques'],['Mexique','mx','Amériques'],['Brésil','br','Amériques'],['Argentine','ar','Amériques'],['Chili','cl','Amériques'],['Colombie','co','Amériques'],['Pérou','pe','Amériques'],['Chine','cn','Asie'],['Japon','jp','Asie'],['Corée du Sud','kr','Asie'],['Inde','in','Asie'],['Indonésie','id','Asie'],['Australie','au','Océanie'],['Nouvelle-Zélande','nz','Océanie'],['Maroc','ma','Afrique'],['Algérie','dz','Afrique'],['Tunisie','tn','Afrique'],['Égypte','eg','Afrique'],['Sénégal','sn','Afrique'],["Côte d'Ivoire",'ci','Afrique'],['Nigéria','ng','Afrique'],['Afrique du Sud','za','Afrique'],['Kenya','ke','Afrique'],['Israël','il','Asie'],['Liban','lb','Asie'],['Arabie saoudite','sa','Asie'],['Iran','ir','Asie'],['Vietnam','vn','Asie'],['Thaïlande','th','Asie']];
+/* niveau Difficile : pays moins connus — les réponses proposées viennent du même continent */
+const FLAGS_HARD = [['Kazakhstan','kz','Asie'],['Ouzbékistan','uz','Asie'],['Kirghizistan','kg','Asie'],['Turkménistan','tm','Asie'],['Tadjikistan','tj','Asie'],['Mongolie','mn','Asie'],['Népal','np','Asie'],['Sri Lanka','lk','Asie'],['Bangladesh','bd','Asie'],['Birmanie','mm','Asie'],['Cambodge','kh','Asie'],['Laos','la','Asie'],['Philippines','ph','Asie'],['Malaisie','my','Asie'],['Jordanie','jo','Asie'],['Qatar','qa','Asie'],['Oman','om','Asie'],['Irak','iq','Asie'],['Syrie','sy','Asie'],['Yémen','ye','Asie'],['Koweït','kw','Asie'],['Bahreïn','bh','Asie'],['Géorgie','ge','Asie'],['Arménie','am','Asie'],['Azerbaïdjan','az','Asie'],['Singapour','sg','Asie'],['Palestine','ps','Asie'],['Albanie','al','Europe'],['Estonie','ee','Europe'],['Lettonie','lv','Europe'],['Lituanie','lt','Europe'],['Slovénie','si','Europe'],['Slovaquie','sk','Europe'],['Serbie','rs','Europe'],['Bosnie-Herzégovine','ba','Europe'],['Macédoine du Nord','mk','Europe'],['Roumanie','ro','Europe'],['Moldavie','md','Europe'],['Croatie','hr','Europe'],['Hongrie','hu','Europe'],['Bulgarie','bg','Europe'],['Islande','is','Europe'],['Luxembourg','lu','Europe'],['Monaco','mc','Europe'],['Andorre','ad','Europe'],['Éthiopie','et','Afrique'],['Ghana','gh','Afrique'],['Cameroun','cm','Afrique'],['Mali','ml','Afrique'],['Guinée','gn','Afrique'],['Burkina Faso','bf','Afrique'],['Tanzanie','tz','Afrique'],['Ouganda','ug','Afrique'],['Mozambique','mz','Afrique'],['Angola','ao','Afrique'],['Zambie','zm','Afrique'],['Zimbabwe','zw','Afrique'],['Soudan','sd','Afrique'],['Liberia','lr','Afrique'],['Tchad','td','Afrique'],['Bolivie','bo','Amériques'],['Paraguay','py','Amériques'],['Uruguay','uy','Amériques'],['Équateur','ec','Amériques'],['Venezuela','ve','Amériques'],['Cuba','cu','Amériques'],['Honduras','hn','Amériques'],['Nicaragua','ni','Amériques'],['Guatemala','gt','Amériques'],['Salvador','sv','Amériques'],['Fidji','fj','Océanie'],['Tuvalu','tv','Océanie'],['Papouasie-Nouvelle-Guinée','pg','Océanie']];
+const FLAGS_ALL = FLAGS.concat(FLAGS_HARD);
+/* niveau Expert : familles de drapeaux quasi identiques — les mauvaises réponses sont les jumeaux */
+const FLAG_TWINS = [
+  ['td','ro','ad','md'],      // bleu-jaune-rouge verticaux
+  ['id','mc','pl','sg'],      // rouge & blanc
+  ['ie','ci','it','mx'],      // vert-blanc-orange/rouge
+  ['nl','lu','ru','hr'],      // rouge-blanc-bleu horizontaux
+  ['no','is','dk','se','fi'], // croix scandinaves
+  ['au','nz','fj','tv'],      // Union Jack + étoiles
+  ['si','sk','rs','ru'],      // drapeaux panslaves
+  ['ye','eg','sy','iq'],      // panarabes horizontaux
+  ['sn','ml','gn','cm'],      // panafricains verticaux
+  ['ve','co','ec'],           // jaune-bleu-rouge
+  ['bh','qa'],                // dentelures rouge/blanc
+  ['us','lr','my'],           // rayures + canton
+  ['hn','ni','sv','gt'],      // bleu-blanc-bleu d'Amérique centrale
+  ['jo','ps','sd','kw'],      // panarabes + triangle
+  ['ee','lv','lt','si'],      // baltes, pièges de mémoire
+];
+const FLAG_LEVELS = {
+  facile:    { qid:'drapeaux',           label:'Drapeaux · Facile',    icon:'🌱', desc:'Les 50 grands pays du monde — pour s’échauffer.' },
+  difficile: { qid:'drapeaux_difficile', label:'Drapeaux · Difficile', icon:'🌋', desc:'Pays moins connus (Asie centrale, Balkans, Afrique…) et réponses du même continent.' },
+  expert:    { qid:'drapeaux_expert',    label:'Drapeaux · Expert',    icon:'🔥', desc:'Drapeaux quasi jumeaux : Tchad ou Roumanie ? Monaco ou Indonésie ? Le piège absolu.' },
+};
+const FLAG_FEM = new Set(['Grèce','Suède','Norvège','Finlande','Pologne','Russie','Turquie','Chine','Nouvelle-Zélande','Tunisie','Colombie','Thaïlande','Argentine','Belgique','Suisse','Autriche','Hongrie','Corée du Sud',"Côte d'Ivoire",'Arabie saoudite','France','Roumanie','Moldavie','Croatie','Slovénie','Slovaquie','Serbie','Bosnie-Herzégovine','Macédoine du Nord','Géorgie','Mongolie','Birmanie','Malaisie','Tanzanie','Zambie','Guinée','Bolivie','Jordanie','Syrie','Palestine','Lettonie','Lituanie','Bulgarie','Papouasie-Nouvelle-Guinée']);
+function flagArticle(name){
+  if(['États-Unis','Pays-Bas','Fidji','Tuvalu','Philippines'].includes(name)) return 'des ';
+  if(/^[AEIOUÉÈÎÍ]/.test(name)) return "de l'";
+  if(FLAG_FEM.has(name)) return 'de la ';
+  return 'du ';
+}
+function flagByIso(iso){ return FLAGS_ALL.find(f=>f[1]===iso); }
 let flagGame = null;
-function startFlagsGame(){
-  const qs = FLAGS.slice().sort(()=>Math.random()-0.5).slice(0,20).map(([name,iso])=>{
-    const wrong = FLAGS.filter(f=>f[1]!==iso).sort(()=>Math.random()-0.5).slice(0,3);
-    const opts = [[name,iso]].concat(wrong).sort(()=>Math.random()-0.5);
+async function renderFlagsMenu(){
+  $('#main').innerHTML = `
+    <div class="narrow">
+    <button class="back-btn" onclick="renderGeo()">← Tous les jeux</button>
+    <div class="card"><h3>🚩 Drapeaux du monde</h3>
+      <div style="font-size:13px;color:#888;">20 drapeaux, 4 propositions, record par niveau. Choisis ta difficulté !</div></div>
+    <div class="quiz-list">
+      ${Object.entries(FLAG_LEVELS).map(([lv,c])=>`<button onclick="startFlagsGame('${lv}')">
+        <div style="font-weight:700;">${c.icon} ${esc(c.label.split('·')[1].trim())}</div>
+        <div style="font-size:12px;color:#888;">${c.desc}</div>
+        <div style="font-size:12px;margin-top:4px;" id="frec-${lv}">…</div>
+      </button>`).join('')}
+    </div>
+    </div>`;
+  const qids = Object.values(FLAG_LEVELS).map(c=>c.qid);
+  const {data} = await db.from('adalix_qcm_scores').select('child,quiz_id,score,duration_s').in('quiz_id', qids);
+  const rows = data||[];
+  const other = child==='adam' ? 'alix' : 'adam';
+  const otherName = other==='adam' ? 'Adam' : 'Alix';
+  const bestOf = (k, qid) => rows.filter(r=>r.child===k && r.quiz_id===qid)
+    .sort((a,b)=> b.score-a.score || (a.duration_s||1e9)-(b.duration_s||1e9))[0];
+  Object.entries(FLAG_LEVELS).forEach(([lv,c])=>{
+    const el = $('#frec-'+lv); if(!el) return;
+    const mine = bestOf(child, c.qid), theirs = bestOf(other, c.qid);
+    const fmt = r => r ? `${r.score}/20` : '—';
+    el.innerHTML = `🏆 Toi : <b>${fmt(mine)}</b> · ${otherName} : <b>${fmt(theirs)}</b>${theirs && (!mine || theirs.score > mine.score) ? ' 🔥' : ''}`;
+  });
+}
+function flagQuestions(level){
+  const shuffle = a => a.slice().sort(()=>Math.random()-0.5);
+  if(level==='expert'){
+    const qs = [];
+    let groups = shuffle(FLAG_TWINS);
+    while(qs.length < 20){
+      if(!groups.length) groups = shuffle(FLAG_TWINS);
+      const g = groups.pop();
+      const iso = g[Math.floor(Math.random()*g.length)];
+      const c = flagByIso(iso);
+      let wrongIsos = shuffle(g.filter(x=>x!==iso)).slice(0,3);
+      if(wrongIsos.length < 3){
+        const fill = shuffle(FLAGS_ALL.filter(f=>f[2]===c[2] && f[1]!==iso && !wrongIsos.includes(f[1]))).slice(0, 3-wrongIsos.length);
+        wrongIsos = wrongIsos.concat(fill.map(f=>f[1]));
+      }
+      const opts = shuffle([[c[0], iso]].concat(wrongIsos.map(w=>{ const f=flagByIso(w); return [f[0], f[1]]; })));
+      qs.push({ name:c[0], iso, opts });
+    }
+    return qs;
+  }
+  const subjects = level==='difficile' ? FLAGS_HARD : FLAGS;
+  const pool = level==='difficile' ? FLAGS_ALL : FLAGS;
+  return shuffle(subjects).slice(0,20).map(([name,iso,cont])=>{
+    let cand = pool.filter(f=>f[1]!==iso && (level==='facile' || f[2]===cont));
+    if(cand.length < 3) cand = pool.filter(f=>f[1]!==iso);
+    const wrong = shuffle(cand).slice(0,3);
+    const opts = shuffle([[name,iso]].concat(wrong.map(f=>[f[0],f[1]])));
     return { name, iso, opts };
   });
-  flagGame = { qs, idx:0, score:0, locked:false, t0:Date.now() };
+}
+function startFlagsGame(level){
+  level = FLAG_LEVELS[level] ? level : 'facile';
+  const cfg = FLAG_LEVELS[level];
+  flagGame = { qs: flagQuestions(level), idx:0, score:0, locked:false, t0:Date.now(), level, qid:cfg.qid, label:cfg.label };
   renderFlagGame();
 }
 function renderFlagGame(){
@@ -655,10 +747,10 @@ function renderFlagGame(){
   const q = g.qs[g.idx];
   $('#main').innerHTML = `
     <div class="narrow">
-    <button class="back-btn" onclick="flagGame=null;renderGeo()">← Quitter</button>
+    <button class="back-btn" onclick="flagGame=null;renderFlagsMenu()">← Quitter</button>
     <div class="card">
-      <div class="quiz-progress">Drapeau ${g.idx+1} / ${g.qs.length} · Score : ${g.score}</div>
-      <div class="quiz-q">🚩 Quel est le drapeau ${q.name.match(/^(États|Pays)/)?'des':q.name.match(/^[AEIOUÉÈ]/)?"de l'":['France','Allemagne','Italie','Espagne','Grèce','Suède','Norvège','Finlande','Pologne','Ukraine','Russie','Turquie','Chine','Inde','Nouvelle-Zélande','Tunisie','Colombie','Thaïlande','Argentine','Belgique','Suisse','Autriche','Hongrie','Corée du Sud',"Côte d'Ivoire",'Arabie saoudite'].includes(q.name)?'de la ':'du '}<span style="color:var(--accent2);">${esc(q.name)}</span> ?</div>
+      <div class="quiz-progress">${FLAG_LEVELS[g.level].icon} ${esc(FLAG_LEVELS[g.level].label)} · Drapeau ${g.idx+1} / ${g.qs.length} · Score : ${g.score}</div>
+      <div class="quiz-q">🚩 Quel est le drapeau ${flagArticle(q.name)}<span style="color:var(--accent2);">${esc(q.name)}</span> ?</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         ${q.opts.map(([n,iso],i)=>`<button id="flag-${i}" onclick="flagClick(${i})" style="border:2.5px solid #ccd4e0;border-radius:12px;background:white;padding:10px;cursor:pointer;">
           <img src="https://flagcdn.com/w160/${iso}.png" alt="?" style="width:100%;max-width:150px;border:1px solid #eee;border-radius:4px;">
@@ -686,7 +778,7 @@ async function finishFlagGame(){
   const g = flagGame; if(!g) return;
   const dur = Math.round((Date.now()-g.t0)/1000);
   flagGame = null;
-  await geoEndScreen('Drapeaux du monde', 'drapeaux', g.score, g.qs.length, dur, 'startFlagsGame()');
+  await geoEndScreen(g.label, g.qid, g.score, g.qs.length, dur, `startFlagsGame('${g.level}')`);
 }
 
 /* ---- écran de fin commun aux jeux géo ---- */
