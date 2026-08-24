@@ -40,6 +40,18 @@ body.theme-alix {
     radial-gradient(circle at 85% 90%, rgba(232,121,143,.30) 0, transparent 38%),
     linear-gradient(165deg, #fff9ef 0%, #fff2f4 100%);
 }
+/* ---- Thème visiteur : voyage, bleu-turquoise ---- */
+body.theme-visiteur {
+  --accent:#2a9d8f; --accent2:#1d6f65;
+  --card-bg:#ffffff; --card-text:#22333b; --card-border:#8fd6cc;
+  --radius-card:16px; --radius-btn:12px; --radius-chip:14px;
+  --font-display:'Nunito', sans-serif; --font-body:'Nunito', sans-serif;
+  --shadow:0 4px 14px rgba(42,157,143,.16);
+  --bg:
+    radial-gradient(circle at 12% 10%, rgba(42,157,143,.18) 0, transparent 36%),
+    radial-gradient(circle at 88% 88%, rgba(233,196,106,.22) 0, transparent 40%),
+    linear-gradient(165deg, #f2fbf9 0%, #eaf6f3 100%);
+}
 /* ---- Thème parent : sobre ---- */
 body.theme-parent {
   --accent:#3e9c7a; --accent2:#1e5c46;
@@ -52,6 +64,8 @@ body.theme-parent {
 body { font-family:var(--font-body); margin:0; background:var(--bg); background-attachment:fixed; color:#26282e; transition:background .3s; }
 .hidden { display:none !important; }
 h1,h2,h3, .who, nav button, .btn, .day-detail h2, .name { font-family:var(--font-display); }
+
+.quiz-img { display:block; width:100%; max-width:400px; max-height:340px; object-fit:contain; margin:12px auto 8px; border-radius:10px; box-shadow:0 3px 14px rgba(0,0,0,.18); background:#fff; }
 
 /* ---- Profile select ---- */
 #screen-profile { min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:24px;
@@ -68,6 +82,8 @@ h1,h2,h3, .who, nav button, .btn, .day-detail h2, .name { font-family:var(--font
 .profile-card.pc-alix { background:linear-gradient(160deg, rgba(255,214,102,.22), rgba(232,121,143,.28)); border-color:rgba(255,214,102,.6); }
 .profile-card.pc-alix:hover { background:linear-gradient(160deg, rgba(255,214,102,.32), rgba(232,121,143,.38)); box-shadow:0 8px 24px rgba(232,121,143,.3); }
 .profile-card.pc-alix .name { font-family:'Baloo 2', cursive; }
+.profile-card.pc-visiteur { background:linear-gradient(160deg, rgba(42,157,143,.28), rgba(21,52,64,.55)); border-color:rgba(143,214,204,.6); }
+.profile-card.pc-visiteur:hover { background:linear-gradient(160deg, rgba(42,157,143,.4), rgba(21,52,64,.6)); box-shadow:0 8px 24px rgba(42,157,143,.3); }
 .profile-card .avatar { font-size:52px; }
 .profile-card .name { font-size:20px; font-weight:800; margin-top:8px; }
 .profile-card .tag { font-size:12px; opacity:.85; margin-top:4px; }
@@ -271,6 +287,7 @@ body.theme-alix .imgchip.sel { background:linear-gradient(135deg, #e8798f, #f0a3
   <div class="profiles">
     <div class="profile-card pc-adam" onclick="selectProfile('adam')"><div class="avatar">🐉</div><div class="name">Adam</div><div class="tag">13 ans · quêteur légendaire</div></div>
     <div class="profile-card pc-alix" onclick="selectProfile('alix')"><div class="avatar">🦊</div><div class="name">Alix</div><div class="tag">11 ans · créatrice d'histoires</div></div>
+    <div class="profile-card pc-visiteur" onclick="selectProfile('visiteur')"><div class="avatar">🧳</div><div class="name">Visiteur</div><div class="tag">jeux géo & quiz · sans compte</div></div>
   </div>
   <div id="parent-link" onclick="askParentPin()">Espace parent</div>
 </div>

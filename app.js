@@ -53,9 +53,19 @@ function selectProfile(c){
   document.body.className = 'theme-' + c;
   $('#screen-profile').classList.add('hidden');
   $('#screen-app').classList.remove('hidden');
+  if(c === 'visiteur'){
+    $('#hdr-who').textContent = '🧳 Visiteur';
+    $('#hdr-streak').style.display = 'none';
+    const hb = $('#hdr-badges'); if(hb) hb.style.display = 'none';
+    buildNav(['geo','quizv']);
+    showTab('geo');
+    return;
+  }
   $('#hdr-who').textContent = c === 'adam' ? '🐉 Adam' : '🦊 Alix';
   localStorage.setItem('adalix_child', c);
-  buildNav(['programme','quiz','geo','les100','checklist','projet','fabrique','chat','guide']);
+  buildNav(c === 'adam'
+    ? ['programme','quiz','geo','orientation','les100','checklist','projet','fabrique','chat','guide']
+    : ['programme','quiz','geo','les100','checklist','projet','fabrique','chat','guide']);
   assistantName = null;
   fabMsgs = []; fabCode = ''; fabUrl = ''; fabLoaded = false; fabStep = 0;
   loadUnlocked(); refreshStreak(); loadAssistantName();
@@ -96,6 +106,7 @@ const TABS = {
   les100:{icon:'🏆',label:'Les 100'}, checklist:{icon:'✅',label:'Checklist'},
   projet:{icon:'💻',label:'Mon projet'}, fabrique:{icon:'🏭',label:'Fabrique'},
   chat:{icon:'💬',label:'Mon assistant'}, guide:{icon:'📖',label:'Guide'}, dashboard:{icon:'📊',label:'Tableau de bord'},
+  quizv:{icon:'🎯',label:'Quiz'}, orientation:{icon:'🧭',label:'Orientation'},
 };
 // icônes réhabillées selon le profil — mêmes intitulés, juste l'esprit visuel qui change
 const THEME_ICONS = {
@@ -110,7 +121,7 @@ function showTab(t){
   tab = t;
   document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
   const nb = $('#nav-'+t); if(nb) nb.classList.add('active');
-  ({programme:renderProgramme, quiz:renderQuizList, geo:renderGeo, les100:renderGallery, checklist:renderChecklist, projet:renderProjet, fabrique:renderFabrique, chat:renderChat, guide:renderGuide, dashboard:renderDashboard}[t])();
+  ({programme:renderProgramme, quiz:renderQuizList, quizv:renderQuizV, orientation:renderOrientation, geo:renderGeo, les100:renderGallery, checklist:renderChecklist, projet:renderProjet, fabrique:renderFabrique, chat:renderChat, guide:renderGuide, dashboard:renderDashboard}[t])();
 }
 
 /* ---------- guide ---------- */
@@ -162,12 +173,22 @@ function exposeNumFor(wi, di){ const e = EXPOSES.find(x=>x.wi===wi && x.di===di)
 
 /* ---------- programme ---------- */
 function dayDate(d){ const [dd,mm] = d.date.split('/').map(Number); return new Date(2026, mm-1, dd); }
+/* Semaine 5 : le programme se différencie par enfant. Un jour sans `only` est commun aux deux ;
+   un jour marqué only:'adam' ou only:'alix' n'apparaît que pour celui-là. */
+function progChild(){ return child === 'alix' ? 'alix' : 'adam'; }
+function daysOf(w){ const c = progChild(); return w.days.filter(d => !d.only || d.only === c); }
+function flatIdx(wi, di){ let n = 0; for(let i=0;i<wi;i++) n += daysOf(D.weeks[i]).length; return n + di; }
+function fromFlatIdx(n){
+  for(let wi=0; wi<D.weeks.length; wi++){ const L = daysOf(D.weeks[wi]).length; if(n < L) return {wi, di:n}; n -= L; }
+  return null;
+}
+function totalDays(){ return D.weeks.reduce((s,w)=>s+daysOf(w).length, 0); }
 // Trouve le jour du programme correspondant à aujourd'hui.
 // Retourne {wi, di, banner} ou null (programme terminé → vue d'ensemble).
 function todayInProgramme(){
   const now = new Date(); now.setHours(0,0,0,0);
   let exact = null, next = null, last = null;
-  D.weeks.forEach((w,wi)=>w.days.forEach((d,di)=>{
+  D.weeks.forEach((w,wi)=>daysOf(w).forEach((d,di)=>{
     const t = dayDate(d).getTime();
     last = {wi, di, t};
     if(t === now.getTime()) exact = {wi, di};
@@ -175,7 +196,7 @@ function todayInProgramme(){
   }));
   if(exact) return {...exact, today:true, banner:null};
   if(next){
-    const isBefore = dayDate(D.weeks[0].days[0]).getTime() > now.getTime();
+    const isBefore = dayDate(daysOf(D.weeks[0])[0]).getTime() > now.getTime();
     return {...next, today:false, banner: isBefore
       ? "🌞 Le programme commence bientôt — le voici en avant-première !"
       : "😴 Aujourd'hui c'est dimanche, repos ! Voici ce qui t'attend demain."};
@@ -193,7 +214,7 @@ function renderProgramme(overview){
     ${t ? `<div style="margin-bottom:12px;"><button class="btn" onclick="renderProgramme()">📍 Revenir à aujourd'hui</button></div>` : ''}
     <div class="week-pills">${D.weeks.map((wk,i)=>`<button class="${i===currentWeek?'active':''}" onclick="currentWeek=${i};renderProgramme(true)">S${wk.num}</button>`).join('')}</div>
     <div class="card"><h3>Semaine ${w.num} — ${esc(w.title)}</h3><div style="font-size:13px;color:#888;">${esc(w.dates)}</div></div>
-    <div class="day-list">${w.days.map((d,i)=>{
+    <div class="day-list">${daysOf(w).map((d,i)=>{
       const isToday = t && t.today && t.wi===currentWeek && t.di===i;
       return `<div class="day-item" style="${isToday?'border-left-color:#c98f2f;background:#fdf6ec;':''}" onclick="renderDay(${currentWeek},${i})">
       <div class="emoji">${d.emoji}</div>
@@ -216,12 +237,12 @@ function renderCases(cases){
     </div>`).join('');
 }
 async function renderDay(wi, di, ctx){
-  const d = D.weeks[wi].days[di];
-  const idx = wi*6 + di;
-  const prev = idx > 0 ? {wi: Math.floor((idx-1)/6), di: (idx-1)%6} : null;
-  const next = idx < 23 ? {wi: Math.floor((idx+1)/6), di: (idx+1)%6} : null;
-  const pd = prev ? D.weeks[prev.wi].days[prev.di] : null;
-  const nd = next ? D.weeks[next.wi].days[next.di] : null;
+  const d = daysOf(D.weeks[wi])[di];
+  const idx = flatIdx(wi, di);
+  const prev = idx > 0 ? fromFlatIdx(idx-1) : null;
+  const next = idx < totalDays()-1 ? fromFlatIdx(idx+1) : null;
+  const pd = prev ? daysOf(D.weeks[prev.wi])[prev.di] : null;
+  const nd = next ? daysOf(D.weeks[next.wi])[next.di] : null;
   const dayNav = `<div style="display:flex;gap:10px;justify-content:space-between;margin:14px 0 4px;">
     ${pd?`<button class="btn ghost" style="font-size:12.5px;" onclick="renderDay(${prev.wi},${prev.di})">◀ ${esc(pd.dow)} ${esc(pd.date)}</button>`:'<span></span>'}
     ${nd?`<button class="btn ghost" style="font-size:12.5px;" onclick="renderDay(${next.wi},${next.di})">${esc(nd.dow)} ${esc(nd.date)} ▶</button>`:'<span></span>'}
@@ -256,14 +277,18 @@ async function renderDay(wi, di, ctx){
     ${d.etapes && d.etapes.length ? `<div class="card"><h3>🧭 Le déroulé du jour</h3>
       <ol style="margin:6px 0 2px 20px;padding:0;">${d.etapes.map(e=>`<li style="font-size:14px;line-height:1.55;margin-bottom:8px;">${esc(e)}</li>`).join('')}</ol>
     </div>` : ''}
+    ${d.sims && d.sims.length ? `<div class="card"><h3>🧮 Les simulateurs du jour</h3>
+      <div style="font-size:13px;color:#888;margin-bottom:8px;">Joue avec les chiffres : c'est en les faisant bouger qu'on comprend.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">${d.sims.map(k=>`<button class="btn" onclick="openSim('${k}')">${SIMS[k].icon} ${esc(SIMS[k].titre)}</button>`).join('')}</div>
+    </div>` : ''}
     ${d.outil ? `<div class="card"><h3>🛠️ L'outil de la semaine : ${esc(d.outil.nom)}</h3>
       <p style="font-size:14px;line-height:1.6;">${esc(d.outil.texte)}</p>
     </div>` : ''}
     ${expoNoteHtml}
     ${renderCases(d.cases)}
-    ${D.ia && D.ia[wi*6+di] ? `<div class="card"><h3>🤖 IA du jour</h3>
-      <div style="font-size:13px;font-weight:700;color:var(--accent2);margin-bottom:4px;">${esc(D.ia[wi*6+di].titre)}</div>
-      <p style="font-size:14px;line-height:1.55;">${esc(D.ia[wi*6+di].texte)}</p>
+    ${D.ia && D.ia[idx] ? `<div class="card"><h3>🤖 IA du jour</h3>
+      <div style="font-size:13px;font-weight:700;color:var(--accent2);margin-bottom:4px;">${esc(D.ia[idx].titre)}</div>
+      <p style="font-size:14px;line-height:1.55;">${esc(D.ia[idx].texte)}</p>
     </div>` : ''}
     ${d.logique ? `<div class="card"><h3>🧠 Logique & rhétorique du jour</h3>
       <div style="font-size:13px;font-weight:700;color:var(--accent2);margin-bottom:4px;">${esc(d.logique.titre)}</div>
@@ -345,9 +370,20 @@ function renderQuizList(){
       <button onclick="showTab('geo')" style="border-left-color:#3e9c7a;">🌍 LES JEUX DE GÉOGRAPHIE — cartes, villes, drapeaux… avec records !</button>
       ${Object.entries(D.quizzes).map(([id,qz])=>`<button onclick="startQuiz('${id}')">📝 ${esc(qz.title)}</button>`).join('')}
       <button onclick="startQuiz('final')" style="border-left-color:#c98f2f;">🏆 LE GRAND QUIZ FINAL — 20 questions sur tout le mois</button>
+      ${Object.entries(D.quizzes2||{}).map(([id,qz])=>`<button onclick="startQuiz('${id}')" style="border-left-color:#7a5ca8;">🎯 ${esc(qz.title)}</button>`).join('')}
     </div>
     <div class="card"><h3>📈 Tes derniers scores</h3><div id="score-history">Chargement…</div></div>`;
   loadScores();
+}
+/* page Quiz du profil visiteur : uniquement les quiz découverte, rien n'est enregistré */
+function renderQuizV(){
+  $('#main').innerHTML = `
+    <div class="card"><h3>🎯 Les quiz du Grand Été</h3>
+      <div style="font-size:13px;color:#888;">Quatre quiz pour te tester — les réponses changent de place à chaque partie. Ton score s'affiche à la fin (rien n'est enregistré en mode visiteur).</div></div>
+    <div class="quiz-list">
+      <button onclick="showTab('geo')" style="border-left-color:#3e9c7a;">🌍 LES JEUX DE GÉOGRAPHIE — cartes, villes, drapeaux, 3 niveaux chacun</button>
+      ${Object.entries(D.quizzes2||{}).map(([id,qz])=>`<button onclick="startQuiz('${id}')">🎯 ${esc(qz.title)}</button>`).join('')}
+    </div>`;
 }
 async function loadScores(){
   const {data} = await db.from('adalix_qcm_scores').select('*').eq('child', child).order('created_at',{ascending:false}).limit(8);
@@ -359,9 +395,25 @@ function quizTitle(id){
   if(id==='final') return 'Grand quiz final';
   if(id==='drapeaux_difficile') return '🌋 Drapeaux · Difficile';
   if(id==='drapeaux_expert') return '🔥 Drapeaux · Expert';
+  if(/_n[23]$/.test(id)){
+    const base = id.replace(/_n[23]$/,'');
+    const g = (typeof GEO_GAMES !== 'undefined') && GEO_GAMES.find(x=>x.qid===base);
+    if(g) return g.label + (id.endsWith('_n2') ? ' · 🌋 N2' : ' · 🔥 N3');
+  }
   const geo = (typeof GEO_GAMES !== 'undefined') && GEO_GAMES.find(g=>(g.qid||'capitales')===id && id!=='capitales');
   if(geo) return geo.label;
+  if(D.quizzes2 && D.quizzes2[id]) return D.quizzes2[id].title.split('—')[0].trim();
   return D.quizzes[id] ? D.quizzes[id].title.split('—')[0].trim() : id;
+}
+/* mélange les réponses d'une question à chaque partie (sinon la bonne réponse garde sa position d'origine) */
+function shuffleOpts(q){
+  const idx = q.opts.map((_,i)=>i).sort(()=>Math.random()-0.5);
+  return Object.assign({}, q, { opts: idx.map(i=>q.opts[i]), a: idx.indexOf(q.a) });
+}
+function quizExit(id){
+  quizState = null;
+  if(child==='visiteur'){ if(id==='capitales') renderGeo(); else renderQuizV(); }
+  else renderQuizList();
 }
 function startQuiz(id){
   let questions;
@@ -369,7 +421,8 @@ function startQuiz(id){
     // le grand final pioche dans les QCM hebdo (pas dans le quiz des capitales, qui a son propre match S1 vs S4)
     const all = Object.entries(D.quizzes).filter(([qid])=>qid.startsWith('s')).flatMap(([,q])=>q.questions);
     questions = all.sort(()=>Math.random()-0.5).slice(0,20);
-  } else { questions = D.quizzes[id].questions; }
+  } else { questions = (D.quizzes[id] || (D.quizzes2||{})[id]).questions; }
+  questions = questions.map(shuffleOpts);
   quizState = { id, questions, idx:0, score:0, t0:Date.now(), answered:false };
   renderQuizQ();
 }
@@ -377,9 +430,10 @@ function renderQuizQ(){
   const s = quizState, q = s.questions[s.idx];
   $('#main').innerHTML = `
     <div class="narrow">
-    <button class="back-btn" onclick="quizState=null;renderQuizList()">← Quitter</button>
+    <button class="back-btn" onclick="quizExit('${s.id}')">← Quitter</button>
     <div class="card">
       <div class="quiz-progress">Question ${s.idx+1} / ${s.questions.length} · Score : ${s.score}</div>
+      ${q.img?`<img class="quiz-img" src="${q.img}" alt="œuvre mystère">`:''}
       <div class="quiz-q">${esc(q.q)}</div>
       ${q.opts.map((o,i)=>`<button class="quiz-opt" id="opt-${i}" onclick="answerQ(${i})">${String.fromCharCode(65+i)}. ${esc(o)}</button>`).join('')}
     </div>
@@ -400,8 +454,10 @@ async function finishQuiz(){
   const dur = Math.round((Date.now()-s.t0)/1000);
   const pct = s.score/s.questions.length;
   const badge = pct===1?'🥇 PARFAIT !':pct>=0.85?'🏅 Expert':pct>=0.7?'✅ Objectif atteint':'💪 Retente ta chance';
-  await db.from('adalix_qcm_scores').insert({child, quiz_id:s.id, score:s.score, total:s.questions.length, duration_s:dur});
-  checkBadges();
+  if(child!=='visiteur'){
+    await db.from('adalix_qcm_scores').insert({child, quiz_id:s.id, score:s.score, total:s.questions.length, duration_s:dur});
+    checkBadges();
+  }
   $('#main').innerHTML = `
     <div class="narrow">
     <div class="card" style="text-align:center;">
@@ -411,7 +467,7 @@ async function finishQuiz(){
       <div style="font-size:13px;color:#888;margin-top:6px;">⏱️ ${Math.floor(dur/60)}m${String(dur%60).padStart(2,'0')}s</div>
       <div class="actions" style="justify-content:center;">
         <button class="btn" onclick="startQuiz('${s.id}')">Rejouer</button>
-        <button class="btn ghost" onclick="quizState=null;renderQuizList()">Retour</button>
+        <button class="btn ghost" onclick="quizExit('${s.id}')">Retour</button>
       </div>
     </div>
     </div>`;
@@ -419,39 +475,86 @@ async function finishQuiz(){
 
 /* ---------- Jeux géo ---------- */
 const GEO_GAMES = [
-  {id:'europe',       icon:'🇪🇺', label:"Pays d'Europe",            sub:'42 pays à cliquer',            type:'shape', map:'europe', qid:'carte_europe'},
-  {id:'ue',           icon:'💙', label:"Pays de l'Union européenne", sub:'les 27, sauras-tu les trouver ?', type:'shape', map:'europe', qid:'carte_ue',
+  {id:'europe',       icon:'🇪🇺', label:"Pays d'Europe",            sub:'42 pays à cliquer · 3 niveaux',            type:'shape', map:'europe', qid:'carte_europe'},
+  {id:'ue',           icon:'💙', label:"Pays de l'Union européenne", sub:'les 27, sauras-tu les trouver ? · 3 niveaux', type:'shape', map:'europe', qid:'carte_ue',
     subset:['Allemagne','Autriche','Belgique','Bulgarie','Chypre','Croatie','Danemark','Espagne','Estonie','Finlande','France','Grèce','Hongrie','Irlande','Italie','Lettonie','Lituanie','Luxembourg','Malte','Pays-Bas','Pologne','Portugal','Roumanie','Slovaquie','Slovénie','Suède','Tchéquie']},
-  {id:'monde',        icon:'🌍', label:'Pays du monde',              sub:'55 pays à situer',             type:'shape', map:'monde', qid:'carte_monde'},
-  {id:'regions',      icon:'🧭', label:'Régions de France',          sub:'les 13 régions métropolitaines', type:'shape', map:'regions', qid:'carte_regions'},
-  {id:'departements', icon:'🧩', label:'Départements français',      sub:'25 départements tirés au sort', type:'shape', map:'departements', qid:'carte_departements', sample:25},
-  {id:'vf',           icon:'📍', label:'Villes de France',           sub:'place 30 villes sur la carte', type:'city', qid:'villes_france'},
-  {id:'ve',           icon:'🏰', label:"Villes d'Europe",            sub:'30 capitales et grandes villes', type:'city', qid:'villes_europe'},
-  {id:'vm',           icon:'🌐', label:'Villes du monde',            sub:'30 mégapoles à placer',        type:'city', qid:'villes_monde'},
-  {id:'vusa',         icon:'🗽', label:'Villes des USA',             sub:'25 villes américaines',        type:'city', qid:'villes_usa'},
-  {id:'phys',         icon:'🏔️', label:'Géo physique du monde',      sub:'fleuves, monts, déserts…',     type:'city', qid:'geo_physique'},
+  {id:'monde',        icon:'🌍', label:'Pays du monde',              sub:'55 pays à situer · 3 niveaux',             type:'shape', map:'monde', qid:'carte_monde'},
+  {id:'regions',      icon:'🧭', label:'Régions de France',          sub:'les 13 régions métropolitaines · 3 niveaux', type:'shape', map:'regions', qid:'carte_regions'},
+  {id:'departements', icon:'🧩', label:'Départements français',      sub:'25 départements tirés au sort · 3 niveaux', type:'shape', map:'departements', qid:'carte_departements', sample:25},
+  {id:'vf',           icon:'📍', label:'Villes de France',           sub:'place 30 villes sur la carte · 3 niveaux', type:'city', qid:'villes_france'},
+  {id:'ve',           icon:'🏰', label:"Villes d'Europe",            sub:'30 capitales et grandes villes · 3 niveaux', type:'city', qid:'villes_europe'},
+  {id:'vm',           icon:'🌐', label:'Villes du monde',            sub:'30 mégapoles à placer · 3 niveaux',        type:'city', qid:'villes_monde'},
+  {id:'vusa',         icon:'🗽', label:'Villes des USA',             sub:'25 villes américaines · 3 niveaux',        type:'city', qid:'villes_usa'},
+  {id:'phys',         icon:'🏔️', label:'Géo physique du monde',      sub:'fleuves, monts, déserts… · 3 niveaux',     type:'city', qid:'geo_physique'},
   {id:'capitales',    icon:'🏛️', label:'Capitales du monde',         sub:'le QCM à refaire en S4 !',     type:'qcm'},
   {id:'drapeaux',     icon:'🚩', label:'Drapeaux du monde',          sub:'niveau au choix : 🌱 facile · 🌋 difficile · 🔥 expert', type:'flags', qid:'drapeaux'},
 ];
 const GEO_QIDS = GEO_GAMES.map(g=>g.qid).filter(Boolean).concat(['capitales']);
+/* niveaux communs aux jeux cartes/villes — suffixe de qid pour des records séparés */
+const GEO_LEVELS = {
+  1:{s:'',    icon:'🌱', name:'Découverte'},
+  2:{s:'_n2', icon:'🌋', name:'Difficile'},
+  3:{s:'_n3', icon:'🔥', name:'Expert'},
+};
+function geoLevelDesc(type, lvl){
+  if(type==='shape') return lvl===1 ? 'Zones colorées, 3 essais par zone.'
+    : lvl===2 ? "Carte SANS couleurs — plus d'indice visuel, 3 essais." : 'Sans couleurs et UN SEUL essai par zone.';
+  return lvl===1 ? 'Barème normal : tombe à moins de quelques dizaines de km.'
+    : lvl===2 ? 'Barème serré : 2× plus exigeant sur la distance.' : 'Barème de pro : 4× plus exigeant — vise au km près !';
+}
 function geoRun(id){
   const g = GEO_GAMES.find(x=>x.id===id);
-  if(g.type==='shape') startMapGame(id);
-  else if(g.type==='city') startCityGame(id);
+  if(g.type==='shape' || g.type==='city') renderGeoLevelMenu(id);
   else if(g.type==='flags') renderFlagsMenu();
   else startQuiz('capitales');
+}
+function startGeoLevel(id, lvl){
+  const g = GEO_GAMES.find(x=>x.id===id);
+  if(g.type==='shape') startMapGame(id, lvl); else startCityGame(id, lvl);
+}
+async function renderGeoLevelMenu(id){
+  const g = GEO_GAMES.find(x=>x.id===id);
+  $('#main').innerHTML = `
+    <div class="narrow">
+    <button class="back-btn" onclick="renderGeo()">← Tous les jeux</button>
+    <div class="card"><h3>${g.icon} ${esc(g.label)}</h3>
+      <div style="font-size:13px;color:#888;">${esc(g.sub)} — choisis ton niveau, chaque niveau garde son propre record.</div></div>
+    <div class="quiz-list">
+      ${[1,2,3].map(l=>`<button onclick="startGeoLevel('${id}',${l})">
+        <div style="font-weight:700;">${GEO_LEVELS[l].icon} ${GEO_LEVELS[l].name}</div>
+        <div style="font-size:12px;color:#888;">${geoLevelDesc(g.type,l)}</div>
+        ${child==='visiteur' ? '' : `<div style="font-size:12px;margin-top:4px;" id="glvl-${l}"></div>`}
+      </button>`).join('')}
+    </div>
+    </div>`;
+  if(child==='visiteur') return;
+  const qids = [1,2,3].map(l=>g.qid + GEO_LEVELS[l].s);
+  const {data} = await db.from('adalix_qcm_scores').select('child,quiz_id,score,duration_s').in('quiz_id', qids);
+  const rows = data||[];
+  const other = child==='adam' ? 'alix' : 'adam';
+  const otherName = other==='adam' ? 'Adam' : 'Alix';
+  const bestOf = (k, qid) => rows.filter(r=>r.child===k && r.quiz_id===qid)
+    .sort((a,b)=> b.score-a.score || (a.duration_s||1e9)-(b.duration_s||1e9))[0];
+  [1,2,3].forEach(l=>{
+    const el = $('#glvl-'+l); if(!el) return;
+    const qid = g.qid + GEO_LEVELS[l].s;
+    const mine = bestOf(child, qid), theirs = bestOf(other, qid);
+    const fmt = r => r ? String(r.score) : '—';
+    el.innerHTML = `🥇 Toi : <b>${fmt(mine)}</b> · ${otherName} : <b>${fmt(theirs)}</b>${theirs && (!mine || theirs.score > mine.score) ? ' 🔥' : ''}`;
+  });
 }
 async function renderGeo(){
   $('#main').innerHTML = `
     <div class="card"><h3>🌍 Les jeux de géographie</h3>
-      <div style="font-size:13px;color:#888;">Clique, place, devine — chaque jeu garde ton record ET celui de ${child==='adam'?'Alix':'Adam'}. À vous deux de faire monter la barre !</div></div>
+      <div style="font-size:13px;color:#888;">${child==='visiteur' ? 'Bienvenue ! Cartes à cliquer, villes à placer au km près, drapeaux… chaque jeu a 3 niveaux de difficulté. Bon voyage !' : `Clique, place, devine — chaque jeu garde ton record ET celui de ${child==='adam'?'Alix':'Adam'}. À vous deux de faire monter la barre !`}</div></div>
     <div class="quiz-list" id="geo-list">
       ${GEO_GAMES.map(g=>`<button onclick="geoRun('${g.id}')">
         <div style="font-weight:700;">${g.icon} ${esc(g.label)}</div>
         <div style="font-size:12px;color:#888;">${esc(g.sub)}</div>
-        <div style="font-size:12px;margin-top:4px;" id="rec-${g.id}">…</div>
+        ${child==='visiteur' ? '' : `<div style="font-size:12px;margin-top:4px;" id="rec-${g.id}">…</div>`}
       </button>`).join('')}
     </div>`;
+  if(child==='visiteur') return;
   // records des deux enfants
   const qids = GEO_GAMES.map(g=>g.qid || 'capitales');
   const {data} = await db.from('adalix_qcm_scores').select('child,quiz_id,score,total,duration_s').in('quiz_id', qids);
@@ -476,10 +579,12 @@ function geoFill(g, i){
   if(g.found[i]==='ok') return '#2d9d78';
   if(g.found[i]==='miss') return '#ff8f1f';
   if(!g.included.has(i)) return '#dde2d6';
+  if(g.nocolor) return '#dde2d6';   // niveaux 2-3 : aucune couleur pour aider
   return GEO_PALETTE[i % GEO_PALETTE.length];
 }
 let mapGame = null;
-function startMapGame(gameId){
+function startMapGame(gameId, lvl){
+  lvl = GEO_LEVELS[lvl] ? lvl : 1;
   const cfg = GEO_GAMES.find(g=>g.id===gameId);
   const M = window.MAPS && window.MAPS[cfg.map];
   if(!M){ toast('Carte indisponible — recharge la page'); return; }
@@ -487,7 +592,9 @@ function startMapGame(gameId){
   if(cfg.subset){ const s = new Set(cfg.subset); idxs = idxs.filter(i=>s.has(M.targets[i].n)); }
   let order = idxs.sort(()=>Math.random()-0.5);
   if(cfg.sample) order = order.slice(0, cfg.sample);
-  mapGame = { cfg, M, order, included:new Set(order), idx:0, score:0, tries:0, found:{}, t0:Date.now() };
+  mapGame = { cfg, M, order, included:new Set(order), idx:0, score:0, tries:0, found:{}, t0:Date.now(),
+    lvl, nocolor: lvl>=2, maxTries: lvl===3?1:3, qid: cfg.qid + GEO_LEVELS[lvl].s,
+    label: cfg.label + (lvl>1 ? ' · ' + GEO_LEVELS[lvl].icon + ' ' + GEO_LEVELS[lvl].name : '') };
   mapGame.timer = setInterval(()=>{
     if(!mapGame) return;
     const el = $('#map-timer');
@@ -501,10 +608,10 @@ function renderMapGame(){
   const M = g.M;
   const target = M.targets[g.order[g.idx]];
   $('#main').innerHTML = `
-    <button class="back-btn" onclick="stopMapGame();renderGeo()">← Quitter</button>
+    <button class="back-btn" onclick="stopMapGame();renderGeoLevelMenu('${g.cfg.id}')">← Quitter</button>
     <div class="card">
       <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-        <div class="quiz-progress">${g.idx+1} / ${g.order.length} · Score : ${g.score}</div>
+        <div class="quiz-progress">${GEO_LEVELS[g.lvl].icon} ${g.idx+1} / ${g.order.length} · Score : ${g.score}</div>
         <div class="quiz-progress" id="map-timer">⏱️</div>
       </div>
       <div class="quiz-q">${g.cfg.icon} Clique sur : <span style="background:var(--accent);color:white;border-radius:12px;padding:2px 14px;">${esc(target.n)}</span></div>
@@ -519,7 +626,7 @@ function renderMapGame(){
         ${(M.context||[]).map(d=>`<path d="${d}" fill="#dde2d6" stroke="#ffffff" stroke-width="0.7"></path>`).join('')}
         ${M.targets.map((t,i)=>`<path d="${t.d}" id="mp-${i}" class="geo-t" fill="${geoFill(g,i)}" stroke="#ffffff" stroke-width="0.9" style="cursor:pointer;" onclick="mapClick(${i})"></path>`).join('')}
       </svg>
-      <div style="font-size:12px;color:#888;margin-top:6px;">3 points du premier coup, 2 au deuxième, 1 au troisième. ✅ Vert foncé = trouvé, 🔶 orange = révélé.</div>
+      <div style="font-size:12px;color:#888;margin-top:6px;">${g.maxTries===1 ? '🔥 Un seul essai : 3 points ou rien !' : '3 points du premier coup, 2 au deuxième, 1 au troisième.'} ✅ Vert foncé = trouvé, 🔶 orange = révélé.${g.nocolor ? ' 🌋 Carte sans couleurs — à toi de connaître les formes !' : ''}</div>
     </div>`;
 }
 function mapClick(i){
@@ -527,7 +634,7 @@ function mapClick(i){
   const targetIdx = g.order[g.idx];
   if(g.found[i] !== undefined && i !== targetIdx) return;
   if(i === targetIdx){
-    g.score += Math.max(1, 3 - g.tries);
+    g.score += g.maxTries===1 ? 3 : Math.max(1, 3 - g.tries);
     g.found[i] = 'ok'; g.tries = 0; g.idx++;
     if(g.idx >= g.order.length){ finishMapGame(); return; }
     renderMapGame();
@@ -536,13 +643,13 @@ function mapClick(i){
     const el = $('#mp-'+i);
     if(el){ const old = el.getAttribute('fill'); el.setAttribute('fill','#c9636a'); setTimeout(()=>{ if(el.isConnected) el.setAttribute('fill', old); }, 450); }
     const fb = $('#map-feedback');
-    if(g.tries >= 3){
+    if(g.tries >= g.maxTries){
       g.found[targetIdx] = 'miss'; g.tries = 0;
       const good = $('#mp-'+targetIdx); if(good) good.setAttribute('fill','#ff8f1f');
       if(fb) fb.textContent = "C'était là, en orange ! On continue…";
       g.idx++;
       setTimeout(()=>{ if(!mapGame) return; if(g.idx >= g.order.length) finishMapGame(); else renderMapGame(); }, 1200);
-    } else if(fb){ fb.textContent = `Non — plus que ${3-g.tries} essai${3-g.tries>1?'s':''}…`; }
+    } else if(fb){ fb.textContent = `Non — plus que ${g.maxTries-g.tries} essai${g.maxTries-g.tries>1?'s':''}…`; }
   }
 }
 async function finishMapGame(){
@@ -550,13 +657,16 @@ async function finishMapGame(){
   clearInterval(g.timer);
   const dur = Math.round((Date.now()-g.t0)/1000);
   const total = g.order.length * 3;
+  const replay = `startMapGame('${g.cfg.id}',${g.lvl})`;
+  const label = g.label, qid = g.qid, score = g.score, id = g.cfg.id;
   mapGame = null;
-  await geoEndScreen(g.cfg.label, g.cfg.qid, g.score, total, dur, `geoRun('${g.cfg.id}')`);
+  await geoEndScreen(label, qid, score, total, dur, replay, id);
 }
 
 /* ---- jeux « place la ville » (distance en km) ---- */
 let cityGame = null;
-function startCityGame(gameId){
+function startCityGame(gameId, lvl){
+  lvl = GEO_LEVELS[lvl] ? lvl : 1;
   const cfg = GEO_GAMES.find(g=>g.id===gameId);
   const C = window.MAPS && window.MAPS.cities && window.MAPS.cities[gameId];
   if(!C){ toast('Carte indisponible — recharge la page'); return; }
@@ -564,7 +674,9 @@ function startCityGame(gameId){
     : C.bg==='usa' ? {w:window.MAPS.usa_bg.w, h:window.MAPS.usa_bg.h, paths:window.MAPS.usa_bg.paths}
     : {w:window.MAPS[C.bg].w, h:window.MAPS[C.bg].h, paths:(window.MAPS[C.bg].context||[]).concat(window.MAPS[C.bg].targets.map(t=>t.d))};
   const order = C.list.map((c,i)=>i).sort(()=>Math.random()-0.5);
-  cityGame = { cfg, C, bg:bgMap, order, idx:0, score:0, locked:false, t0:Date.now() };
+  cityGame = { cfg, C, bg:bgMap, order, idx:0, score:0, locked:false, t0:Date.now(),
+    lvl, mult: lvl===3?4 : lvl===2?2 : 1, qid: cfg.qid + GEO_LEVELS[lvl].s,
+    label: cfg.label + (lvl>1 ? ' · ' + GEO_LEVELS[lvl].icon + ' ' + GEO_LEVELS[lvl].name : '') };
   cityGame.timer = setInterval(()=>{
     if(!cityGame) return;
     const el = $('#map-timer');
@@ -577,10 +689,10 @@ function renderCityGame(){
   const g = cityGame; if(!g) return;
   const city = g.C.list[g.order[g.idx]];
   $('#main').innerHTML = `
-    <button class="back-btn" onclick="stopCityGame();renderGeo()">← Quitter</button>
+    <button class="back-btn" onclick="stopCityGame();renderGeoLevelMenu('${g.cfg.id}')">← Quitter</button>
     <div class="card">
       <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-        <div class="quiz-progress">${g.idx+1} / ${g.order.length} · Score : ${g.score}</div>
+        <div class="quiz-progress">${GEO_LEVELS[g.lvl].icon} ${g.idx+1} / ${g.order.length} · Score : ${g.score}</div>
         <div class="quiz-progress" id="map-timer">⏱️</div>
       </div>
       <div class="quiz-q">${g.cfg.icon} Place : <span style="background:var(--accent);color:white;border-radius:12px;padding:2px 14px;">${esc(city.n)}</span></div>
@@ -598,7 +710,7 @@ function renderCityGame(){
         ${g.bg.paths.map(d=>`<path d="${d}" fill="url(#landg)" stroke="#ffffff" stroke-width="0.8"></path>`).join('')}
         <g id="city-markers"></g>
       </svg>
-      <div style="font-size:12px;color:#888;margin-top:6px;">Clique à l'endroit exact : 100 points si tu tombes dessus, moins il y a de kilomètres d'écart, plus tu marques !</div>
+      <div style="font-size:12px;color:#888;margin-top:6px;">Clique à l'endroit exact : 100 points si tu tombes dessus, moins il y a de kilomètres d'écart, plus tu marques !${g.mult>1 ? ` ${GEO_LEVELS[g.lvl].icon} Barème ${g.mult}× plus exigeant.` : ''}</div>
     </div>`;
 }
 function cityClick(evt){
@@ -610,7 +722,7 @@ function cityClick(evt){
   const city = g.C.list[g.order[g.idx]];
   const dpx = Math.hypot(x - city.x, y - city.y);
   const km = Math.round(dpx * city.k);
-  const points = Math.max(0, 100 - Math.round(km / g.C.D));
+  const points = Math.max(0, 100 - Math.round(km * g.mult / g.C.D));
   g.score += points;
   g.locked = true;
   const pin = (px, py, color, dark) => `
@@ -636,8 +748,10 @@ async function finishCityGame(){
   clearInterval(g.timer);
   const dur = Math.round((Date.now()-g.t0)/1000);
   const total = g.order.length * 100;
+  const replay = `startCityGame('${g.cfg.id}',${g.lvl})`;
+  const label = g.label, qid = g.qid, score = g.score;
   cityGame = null;
-  await geoEndScreen(g.cfg.label, g.cfg.qid, g.score, total, dur, `geoRun('${g.cfg.id}')`);
+  await geoEndScreen(label, qid, score, total, dur, replay);
 }
 
 /* ---- jeu des drapeaux (images flagcdn) — 3 niveaux de difficulté ---- */
@@ -688,10 +802,11 @@ async function renderFlagsMenu(){
       ${Object.entries(FLAG_LEVELS).map(([lv,c])=>`<button onclick="startFlagsGame('${lv}')">
         <div style="font-weight:700;">${c.icon} ${esc(c.label.split('·')[1].trim())}</div>
         <div style="font-size:12px;color:#888;">${c.desc}</div>
-        <div style="font-size:12px;margin-top:4px;" id="frec-${lv}">…</div>
+        ${child==='visiteur' ? '' : `<div style="font-size:12px;margin-top:4px;" id="frec-${lv}">…</div>`}
       </button>`).join('')}
     </div>
     </div>`;
+  if(child==='visiteur') return;
   const qids = Object.values(FLAG_LEVELS).map(c=>c.qid);
   const {data} = await db.from('adalix_qcm_scores').select('child,quiz_id,score,duration_s').in('quiz_id', qids);
   const rows = data||[];
@@ -785,19 +900,21 @@ async function finishFlagGame(){
 async function geoEndScreen(label, qid, score, total, dur, replay){
   const pct = score/total;
   const badge = pct>=0.9?'🥇 Champion(ne) !':pct>=0.7?'🏅 Très solide !':pct>=0.5?'✅ Bonne base — rejoue pour battre ton record':'💪 Ça se dompte en rejouant !';
-  await db.from('adalix_qcm_scores').insert({child, quiz_id:qid, score, total, duration_s:dur});
-  checkBadges();
-  // record battu ?
   let recordMsg = '';
-  try {
-    const {data} = await db.from('adalix_qcm_scores').select('child,score').eq('quiz_id',qid);
-    const rows = data||[];
-    const myBest = Math.max(...rows.filter(r=>r.child===child).map(r=>r.score));
-    const other = child==='adam'?'alix':'adam';
-    const otherBest = Math.max(0, ...rows.filter(r=>r.child===other).map(r=>r.score));
-    if(score >= myBest && score > 0) recordMsg = '🎉 Nouveau record personnel !';
-    if(otherBest && score > otherBest) recordMsg += ` Et tu passes devant ${other==='adam'?'Adam':'Alix'} ! 👑`;
-  } catch(e){}
+  if(child!=='visiteur'){
+    await db.from('adalix_qcm_scores').insert({child, quiz_id:qid, score, total, duration_s:dur});
+    checkBadges();
+    // record battu ?
+    try {
+      const {data} = await db.from('adalix_qcm_scores').select('child,score').eq('quiz_id',qid);
+      const rows = data||[];
+      const myBest = Math.max(...rows.filter(r=>r.child===child).map(r=>r.score));
+      const other = child==='adam'?'alix':'adam';
+      const otherBest = Math.max(0, ...rows.filter(r=>r.child===other).map(r=>r.score));
+      if(score >= myBest && score > 0) recordMsg = '🎉 Nouveau record personnel !';
+      if(otherBest && score > otherBest) recordMsg += ` Et tu passes devant ${other==='adam'?'Adam':'Alix'} ! 👑`;
+    } catch(e){}
+  }
   $('#main').innerHTML = `
     <div class="narrow">
     <div class="card" style="text-align:center;">
@@ -814,6 +931,223 @@ async function geoEndScreen(label, qid, score, total, dur, replay){
     </div>`;
 }
 
+
+
+/* ---------- simulateurs d'éducation financière ---------- */
+const SIMS = {
+  epargne: {icon:'🏦', titre:"Simulateur d'épargne"},
+  pret:    {icon:'🏠', titre:'Simulateur de prêt'},
+  budget:  {icon:'🥧', titre:'Répartir un budget'},
+};
+const eur = n => (Math.round(n)).toLocaleString('fr-FR') + ' €';
+const numOf = sel => { const el = $(sel); const v = parseFloat((el ? el.value : '0').replace(',','.')); return isFinite(v) ? v : 0; };
+
+function openSim(kind){
+  if(kind === 'epargne'){
+    modal(`<h3>🏦 Simulateur d'épargne</h3>
+      <p style="font-size:13px;color:#666;">Les intérêts composés : chaque année, tes intérêts produisent à leur tour des intérêts.</p>
+      <label style="font-size:13px;font-weight:700;">Capital de départ (€)</label><input type="text" id="s-cap" value="1000" oninput="simEpargne()">
+      <label style="font-size:13px;font-weight:700;">Versement chaque mois (€)</label><input type="text" id="s-mens" value="0" oninput="simEpargne()">
+      <label style="font-size:13px;font-weight:700;">Taux par an (%)</label><input type="text" id="s-taux" value="1,7" oninput="simEpargne()">
+      <label style="font-size:13px;font-weight:700;">Durée (années)</label><input type="text" id="s-duree" value="10" oninput="simEpargne()">
+      <div id="s-out" style="margin-top:12px;"></div>
+      <div class="actions"><button class="btn ghost" onclick="closeModal()">Fermer</button></div>`);
+    simEpargne();
+  } else if(kind === 'pret'){
+    modal(`<h3>🏠 Simulateur de prêt immobilier</h3>
+      <p style="font-size:13px;color:#666;">La vraie formule utilisée par les banques. Taux moyen sur 20 ans aujourd'hui : environ 3,3 %.</p>
+      <label style="font-size:13px;font-weight:700;">Somme empruntée (€)</label><input type="text" id="p-cap" value="200000" oninput="simPret()">
+      <label style="font-size:13px;font-weight:700;">Taux par an (%)</label><input type="text" id="p-taux" value="3,3" oninput="simPret()">
+      <label style="font-size:13px;font-weight:700;">Durée (années)</label><input type="text" id="p-duree" value="20" oninput="simPret()">
+      <div id="p-out" style="margin-top:12px;"></div>
+      <div class="actions"><button class="btn ghost" onclick="closeModal()">Fermer</button></div>`);
+    simPret();
+  } else {
+    modal(`<h3>🥧 Répartir un budget — la règle 50/30/20</h3>
+      <p style="font-size:13px;color:#666;">Entre ce qui rentre chaque mois, puis compare ta répartition à la règle.</p>
+      <label style="font-size:13px;font-weight:700;">Ce qui rentre par mois (€)</label><input type="text" id="b-rev" value="2000" oninput="simBudget()">
+      <div id="b-out" style="margin-top:12px;"></div>
+      <div class="actions"><button class="btn ghost" onclick="closeModal()">Fermer</button></div>`);
+    simBudget();
+  }
+}
+function simEpargne(){
+  const cap = numOf('#s-cap'), mens = numOf('#s-mens'), taux = numOf('#s-taux')/100, ans = Math.max(0, Math.min(60, numOf('#s-duree')));
+  const m = taux/12, n = Math.round(ans*12);
+  let total = cap;
+  for(let i=0;i<n;i++) total = total*(1+m) + mens;
+  const verse = cap + mens*n, gains = total - verse;
+  const sansInterets = verse;
+  const el = $('#s-out'); if(!el) return;
+  const pct = total>0 ? Math.round(gains/total*100) : 0;
+  el.innerHTML = `
+    <div style="background:#eef7f3;border-radius:10px;padding:12px 14px;">
+      <div style="font-size:13px;color:#666;">Au bout de ${ans} an${ans>1?'s':''}, tu as :</div>
+      <div style="font-size:30px;font-weight:800;color:#1e5c46;">${eur(total)}</div>
+      <div style="font-size:13.5px;margin-top:6px;">💰 Ce que tu as versé toi : <b>${eur(verse)}</b></div>
+      <div style="font-size:13.5px;">✨ Ce que les intérêts ont ajouté : <b style="color:#1e5c46;">${eur(gains)}</b> (${pct} % du total)</div>
+      <div style="height:14px;border-radius:7px;overflow:hidden;display:flex;margin-top:8px;background:#dfe8e4;">
+        <div style="width:${100-pct}%;background:#8fb9a8;"></div><div style="width:${pct}%;background:#1e5c46;"></div>
+      </div>
+      ${sansInterets===total?'':`<div style="font-size:12.5px;color:#666;margin-top:8px;">Sans aucun intérêt, tu n'aurais que ${eur(sansInterets)}.</div>`}
+      <div style="font-size:12.5px;color:#b06a1a;margin-top:6px;">⚠️ Avec une inflation d'environ 2,1 % par an, un taux inférieur à 2,1 % te fait perdre du pouvoir d'achat, même si le nombre d'euros augmente.</div>
+    </div>`;
+}
+function simPret(){
+  const cap = numOf('#p-cap'), taux = numOf('#p-taux')/100, ans = Math.max(1, Math.min(30, numOf('#p-duree')));
+  const m = taux/12, n = Math.round(ans*12);
+  const mensualite = m === 0 ? cap/n : cap * m / (1 - Math.pow(1+m, -n));
+  const total = mensualite*n, interets = total - cap;
+  const el = $('#p-out'); if(!el) return;
+  const pct = total>0 ? Math.round(interets/total*100) : 0;
+  el.innerHTML = `
+    <div style="background:#fdf6ec;border-radius:10px;padding:12px 14px;">
+      <div style="font-size:13px;color:#666;">Tu rembourses chaque mois pendant ${ans} ans :</div>
+      <div style="font-size:30px;font-weight:800;color:#b06a1a;">${eur(mensualite)}</div>
+      <div style="font-size:13.5px;margin-top:6px;">🏦 Somme empruntée : <b>${eur(cap)}</b></div>
+      <div style="font-size:13.5px;">💸 Intérêts versés à la banque : <b style="color:#c9636a;">${eur(interets)}</b></div>
+      <div style="font-size:13.5px;">📊 Coût total du logement : <b>${eur(total)}</b> — soit ${pct} % de plus que le prix affiché.</div>
+      <div style="height:14px;border-radius:7px;overflow:hidden;display:flex;margin-top:8px;background:#f0e2cd;">
+        <div style="width:${100-pct}%;background:#e8b96b;"></div><div style="width:${pct}%;background:#c9636a;"></div>
+      </div>
+      <div style="font-size:12.5px;color:#666;margin-top:8px;">Essaie le même emprunt à 1,12 % (les taux de début 2022) puis à 4,20 % (fin 2023) : c'est le même appartement, et près de 73 000 € d'écart sur le coût total.</div>
+    </div>`;
+}
+function simBudget(){
+  const r = numOf('#b-rev');
+  const el = $('#b-out'); if(!el) return;
+  const parts = [
+    {n:'Impondérables', p:50, c:'#5a6b8c', d:'Loyer, électricité, eau, courses, transport, assurances — ça tombe, que tu le veuilles ou non.'},
+    {n:'Envies',        p:30, c:'#c9962c', d:'Sorties, jeux, vêtements, cadeaux, restaurants. Le droit de vivre, pas seulement de survivre.'},
+    {n:'Épargne',       p:20, c:'#1e5c46', d:"À mettre de côté LE JOUR DE LA PAIE, avant de dépenser. D'abord un fonds d'urgence de 3 à 6 mois de dépenses, ensuite les projets."},
+  ];
+  el.innerHTML = `
+    <div style="display:flex;height:18px;border-radius:9px;overflow:hidden;margin-bottom:10px;">
+      ${parts.map(x=>`<div style="width:${x.p}%;background:${x.c};"></div>`).join('')}
+    </div>
+    ${parts.map(x=>`<div style="background:#f7f8fb;border-radius:10px;padding:10px 12px;margin-bottom:8px;border-left:4px solid ${x.c};">
+      <div style="font-size:14px;font-weight:700;">${x.n} — ${x.p} % : <span style="color:${x.c};">${eur(r*x.p/100)}</span></div>
+      <div style="font-size:12.5px;color:#666;margin-top:2px;">${x.d}</div>
+    </div>`).join('')}
+    <div style="font-size:12.5px;color:#666;">Avec ${eur(r)} par mois, l'épargne représente ${eur(r*0.2*12)} par an. En 10 ans, sans compter les intérêts : ${eur(r*0.2*120)}.</div>`;
+}
+
+/* ---------- orientation (Adam) : test RIASEC + le système après la 3e ---------- */
+let orientState = null, orientSaved = null;
+const ORI = () => D.orientation;
+async function loadOrientation(){
+  const {data} = await db.from('adalix_orientation').select('*').eq('child', child).maybeSingle();
+  orientSaved = data || null;
+}
+function orientScores(answers){
+  const sc = {R:0,I:0,A:0,S:0,E:0,C:0};
+  ORI().questions.forEach((q,i)=>{ if(answers[i] != null) sc[q.t] += answers[i]; });
+  return sc;
+}
+function orientTop(sc){ return Object.keys(sc).sort((a,b)=> sc[b]-sc[a]); }
+async function renderOrientation(){
+  $('#main').innerHTML = '<div class="card">Chargement…</div>';
+  await loadOrientation();
+  const done = orientSaved && orientSaved.scores && Object.keys(orientSaved.scores).length;
+  $('#main').innerHTML = `
+    <div class="narrow">
+    <div class="card"><h3>🧭 Ton orientation</h3>
+      <div style="font-size:14px;line-height:1.6;">Dans dix mois tu devras faire des choix qui engagent les trois années suivantes. Personne ne te demande de choisir un métier à 13 ans — on te demande de commencer à te connaître. Voici de quoi t'y mettre sérieusement.</div></div>
+    ${done ? `<div class="card"><h3>📊 Ton profil</h3><div id="ori-res"></div>
+        <div class="actions"><button class="btn ghost" onclick="startOrient(true)">Refaire le test</button></div></div>`
+     : `<div class="card"><h3>🎯 Le test d'intérêts</h3>
+        <div style="font-size:14px;line-height:1.6;">60 questions, environ 20 minutes. Il s'appuie sur le modèle <b>RIASEC</b> du psychologue John Holland, utilisé par les conseillers d'orientation du monde entier. Réponds vite et honnêtement : ce qui compte, c'est ce que tu aimes VRAIMENT faire, pas ce qui « ferait bien ».</div>
+        <div class="actions"><button class="btn" onclick="startOrient()">Commencer le test</button></div></div>`}
+    <div class="card"><h3>🚪 Les 4 voies après la 3e</h3>
+      ${ORI().voies.map(v=>`<div style="margin-bottom:10px;"><div style="font-size:14.5px;font-weight:700;">${v.emoji} ${esc(v.titre)}</div>
+        <div style="font-size:13.5px;line-height:1.55;color:#444;">${esc(v.txt)}</div></div>`).join('')}</div>
+    <div class="card"><h3>🎓 La voie générale : 13 spécialités</h3>
+      <div style="font-size:13px;color:#888;margin-bottom:6px;">Tu en choisis 3 en première, puis tu en gardes 2 en terminale. Aucun lycée ne les propose toutes.</div>
+      <ul style="margin:0 0 0 18px;padding:0;font-size:13.5px;line-height:1.6;">${ORI().spes.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>
+    <div class="card"><h3>🔬 La voie technologique : 8 séries</h3>
+      <div style="font-size:13px;color:#888;margin-bottom:6px;">Ici les spécialités ne se choisissent pas : elles sont imposées par la série. Et les maths restent dans le tronc commun.</div>
+      <table class="ptable">${ORI().techno.map(t=>`<tr><td style="font-weight:800;white-space:nowrap;">${esc(t[0])}</td><td>${esc(t[1])}</td></tr>`).join('')}</table></div>
+    <div class="card"><h3>🗓️ Le calendrier de ton année de 3e</h3>
+      ${ORI().calendrier.map(c=>`<div style="border-left:3px solid var(--accent);padding-left:10px;margin-bottom:10px;">
+        <div style="font-size:12px;color:#888;font-weight:700;">${esc(c.q)}</div>
+        <div style="font-size:14px;font-weight:700;">${esc(c.t)}</div>
+        <div style="font-size:13.5px;line-height:1.5;color:#444;">${esc(c.d)}</div></div>`).join('')}</div>
+    <div class="card" style="border-left:4px solid #c9636a;"><h3>🔍 ${esc(ORI().factcheck.titre)}</h3>
+      <p style="font-size:14px;line-height:1.6;">${esc(ORI().factcheck.txt)}</p></div>
+    <div class="card"><h3>🔗 Les sites officiels</h3><div class="links">
+      ${ORI().ressources.map(r=>`<a href="${r.u}" target="_blank" rel="noopener">${esc(r.t)} ↗</a>`).join('')}</div></div>
+    </div>`;
+  if(done) drawOrientResult(orientSaved.scores);
+}
+function drawOrientResult(sc){
+  const el = $('#ori-res'); if(!el) return;
+  const order = orientTop(sc), max = Math.max(20, ...Object.values(sc));
+  const T = ORI().types;
+  el.innerHTML = `
+    <div style="margin:8px 0 14px;">
+      ${order.map(k=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <div style="width:118px;font-size:13px;font-weight:700;">${T[k].emoji} ${esc(T[k].nom)}</div>
+        <div style="flex:1;height:14px;background:#eceef3;border-radius:7px;overflow:hidden;">
+          <div style="width:${Math.round(sc[k]/max*100)}%;height:100%;background:${T[k].couleur};"></div></div>
+        <div style="width:34px;text-align:right;font-size:12.5px;color:#888;">${sc[k]}</div>
+      </div>`).join('')}
+    </div>
+    <div style="font-size:13px;color:#888;">Ton code : <b style="font-size:15px;color:var(--accent2);">${order.slice(0,3).join('')}</b> — c'est la COMBINAISON de tes trois premières familles qui te décrit, pas la première toute seule.</div>
+    ${order.slice(0,3).map((k,i)=>`<div class="card" style="margin-top:12px;border-left:4px solid ${T[k].couleur};">
+      <h3>${i+1}. ${T[k].emoji} ${esc(T[k].nom)}</h3>
+      <p style="font-size:14px;line-height:1.6;">${esc(T[k].resume)}</p>
+      <p style="font-size:13.5px;line-height:1.55;color:#444;"><b>Tes forces :</b> ${esc(T[k].forces)}</p>
+      <div style="font-size:13.5px;margin-top:6px;"><b>Des métiers :</b> ${T[k].metiers.map(m=>`<span class="badge-chip">${esc(m)}</span>`).join(' ')}</div>
+      <p style="font-size:13.5px;line-height:1.55;margin-top:8px;"><b>Les filières qui y mènent :</b> ${T[k].filieres.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')}</p>
+    </div>`).join('')}
+    <div style="font-size:12.5px;color:#888;margin-top:10px;">⚠️ Un test n'est pas une boule de cristal : c'est un miroir de tes réponses. S'il te surprend, demande-toi si c'est parce qu'il voit juste — ou parce que tu as répondu ce que tu croyais devoir répondre.</div>`;
+}
+function startOrient(reset){
+  const saved = (!reset && orientSaved && orientSaved.answers) ? orientSaved.answers : {};
+  orientState = { answers: Object.assign({}, saved), idx: 0 };
+  const firstUnanswered = ORI().questions.findIndex((q,i)=> orientState.answers[i] == null);
+  orientState.idx = firstUnanswered < 0 ? 0 : firstUnanswered;
+  renderOrientQ();
+}
+function renderOrientQ(){
+  const st = orientState, qs = ORI().questions, q = qs[st.idx];
+  const answered = Object.keys(st.answers).length;
+  $('#main').innerHTML = `
+    <div class="narrow">
+    <button class="back-btn" onclick="orientState=null;renderOrientation()">← Quitter (tes réponses sont gardées)</button>
+    <div class="card">
+      <div class="quiz-progress">Question ${st.idx+1} / ${qs.length} · ${answered} répondues</div>
+      <div style="height:8px;background:#eceef3;border-radius:4px;overflow:hidden;margin:6px 0 14px;">
+        <div style="width:${Math.round(answered/qs.length*100)}%;height:100%;background:var(--accent);transition:width .2s;"></div></div>
+      <div style="font-size:13px;color:#888;">Est-ce que ça te plairait ?</div>
+      <div class="quiz-q" style="margin:6px 0 16px;">${esc(q.q)}</div>
+      <button class="quiz-opt" onclick="orientAnswer(2)">👍 &nbsp;Oui, ça me plairait</button>
+      <button class="quiz-opt" onclick="orientAnswer(1)">😐 &nbsp;Bof, pourquoi pas</button>
+      <button class="quiz-opt" onclick="orientAnswer(0)">👎 &nbsp;Non, pas du tout</button>
+      ${st.idx>0?`<button class="back-btn" style="margin-top:10px;" onclick="orientState.idx--;renderOrientQ()">← question précédente</button>`:''}
+    </div>
+    </div>`;
+}
+function orientAnswer(v){
+  const st = orientState;
+  st.answers[st.idx] = v;
+  const next = ORI().questions.findIndex((q,i)=> i > st.idx && st.answers[i] == null);
+  if(next >= 0){ st.idx = next; renderOrientQ(); return; }
+  const missing = ORI().questions.findIndex((q,i)=> st.answers[i] == null);
+  if(missing >= 0){ st.idx = missing; renderOrientQ(); return; }
+  finishOrient();
+}
+async function finishOrient(){
+  const st = orientState;
+  if(!st) return;                 // déjà en cours d'enregistrement : on ne sauvegarde pas deux fois
+  const answers = st.answers;
+  const sc = orientScores(answers);
+  const top = orientTop(sc).slice(0,3).join('');
+  orientState = null;
+  await db.from('adalix_orientation').upsert({child, answers, scores:sc, top, updated_at:new Date().toISOString()});
+  toast('Profil enregistré ! 🧭');
+  renderOrientation();
+}
 
 /* ---------- checklist ---------- */
 let todayItems = {};
@@ -1422,10 +1756,10 @@ function buildQuizContext(){
   const today = new Date(); today.setHours(0,0,0,0);
   const seen = [];
   let idx = 0;
-  D.weeks.forEach(w => w.days.forEach(d => {
+  D.weeks.forEach(w => daysOf(w).forEach(d => {
     if(dayDate(d) <= today){
       seen.push(`${d.title} (${d.theme})` + (d.logique && d.logique.titre ? ` — logique/rhétorique : ${d.logique.titre}` : ''));
-      if(D.ia[idx]) seen[seen.length-1] += ` — IA : ${D.ia[idx].titre}`;
+      if(D.ia && D.ia[idx]) seen[seen.length-1] += ` — IA : ${D.ia[idx].titre}`;
     }
     idx++;
   }));
@@ -1677,7 +2011,7 @@ function openBadges(){ modal(renderBadgesHTML()); }
 /* ---------- parent dashboard ---------- */
 async function renderDashboard(){
   $('#main').innerHTML = '<div class="card">Chargement…</div>';
-  const [scores, checks, persos, journal, chats, projets, assistants, badges, expoNotes, profiles, boards] = await Promise.all([
+  const [scores, checks, persos, journal, chats, projets, assistants, badges, expoNotes, profiles, boards, orients] = await Promise.all([
     db.from('adalix_qcm_scores').select('*').order('created_at',{ascending:false}).limit(30),
     db.from('adalix_checklist').select('*').order('day',{ascending:false}).limit(60),
     db.from('adalix_personalities').select('*'),
@@ -1689,6 +2023,7 @@ async function renderDashboard(){
     db.from('adalix_expose_notes').select('*'),
     db.from('adalix_profiles').select('*'),
     db.from('adalix_projet_board').select('*'),
+    db.from('adalix_orientation').select('*'),
   ]);
   profilesCache = profiles.data||[];
   const S = scores.data||[], C = checks.data||[], P = persos.data||[], J = journal.data||[], CH = chats.data||[], PR = projets.data||[], AS = assistants.data||[], BD = badges.data||[];
@@ -1713,6 +2048,24 @@ async function renderDashboard(){
       ${S.slice(0,12).map(r=>`<tr><td>${kidName(r.child)}</td><td>${esc(quizTitle(r.quiz_id))}</td><td><b>${r.score}/${r.total}</b></td><td>${new Date(r.created_at).toLocaleDateString('fr-FR')}</td></tr>`).join('')||'<tr><td colspan=4 style="color:#999;">Aucun quiz encore</td></tr>'}</table></div>
     ${renderProfilesCard()}
     ${renderExpoNotationCard()}
+    ${(orients.data||[]).length ? `<div class="card"><h3>🧭 Orientation — le profil du test</h3>
+      ${(orients.data||[]).map(r=>{
+        const T = D.orientation.types, sc = r.scores||{};
+        const order = Object.keys(sc).sort((a,b)=>sc[b]-sc[a]);
+        const max = Math.max(20, ...Object.values(sc).map(Number));
+        return `<div style="margin-bottom:14px;">
+          <div style="font-size:14px;font-weight:700;">${r.child==='adam'?'🐉 Adam':'🦊 Alix'} — code <b style="color:var(--accent2);">${esc(r.top||'')}</b>
+            <span style="font-size:12px;color:#999;font-weight:400;">(${new Date(r.updated_at).toLocaleDateString('fr-FR')})</span></div>
+          ${order.map(k=>`<div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+            <div style="width:120px;font-size:12.5px;">${T[k]?T[k].emoji+' '+T[k].nom:k}</div>
+            <div style="flex:1;height:11px;background:#eceef3;border-radius:6px;overflow:hidden;">
+              <div style="width:${Math.round(sc[k]/max*100)}%;height:100%;background:${T[k]?T[k].couleur:'#888'};"></div></div>
+            <div style="width:30px;text-align:right;font-size:12px;color:#888;">${sc[k]}</div></div>`).join('')}
+          <div style="font-size:12.5px;color:#666;margin-top:6px;">Métiers suggérés : ${(T[order[0]]?T[order[0]].metiers.slice(0,4):[]).join(', ')}…</div>
+        </div>`;
+      }).join('')}
+      <div style="font-size:12px;color:#999;">Un point de départ pour discuter avec lui — surtout pas un verdict.</div>
+    </div>` : ''}
     <div class="card"><h3>🚀 Pilotage des projets</h3>
       ${kids.map(k=>{
         const bo = (boards.data||[]).find(r=>r.child===k);
