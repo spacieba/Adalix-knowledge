@@ -321,10 +321,19 @@ window.addEventListener('load', function(){
   if (!z) return;
   var d = document.createElement('div');
   d.style.cssText = 'max-width:520px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.4);border-radius:14px;padding:16px 18px;font-size:14px;line-height:1.55;text-align:left;';
-  d.innerHTML = "<b>⚠️ L'application n'a pas pu démarrer.</b><br>Essaie dans l'ordre :<br>"
-    + "1. Recharge en forçant : <b>Ctrl + Maj + R</b> (ou Cmd + Maj + R sur Mac).<br>"
-    + "2. Si tu as un bloqueur de publicités, désactive-le sur ce site.<br>"
-    + "3. Vérifie ta connexion internet, puis recharge.";
+  if (location.protocol === 'file:') {
+    /* cas le plus fréquent : on a ouvert le fichier index.html téléchargé, tout seul,
+       au lieu d'aller sur le site — les autres fichiers ne peuvent alors pas se charger */
+    d.innerHTML = "<b>📂 Tu as ouvert un fichier enregistré sur l'ordinateur.</b><br>"
+      + "L'application ne peut pas fonctionner comme ça : il lui manque ses autres fichiers.<br><br>"
+      + "👉 Ouvre plutôt cette adresse :<br>"
+      + "<a href='https://adalix-knowledge.vercel.app' style='color:#ffd166;font-weight:800;font-size:16px;'>adalix-knowledge.vercel.app</a>";
+  } else {
+    d.innerHTML = "<b>⚠️ L'application n'a pas pu démarrer.</b><br>Essaie dans l'ordre :<br>"
+      + "1. Recharge en forçant : <b>Ctrl + Maj + R</b> (ou Cmd + Maj + R sur Mac).<br>"
+      + "2. Si tu as un bloqueur de publicités, désactive-le sur ce site.<br>"
+      + "3. Vérifie ta connexion internet, puis recharge.";
+  }
   z.appendChild(d);
 });
 </script>
