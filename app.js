@@ -582,10 +582,11 @@ function quizTitle(id){
   }
   if(id==='drapeaux_difficile') return '🌋 Drapeaux · Difficile';
   if(id==='drapeaux_expert') return '🔥 Drapeaux · Expert';
-  if(/_n[23]$/.test(id)){
-    const base = id.replace(/_n[23]$/,'');
+  if(id==='drapeaux_legendaire') return '👑 Drapeaux · Légendaire';
+  if(/_n[234]$/.test(id)){
+    const base = id.replace(/_n[234]$/,''), n = +id.slice(-1);
     const g = (typeof GEO_GAMES !== 'undefined') && GEO_GAMES.find(x=>x.qid===base);
-    if(g) return g.label + (id.endsWith('_n2') ? ' · 🌋 N2' : ' · 🔥 N3');
+    if(g) return g.label + ' · ' + GEO_LEVELS[n].icon + ' ' + GEO_LEVELS[n].name;
   }
   const geo = (typeof GEO_GAMES !== 'undefined') && GEO_GAMES.find(g=>(g.qid||'capitales')===id && id!=='capitales');
   if(geo) return geo.label;
@@ -636,7 +637,11 @@ function renderQuizNiveaux(id){
     <div class="quiz-list">
       ${niveaux.map(nv=>`<button onclick="startQuiz('${id}:${nv}')">
         <div style="font-weight:700;">${(NV[nv]||{}).icon||''} ${esc((NV[nv]||{}).label||nv)}</div>
-        <div style="font-size:12px;color:#888;">${qz.niveaux[nv].length} questions${nv==='facile'?" — pour se lancer":nv==='moyen'?" — il faut réfléchir":" — pour les costauds"}</div>
+        <div style="font-size:12px;color:#888;">${qz.niveaux[nv].length} questions${
+          nv==='facile' ? " — pour se lancer"
+          : nv==='moyen' ? " — il faut réfléchir"
+          : nv==='difficile' ? " — pour les costauds"
+          : " · " + ((qz.niveaux[nv][0]||{opts:[]}).opts.length) + " propositions au lieu de 4 — bonne chance"}</div>
         ${child==='visiteur' ? '' : `<div style="font-size:12px;margin-top:4px;" id="qrec-${nv}">…</div>`}
       </button>`).join('')}
     </div>
@@ -799,12 +804,19 @@ const GEO_LEVELS = {
   1:{s:'',    icon:'🌱', name:'Découverte'},
   2:{s:'_n2', icon:'🌋', name:'Difficile'},
   3:{s:'_n3', icon:'🔥', name:'Expert'},
+  4:{s:'_n4', icon:'👑', name:'Légendaire'},
 };
+const GEO_NIVEAUX = [1,2,3,4];
+const MAP_CHRONO_N4 = 12;   // secondes accordées par zone au niveau légendaire
 function geoLevelDesc(type, lvl){
   if(type==='shape') return lvl===1 ? 'Zones colorées, 3 essais par zone.'
-    : lvl===2 ? "Carte SANS couleurs — plus d'indice visuel, 3 essais." : 'Sans couleurs et UN SEUL essai par zone.';
+    : lvl===2 ? "Carte SANS couleurs — plus d'indice visuel, 3 essais."
+    : lvl===3 ? 'Sans couleurs et UN SEUL essai par zone.'
+    : 'Sans couleurs, un seul essai… et ' + MAP_CHRONO_N4 + ' secondes chrono par zone.';
   return lvl===1 ? 'Barème normal : tombe à moins de quelques dizaines de km.'
-    : lvl===2 ? 'Barème serré : 2× plus exigeant sur la distance.' : 'Barème de pro : 4× plus exigeant — vise au km près !';
+    : lvl===2 ? 'Barème serré : 2× plus exigeant sur la distance.'
+    : lvl===3 ? 'Barème de pro : 4× plus exigeant — vise au km près !'
+    : 'Barème légendaire : 8× plus exigeant. Le moindre écart se paie.';
 }
 function geoRun(id){
   const g = GEO_GAMES.find(x=>x.id===id);
@@ -824,7 +836,7 @@ async function renderGeoLevelMenu(id){
     <div class="card"><h3>${g.icon} ${esc(g.label)}</h3>
       <div style="font-size:13px;color:#888;">${esc(g.sub)} — choisis ton niveau, chaque niveau garde son propre record.</div></div>
     <div class="quiz-list">
-      ${[1,2,3].map(l=>`<button onclick="startGeoLevel('${id}',${l})">
+      ${GEO_NIVEAUX.map(l=>`<button onclick="startGeoLevel('${id}',${l})">
         <div style="font-weight:700;">${GEO_LEVELS[l].icon} ${GEO_LEVELS[l].name}</div>
         <div style="font-size:12px;color:#888;">${geoLevelDesc(g.type,l)}</div>
         ${child==='visiteur' ? '' : `<div style="font-size:12px;margin-top:4px;" id="glvl-${l}"></div>`}
@@ -834,14 +846,14 @@ async function renderGeoLevelMenu(id){
   if(child==='visiteur') return;
   const bestAutresL = (rows, qid) => rows.filter(r=>r.child!==child && r.quiz_id===qid)
     .sort((a,b)=> b.score-a.score || (a.duration_s||1e9)-(b.duration_s||1e9))[0];
-  const qids = [1,2,3].map(l=>g.qid + GEO_LEVELS[l].s);
+  const qids = GEO_NIVEAUX.map(l=>g.qid + GEO_LEVELS[l].s);
   const {data} = await db.from('adalix_qcm_scores').select('child,quiz_id,score,duration_s').in('quiz_id', qids);
   const rows = data||[];
   const other = child==='adam' ? 'alix' : 'adam';
   const otherName = other==='adam' ? 'Adam' : 'Alix';
   const bestOf = (k, qid) => rows.filter(r=>r.child===k && r.quiz_id===qid)
     .sort((a,b)=> b.score-a.score || (a.duration_s||1e9)-(b.duration_s||1e9))[0];
-  [1,2,3].forEach(l=>{
+  GEO_NIVEAUX.forEach(l=>{
     const el = $('#glvl-'+l); if(!el) return;
     const qid = g.qid + GEO_LEVELS[l].s;
     const mine = bestOf(child, qid), theirs = bestOf(other, qid);
@@ -913,19 +925,37 @@ function startMapGame(gameId, lvl){
   let order = idxs.sort(()=>Math.random()-0.5);
   if(cfg.sample) order = order.slice(0, cfg.sample);
   mapGame = { cfg, M, order, included:new Set(order), idx:0, score:0, tries:0, found:{}, t0:Date.now(),
-    lvl, nocolor: lvl>=2, maxTries: lvl===3?1:3, qid: cfg.qid + GEO_LEVELS[lvl].s,
+    lvl, nocolor: lvl>=2, maxTries: lvl>=3?1:3, chrono: lvl>=4 ? MAP_CHRONO_N4 : 0, qid: cfg.qid + GEO_LEVELS[lvl].s,
     label: cfg.label + (lvl>1 ? ' · ' + GEO_LEVELS[lvl].icon + ' ' + GEO_LEVELS[lvl].name : '') };
   mapGame.timer = setInterval(()=>{
-    if(!mapGame) return;
+    const g = mapGame; if(!g) return;
     const el = $('#map-timer');
-    if(el){ const s = Math.round((Date.now()-mapGame.t0)/1000); el.textContent = '⏱️ ' + Math.floor(s/60) + 'm' + String(s%60).padStart(2,'0'); }
-  }, 1000);
+    if(g.chrono){
+      // niveau légendaire : compte à rebours par zone, la zone est perdue à zéro
+      const reste = Math.max(0, g.chrono - (Date.now() - (g.tZone||Date.now()))/1000);
+      if(el){ el.textContent = '⏳ ' + reste.toFixed(1) + ' s';
+        el.style.color = reste <= 3 ? '#c9636a' : ''; el.style.fontWeight = reste <= 3 ? '800' : ''; }
+      if(reste <= 0) mapTempsEcoule();
+      return;
+    }
+    if(el){ const n = Math.round((Date.now()-g.t0)/1000); el.textContent = '⏱️ ' + Math.floor(n/60) + 'm' + String(n%60).padStart(2,'0'); }
+  }, 100);
   renderMapGame();
 }
 function stopMapGame(){ if(mapGame && mapGame.timer) clearInterval(mapGame.timer); mapGame = null; }
+/* niveau légendaire : le temps imparti à la zone est écoulé — on la révèle et on passe à la suivante */
+function mapTempsEcoule(){
+  const g = mapGame; if(!g || !g.chrono) return;
+  const cible = g.order[g.idx];
+  g.found[cible] = 'reveal'; g.tries = 0; g.idx++;
+  if(g.idx >= g.order.length){ finishMapGame(); return; }
+  renderMapGame();
+  const fb = $('#map-feedback'); if(fb) fb.textContent = '⏳ Trop tard ! On passe à la suivante.';
+}
 function renderMapGame(){
   const g = mapGame; if(!g) return;
   const M = g.M;
+  if(g.chrono) g.tZone = Date.now();   // le compte à rebours repart à chaque nouvelle zone
   const target = M.targets[g.order[g.idx]];
   $('#main').innerHTML = `
     <button class="back-btn" onclick="stopMapGame();renderGeoLevelMenu('${g.cfg.id}')">← Quitter</button>
@@ -935,7 +965,7 @@ function renderMapGame(){
         <div class="quiz-progress" id="map-timer">⏱️</div>
       </div>
       <div class="quiz-q">${g.cfg.icon} Clique sur : <span style="background:var(--accent);color:white;border-radius:12px;padding:2px 14px;">${esc(target.n)}</span></div>
-      <div id="map-feedback" style="font-size:13px;height:18px;color:#c9636a;"></div>
+      <div id="map-feedback" style="font-size:13px;min-height:18px;color:#c9636a;"></div>
       <svg viewBox="0 0 ${M.w} ${M.h}" style="width:100%;border-radius:12px;display:block;overflow:hidden;box-shadow:inset 0 0 30px rgba(20,60,110,.15);">
         <defs>
           <radialGradient id="sea" cx="30%" cy="22%" r="95%">
@@ -946,7 +976,7 @@ function renderMapGame(){
         ${(M.context||[]).map(d=>`<path d="${d}" fill="#dde2d6" stroke="#ffffff" stroke-width="0.7"></path>`).join('')}
         ${M.targets.map((t,i)=>`<path d="${t.d}" id="mp-${i}" class="geo-t" fill="${geoFill(g,i)}" stroke="#ffffff" stroke-width="0.9" style="cursor:pointer;" onclick="mapClick(${i})"></path>`).join('')}
       </svg>
-      <div style="font-size:12px;color:#888;margin-top:6px;">${g.maxTries===1 ? '🔥 Un seul essai : 3 points ou rien !' : '3 points du premier coup, 2 au deuxième, 1 au troisième.'} ✅ Vert foncé = trouvé, 🔶 orange = révélé.${g.nocolor ? ' 🌋 Carte sans couleurs — à toi de connaître les formes !' : ''}</div>
+      <div style="font-size:12px;color:#888;margin-top:6px;">${g.maxTries===1 ? '🔥 Un seul essai : 3 points ou rien !' : '3 points du premier coup, 2 au deuxième, 1 au troisième.'} ✅ Vert foncé = trouvé, 🔶 orange = révélé.${g.nocolor ? ' 🌋 Carte sans couleurs — à toi de connaître les formes !' : ''}${g.chrono ? ' 👑 ' + g.chrono + ' secondes par zone : passé ce délai, elle est perdue.' : ''}</div>
     </div>`;
 }
 function mapClick(i){
@@ -995,7 +1025,7 @@ function startCityGame(gameId, lvl){
     : {w:window.MAPS[C.bg].w, h:window.MAPS[C.bg].h, paths:(window.MAPS[C.bg].context||[]).concat(window.MAPS[C.bg].targets.map(t=>t.d))};
   const order = C.list.map((c,i)=>i).sort(()=>Math.random()-0.5);
   cityGame = { cfg, C, bg:bgMap, order, idx:0, score:0, locked:false, t0:Date.now(),
-    lvl, mult: lvl===3?4 : lvl===2?2 : 1, qid: cfg.qid + GEO_LEVELS[lvl].s,
+    lvl, mult: lvl>=4?8 : lvl===3?4 : lvl===2?2 : 1, qid: cfg.qid + GEO_LEVELS[lvl].s,
     label: cfg.label + (lvl>1 ? ' · ' + GEO_LEVELS[lvl].icon + ' ' + GEO_LEVELS[lvl].name : '') };
   cityGame.timer = setInterval(()=>{
     if(!cityGame) return;
@@ -1102,7 +1132,9 @@ const FLAG_LEVELS = {
   facile:    { qid:'drapeaux',           label:'Drapeaux · Facile',    icon:'🌱', desc:'Les 50 grands pays du monde — pour s’échauffer.' },
   difficile: { qid:'drapeaux_difficile', label:'Drapeaux · Difficile', icon:'🌋', desc:'Pays moins connus (Asie centrale, Balkans, Afrique…) et réponses du même continent.' },
   expert:    { qid:'drapeaux_expert',    label:'Drapeaux · Expert',    icon:'🔥', desc:'Drapeaux quasi jumeaux : Tchad ou Roumanie ? Monaco ou Indonésie ? Le piège absolu.' },
+  legendaire:{ qid:'drapeaux_legendaire',label:'Drapeaux · Légendaire', icon:'👑', desc:'HUIT propositions au lieu de quatre, toutes ressemblantes. Le niveau des vrais.', opts:8 },
 };
+function flagNbOpts(level){ return (FLAG_LEVELS[level] && FLAG_LEVELS[level].opts) || 4; }
 const FLAG_FEM = new Set(['Grèce','Suède','Norvège','Finlande','Pologne','Russie','Turquie','Chine','Nouvelle-Zélande','Tunisie','Colombie','Thaïlande','Argentine','Belgique','Suisse','Autriche','Hongrie','Corée du Sud',"Côte d'Ivoire",'Arabie saoudite','France','Roumanie','Moldavie','Croatie','Slovénie','Slovaquie','Serbie','Bosnie-Herzégovine','Macédoine du Nord','Géorgie','Mongolie','Birmanie','Malaisie','Tanzanie','Zambie','Guinée','Bolivie','Jordanie','Syrie','Palestine','Lettonie','Lituanie','Bulgarie','Papouasie-Nouvelle-Guinée']);
 function flagArticle(name){
   if(['États-Unis','Pays-Bas','Fidji','Tuvalu','Philippines'].includes(name)) return 'des ';
@@ -1117,7 +1149,7 @@ async function renderFlagsMenu(){
     <div class="narrow">
     <button class="back-btn" onclick="renderGeo()">← Tous les jeux</button>
     <div class="card"><h3>🚩 Drapeaux du monde</h3>
-      <div style="font-size:13px;color:#888;">20 drapeaux, 4 propositions, record par niveau. Choisis ta difficulté !</div></div>
+      <div style="font-size:13px;color:#888;">20 drapeaux à reconnaître, un record par niveau. Choisis ta difficulté — le niveau 👑 légendaire propose huit drapeaux à la fois.</div></div>
     <div class="quiz-list">
       ${Object.entries(FLAG_LEVELS).map(([lv,c])=>`<button onclick="startFlagsGame('${lv}')">
         <div style="font-weight:700;">${c.icon} ${esc(c.label.split('·')[1].trim())}</div>
@@ -1148,7 +1180,9 @@ async function renderFlagsMenu(){
 }
 function flagQuestions(level){
   const shuffle = a => a.slice().sort(()=>Math.random()-0.5);
-  if(level==='expert'){
+  const nOpts = flagNbOpts(level);          // 4 partout, 8 au niveau légendaire
+  const nWrong = nOpts - 1;
+  if(level==='expert' || level==='legendaire'){
     const qs = [];
     let groups = shuffle(FLAG_TWINS);
     while(qs.length < 20){
@@ -1156,10 +1190,16 @@ function flagQuestions(level){
       const g = groups.pop();
       const iso = g[Math.floor(Math.random()*g.length)];
       const c = flagByIso(iso);
-      let wrongIsos = shuffle(g.filter(x=>x!==iso)).slice(0,3);
-      if(wrongIsos.length < 3){
-        const fill = shuffle(FLAGS_ALL.filter(f=>f[2]===c[2] && f[1]!==iso && !wrongIsos.includes(f[1]))).slice(0, 3-wrongIsos.length);
-        wrongIsos = wrongIsos.concat(fill.map(f=>f[1]));
+      // d'abord les vrais sosies du même groupe, puis les drapeaux du même continent,
+      // puis n'importe quel autre drapeau : au niveau légendaire il en faut sept.
+      let wrongIsos = shuffle(g.filter(x=>x!==iso)).slice(0, nWrong);
+      if(wrongIsos.length < nWrong){
+        const memeCont = shuffle(FLAGS_ALL.filter(f=>f[2]===c[2] && f[1]!==iso && wrongIsos.indexOf(f[1])<0));
+        wrongIsos = wrongIsos.concat(memeCont.slice(0, nWrong-wrongIsos.length).map(f=>f[1]));
+      }
+      if(wrongIsos.length < nWrong){
+        const reste = shuffle(FLAGS_ALL.filter(f=>f[1]!==iso && wrongIsos.indexOf(f[1])<0));
+        wrongIsos = wrongIsos.concat(reste.slice(0, nWrong-wrongIsos.length).map(f=>f[1]));
       }
       const opts = shuffle([[c[0], iso]].concat(wrongIsos.map(w=>{ const f=flagByIso(w); return [f[0], f[1]]; })));
       qs.push({ name:c[0], iso, opts });
@@ -1170,8 +1210,8 @@ function flagQuestions(level){
   const pool = level==='difficile' ? FLAGS_ALL : FLAGS;
   return shuffle(subjects).slice(0,20).map(([name,iso,cont])=>{
     let cand = pool.filter(f=>f[1]!==iso && (level==='facile' || f[2]===cont));
-    if(cand.length < 3) cand = pool.filter(f=>f[1]!==iso);
-    const wrong = shuffle(cand).slice(0,3);
+    if(cand.length < nWrong) cand = pool.filter(f=>f[1]!==iso);
+    const wrong = shuffle(cand).slice(0, nWrong);
     const opts = shuffle([[name,iso]].concat(wrong.map(f=>[f[0],f[1]])));
     return { name, iso, opts };
   });
@@ -1191,11 +1231,12 @@ function renderFlagGame(){
     <div class="card">
       <div class="quiz-progress">${FLAG_LEVELS[g.level].icon} ${esc(FLAG_LEVELS[g.level].label)} · Drapeau ${g.idx+1} / ${g.qs.length} · ${g.score} trouvé${g.score>1?'s':''} · <b>${g.score*PTS_BONNE} pts</b></div>
       <div class="quiz-q">🚩 Quel est le drapeau ${flagArticle(q.name)}<span style="color:var(--accent2);">${esc(q.name)}</span> ?</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div style="display:grid;grid-template-columns:repeat(${q.opts.length>4?'auto-fit,minmax(110px,1fr)':'2,1fr'});gap:10px;">
         ${q.opts.map(([n,iso],i)=>`<button id="flag-${i}" onclick="flagClick(${i})" style="border:2.5px solid #ccd4e0;border-radius:12px;background:white;padding:10px;cursor:pointer;">
           <img src="https://flagcdn.com/w160/${iso}.png" alt="?" style="width:100%;max-width:150px;border:1px solid #eee;border-radius:4px;">
         </button>`).join('')}
       </div>
+      ${q.opts.length>4 ? '<div style="font-size:12px;color:#888;margin-top:8px;">👑 Huit propositions — regarde bien les nuances de couleur et les proportions.</div>' : ''}
     </div>
     </div>`;
 }
