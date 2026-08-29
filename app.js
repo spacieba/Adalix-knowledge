@@ -2,7 +2,28 @@
 const SUPA_URL = 'https://qntpdaakdqaysxbeugxk.supabase.co';
 const SUPA_KEY = 'sb_publishable_0m2Hob3cSEFz8UzLJrwBhw_AuW3EIOB';
 const PARENT_PIN = '2026';
-const db = window.supabase.createClient(SUPA_URL, SUPA_KEY);
+/* Si la librairie Supabase (CDN externe) ne se charge pas — bloqueur de pub, coupure
+   réseau, CDN en panne — on ne laisse PAS toute l'application mourir : on bascule sur
+   un client de secours qui renvoie des données vides. Le programme, les quiz et les
+   jeux continuent de fonctionner ; seuls l'enregistrement et l'historique sont perdus. */
+let dbOffline = false;
+const db = (function(){
+  try {
+    if(window.supabase && window.supabase.createClient) return window.supabase.createClient(SUPA_URL, SUPA_KEY);
+    throw new Error('librairie Supabase absente');
+  } catch(e){
+    console.error('Supabase indisponible — mode hors-ligne :', e);
+    dbOffline = true;
+    const handler = {
+      get(t, k){
+        if(k === 'then') return f => Promise.resolve({data: [], error: null}).then(f);
+        return () => new Proxy(function(){}, handler);
+      },
+      apply(){ return new Proxy(function(){}, handler); }
+    };
+    return { from: () => new Proxy(function(){}, handler) };
+  }
+})();
 const D = window.DATA;
 
 let child = null;          // 'adam' | 'alix' | 'parent'
@@ -63,6 +84,7 @@ function selectProfile(c){
   }
   $('#hdr-who').textContent = c === 'adam' ? '🐉 Adam' : '🦊 Alix';
   localStorage.setItem('adalix_child', c);
+  if(dbOffline) setTimeout(()=>toast("⚠️ Connexion à la base impossible — rien ne sera enregistré aujourd'hui."), 900);
   buildNav(c === 'adam'
     ? ['programme','quiz','geo','orientation','les100','checklist','projet','fabrique','chat','guide']
     : ['programme','quiz','geo','les100','checklist','projet','fabrique','chat','guide']);

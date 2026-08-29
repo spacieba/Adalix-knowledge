@@ -312,5 +312,21 @@ body.theme-alix .imgchip.sel { background:linear-gradient(135deg, #e8798f, #f0a3
 <script src="map.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="app.js"></script>
+<script>
+/* Filet de sécurité : si app.js n'a pas pu s'exécuter (script bloqué, réseau coupé,
+   fichier incomplet), la page resterait muette au clic. On affiche un message clair. */
+window.addEventListener('load', function(){
+  if (typeof selectProfile === 'function') return;
+  var z = document.getElementById('screen-profile');
+  if (!z) return;
+  var d = document.createElement('div');
+  d.style.cssText = 'max-width:520px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.4);border-radius:14px;padding:16px 18px;font-size:14px;line-height:1.55;text-align:left;';
+  d.innerHTML = "<b>⚠️ L'application n'a pas pu démarrer.</b><br>Essaie dans l'ordre :<br>"
+    + "1. Recharge en forçant : <b>Ctrl + Maj + R</b> (ou Cmd + Maj + R sur Mac).<br>"
+    + "2. Si tu as un bloqueur de publicités, désactive-le sur ce site.<br>"
+    + "3. Vérifie ta connexion internet, puis recharge.";
+  z.appendChild(d);
+});
+</script>
 </body>
 </html>
