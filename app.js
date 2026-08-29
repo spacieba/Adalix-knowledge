@@ -68,20 +68,94 @@ function toast(msg){ const t=document.createElement('div'); t.className='toast';
 function modal(html){ $('#modal-root').innerHTML = `<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">${html}</div></div>`; }
 function closeModal(){ $('#modal-root').innerHTML=''; }
 
+/* ---------- profil visiteur nommé (toute la famille peut jouer) ----------
+   Un visiteur est enregistré sous la clé 'v:Prénom' : ses scores vont dans la même
+   table que ceux des enfants, sans jamais se mélanger avec 'adam' / 'alix'. */
+function isVisitor(k){ const x = (k === undefined ? child : k); return typeof x === 'string' && x.slice(0,2) === 'v:'; }
+function joueurNom(k){
+  if(k === 'adam') return '🐉 Adam';
+  if(k === 'alix') return '🦊 Alix';
+  if(isVisitor(k)) return '🧳 ' + k.slice(2);
+  return k || '—';
+}
+function askVisitorName(){
+  const dernier = (localStorage.getItem('adalix_visiteur') || '');
+  modal(`<h3>🧳 Bienvenue !</h3>
+    <p style="font-size:14px;line-height:1.55;">Écris ton prénom : tes scores seront enregistrés et tu apparaîtras au classement de la famille.</p>
+    <input type="text" id="v-nom" maxlength="18" placeholder="Ton prénom" value="${esc(dernier)}"
+      onkeydown="if(event.key==='Enter')startVisitor()">
+    <div class="actions">
+      <button class="btn" onclick="startVisitor()">C'est parti !</button>
+      <button class="btn ghost" onclick="closeModal()">Annuler</button>
+    </div>
+    <div style="font-size:12px;color:#888;margin-top:10px;">Sans prénom, tu peux jouer quand même — mais rien ne sera enregistré.</div>
+    <button class="back-btn" style="margin-top:6px;" onclick="startVisitor(true)">Jouer sans enregistrer →</button>`);
+  setTimeout(()=>{ const i = $('#v-nom'); if(i){ i.focus(); i.select(); } }, 60);
+}
+function startVisitor(anonyme){
+  let nom = '';
+  if(anonyme !== true){
+    const i = $('#v-nom');
+    nom = ((i && i.value) || '').trim().replace(/\s+/g,' ').slice(0,18);
+    if(!nom){ toast('Écris ton prénom (ou choisis « jouer sans enregistrer »)'); return; }
+    // majuscule à chaque prénom composé : "papy roger" → "Papy Roger", "jean-luc" → "Jean-Luc"
+    nom = nom.split(/([ \-])/).map(m => (m === ' ' || m === '-') ? m : m.charAt(0).toUpperCase() + m.slice(1).toLowerCase()).join('');
+    localStorage.setItem('adalix_visiteur', nom);
+  }
+  closeModal();
+  child = nom ? 'v:' + nom : 'visiteur';
+  document.body.className = 'theme-visiteur';
+  $('#screen-profile').classList.add('hidden');
+  $('#screen-app').classList.remove('hidden');
+  $('#hdr-who').textContent = nom ? '🧳 ' + nom : '🧳 Visiteur';
+  $('#hdr-streak').style.display = 'none';
+  const hb = $('#hdr-badges'); if(hb) hb.style.display = 'none';
+  if(dbOffline) setTimeout(()=>toast("⚠️ Connexion impossible — les scores ne seront pas enregistrés."), 900);
+  buildNav(['geo','quizv','classement']);
+  showTab('geo');
+}
+
+/* ---------- classement de la famille ---------- */
+async function renderClassement(){
+  $('#main').innerHTML = '<div class="card">Chargement du classement…</div>';
+  const {data} = await db.from('adalix_qcm_scores').select('child,quiz_id,score,total,duration_s,created_at');
+  const rows = data || [];
+  // meilleur score de chaque joueur, pour chaque épreuve
+  const parEpreuve = {};
+  rows.forEach(r=>{
+    if(!r.child) return;
+    const e = parEpreuve[r.quiz_id] || (parEpreuve[r.quiz_id] = {});
+    const cur = e[r.child];
+    if(!cur || r.score > cur.score || (r.score === cur.score && (r.duration_s||1e9) < (cur.duration_s||1e9))) e[r.child] = r;
+  });
+  const epreuves = Object.keys(parEpreuve).sort((a,b)=>quizTitle(a).localeCompare(quizTitle(b),'fr'));
+  const podium = ['🥇','🥈','🥉'];
+  const joueurs = [...new Set(rows.map(r=>r.child))];
+  const corps = epreuves.map(qid=>{
+    const tri = Object.values(parEpreuve[qid])
+      .sort((a,b)=> b.score-a.score || (a.duration_s||1e9)-(b.duration_s||1e9)).slice(0,3);
+    return `<div class="card">
+      <h3>${esc(quizTitle(qid))}</h3>
+      ${tri.map((r,i)=>`<div style="display:flex;align-items:center;gap:10px;padding:5px 0;${r.child===child?'font-weight:800;':''}">
+        <div style="font-size:19px;width:26px;">${podium[i]}</div>
+        <div style="flex:1;font-size:14px;">${esc(joueurNom(r.child))}${r.child===child?' <span style="font-size:11px;background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;">toi</span>':''}</div>
+        <div style="font-size:14px;font-weight:800;">${r.score}${r.total?'<span style="font-weight:400;opacity:.55;font-size:12px;"> / '+r.total+'</span>':''}</div>
+      </div>`).join('')}
+    </div>`;
+  }).join('');
+  $('#main').innerHTML = `
+    <div class="card"><h3>🏆 Le classement de la famille</h3>
+      <div style="font-size:13.5px;line-height:1.55;">Le meilleur score de chacun, épreuve par épreuve. ${joueurs.length} joueur${joueurs.length>1?'s':''} pour l'instant${isVisitor()?" — dont toi !":''} À toi de monter sur le podium : chaque jeu peut se rejouer autant de fois que tu veux.</div></div>
+    ${corps || '<div class="card"><div style="font-size:14px;">Personne n\'a encore joué. Sois le premier : va dans 🌍 Jeux géo ou 🎯 Quiz !</div></div>'}`;
+}
+
 /* ---------- profile ---------- */
 function selectProfile(c){
   child = c;
   document.body.className = 'theme-' + c;
   $('#screen-profile').classList.add('hidden');
   $('#screen-app').classList.remove('hidden');
-  if(c === 'visiteur'){
-    $('#hdr-who').textContent = '🧳 Visiteur';
-    $('#hdr-streak').style.display = 'none';
-    const hb = $('#hdr-badges'); if(hb) hb.style.display = 'none';
-    buildNav(['geo','quizv']);
-    showTab('geo');
-    return;
-  }
+  if(c === 'visiteur'){ child = null; document.body.className = ''; askVisitorName(); return; }
   $('#hdr-who').textContent = c === 'adam' ? '🐉 Adam' : '🦊 Alix';
   localStorage.setItem('adalix_child', c);
   if(dbOffline) setTimeout(()=>toast("⚠️ Connexion à la base impossible — rien ne sera enregistré aujourd'hui."), 900);
@@ -128,7 +202,7 @@ const TABS = {
   les100:{icon:'🏆',label:'Les 100'}, checklist:{icon:'✅',label:'Checklist'},
   projet:{icon:'💻',label:'Mon projet'}, fabrique:{icon:'🏭',label:'Fabrique'},
   chat:{icon:'💬',label:'Mon assistant'}, guide:{icon:'📖',label:'Guide'}, dashboard:{icon:'📊',label:'Tableau de bord'},
-  quizv:{icon:'🎯',label:'Quiz'}, orientation:{icon:'🧭',label:'Orientation'},
+  quizv:{icon:'🎯',label:'Quiz'}, orientation:{icon:'🧭',label:'Orientation'}, classement:{icon:'🏆',label:'Classement'},
 };
 // icônes réhabillées selon le profil — mêmes intitulés, juste l'esprit visuel qui change
 const THEME_ICONS = {
@@ -143,7 +217,7 @@ function showTab(t){
   tab = t;
   document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
   const nb = $('#nav-'+t); if(nb) nb.classList.add('active');
-  ({programme:renderProgramme, quiz:renderQuizList, quizv:renderQuizV, orientation:renderOrientation, geo:renderGeo, les100:renderGallery, checklist:renderChecklist, projet:renderProjet, fabrique:renderFabrique, chat:renderChat, guide:renderGuide, dashboard:renderDashboard}[t])();
+  ({programme:renderProgramme, quiz:renderQuizList, quizv:renderQuizV, classement:renderClassement, orientation:renderOrientation, geo:renderGeo, les100:renderGallery, checklist:renderChecklist, projet:renderProjet, fabrique:renderFabrique, chat:renderChat, guide:renderGuide, dashboard:renderDashboard}[t])();
 }
 
 /* ---------- guide ---------- */
@@ -401,7 +475,7 @@ function renderQuizList(){
 function renderQuizV(){
   $('#main').innerHTML = `
     <div class="card"><h3>🎯 Les quiz du Grand Été</h3>
-      <div style="font-size:13px;color:#888;">Quatre quiz pour te tester — les réponses changent de place à chaque partie. Ton score s'affiche à la fin (rien n'est enregistré en mode visiteur).</div></div>
+      <div style="font-size:13px;color:#888;">${isVisitor() ? "Quatre quiz pour te tester — les réponses changent de place à chaque partie. Tes scores sont enregistrés : retrouve-toi dans l\'onglet 🏆 Classement." : "Quatre quiz pour te tester — les réponses changent de place à chaque partie. Ton score s\'affiche à la fin (tu joues sans enregistrer)."}</div></div>
     <div class="quiz-list">
       <button onclick="showTab('geo')" style="border-left-color:#3e9c7a;">🌍 LES JEUX DE GÉOGRAPHIE — cartes, villes, drapeaux, 3 niveaux chacun</button>
       ${Object.entries(D.quizzes2||{}).map(([id,qz])=>`<button onclick="startQuiz('${id}')">🎯 ${esc(qz.title)}</button>`).join('')}
@@ -476,9 +550,9 @@ async function finishQuiz(){
   const dur = Math.round((Date.now()-s.t0)/1000);
   const pct = s.score/s.questions.length;
   const badge = pct===1?'🥇 PARFAIT !':pct>=0.85?'🏅 Expert':pct>=0.7?'✅ Objectif atteint':'💪 Retente ta chance';
-  if(child!=='visiteur'){
+  if(child !== 'visiteur' && child !== 'parent'){   // 'visiteur' = anonyme : on n'enregistre rien
     await db.from('adalix_qcm_scores').insert({child, quiz_id:s.id, score:s.score, total:s.questions.length, duration_s:dur});
-    checkBadges();
+    if(!isVisitor()) checkBadges();
   }
   $('#main').innerHTML = `
     <div class="narrow">
@@ -550,6 +624,8 @@ async function renderGeoLevelMenu(id){
     </div>
     </div>`;
   if(child==='visiteur') return;
+  const bestAutresL = (rows, qid) => rows.filter(r=>r.child!==child && r.quiz_id===qid)
+    .sort((a,b)=> b.score-a.score || (a.duration_s||1e9)-(b.duration_s||1e9))[0];
   const qids = [1,2,3].map(l=>g.qid + GEO_LEVELS[l].s);
   const {data} = await db.from('adalix_qcm_scores').select('child,quiz_id,score,duration_s').in('quiz_id', qids);
   const rows = data||[];
@@ -562,13 +638,19 @@ async function renderGeoLevelMenu(id){
     const qid = g.qid + GEO_LEVELS[l].s;
     const mine = bestOf(child, qid), theirs = bestOf(other, qid);
     const fmt = r => r ? String(r.score) : '—';
+    if(isVisitor()){
+      const top = bestAutresL(rows, qid);
+      el.innerHTML = `🥇 Toi : <b>${fmt(mine)}</b>` + (top ? ` · meilleur : <b>${fmt(top)}</b> (${esc(joueurNom(top.child))})` : '')
+        + (top && (!mine || top.score > mine.score) ? ' 🔥' : '');
+      return;
+    }
     el.innerHTML = `🥇 Toi : <b>${fmt(mine)}</b> · ${otherName} : <b>${fmt(theirs)}</b>${theirs && (!mine || theirs.score > mine.score) ? ' 🔥' : ''}`;
   });
 }
 async function renderGeo(){
   $('#main').innerHTML = `
     <div class="card"><h3>🌍 Les jeux de géographie</h3>
-      <div style="font-size:13px;color:#888;">${child==='visiteur' ? 'Bienvenue ! Cartes à cliquer, villes à placer au km près, drapeaux… chaque jeu a 3 niveaux de difficulté. Bon voyage !' : `Clique, place, devine — chaque jeu garde ton record ET celui de ${child==='adam'?'Alix':'Adam'}. À vous deux de faire monter la barre !`}</div></div>
+      <div style="font-size:13px;color:#888;">${child==='visiteur' ? 'Cartes à cliquer, villes à placer au km près, drapeaux… chaque jeu a 3 niveaux de difficulté. (Tu joues sans enregistrer : tes scores ne seront pas gardés.)' : isVisitor() ? 'Chaque jeu garde ton record et te situe face au reste de la famille — le classement complet est dans l\'onglet 🏆.' : `Clique, place, devine — chaque jeu garde ton record ET celui de ${child==='adam'?'Alix':'Adam'}. À vous deux de faire monter la barre !`}</div></div>
     <div class="quiz-list" id="geo-list">
       ${GEO_GAMES.map(g=>`<button onclick="geoRun('${g.id}')">
         <div style="font-weight:700;">${g.icon} ${esc(g.label)}</div>
@@ -577,11 +659,12 @@ async function renderGeo(){
       </button>`).join('')}
     </div>`;
   if(child==='visiteur') return;
-  // records des deux enfants
   const qids = GEO_GAMES.map(g=>g.qid || 'capitales');
   const {data} = await db.from('adalix_qcm_scores').select('child,quiz_id,score,total,duration_s').in('quiz_id', qids);
   const rows = data||[];
   const bestOf = (k, qid) => rows.filter(r=>r.child===k && r.quiz_id===qid)
+    .sort((a,b)=> b.score-a.score || (a.duration_s||1e9)-(b.duration_s||1e9))[0];
+  const bestAutres = qid => rows.filter(r=>r.child!==child && r.quiz_id===qid)
     .sort((a,b)=> b.score-a.score || (a.duration_s||1e9)-(b.duration_s||1e9))[0];
   const fmt = r => r ? `${r.score}${r.duration_s?' · '+Math.floor(r.duration_s/60)+'m'+String(r.duration_s%60).padStart(2,'0'):''}` : '—';
   const other = child==='adam' ? 'alix' : 'adam';
@@ -589,7 +672,14 @@ async function renderGeo(){
   GEO_GAMES.forEach(g=>{
     const el = $('#rec-'+g.id); if(!el) return;
     const qid = g.qid || 'capitales';
-    const mine = bestOf(child, qid), theirs = bestOf(other, qid);
+    const mine = bestOf(child, qid);
+    if(isVisitor()){
+      const top = bestAutres(qid);
+      el.innerHTML = `🥇 Toi : <b>${fmt(mine)}</b>` + (top ? ` &nbsp;·&nbsp; meilleur : <b>${fmt(top)}</b> (${esc(joueurNom(top.child))})` : '');
+      if(top && (!mine || top.score > mine.score)) el.innerHTML += ' 🔥';
+      return;
+    }
+    const theirs = bestOf(other, qid);
     el.innerHTML = `🥇 Toi : <b>${fmt(mine)}</b> &nbsp;·&nbsp; ${otherName} : <b>${fmt(theirs)}</b>`;
     if(mine && theirs && theirs.score > mine.score) el.innerHTML += ' 🔥';
   });
@@ -840,6 +930,13 @@ async function renderFlagsMenu(){
     const el = $('#frec-'+lv); if(!el) return;
     const mine = bestOf(child, c.qid), theirs = bestOf(other, c.qid);
     const fmt = r => r ? `${r.score}/20` : '—';
+    if(isVisitor()){
+      const top = rows.filter(r=>r.child!==child && r.quiz_id===c.qid)
+        .sort((a,b)=> b.score-a.score || (a.duration_s||1e9)-(b.duration_s||1e9))[0];
+      el.innerHTML = `🏆 Toi : <b>${fmt(mine)}</b>` + (top ? ` · meilleur : <b>${fmt(top)}</b> (${esc(joueurNom(top.child))})` : '')
+        + (top && (!mine || top.score > mine.score) ? ' 🔥' : '');
+      return;
+    }
     el.innerHTML = `🏆 Toi : <b>${fmt(mine)}</b> · ${otherName} : <b>${fmt(theirs)}</b>${theirs && (!mine || theirs.score > mine.score) ? ' 🔥' : ''}`;
   });
 }
@@ -923,18 +1020,26 @@ async function geoEndScreen(label, qid, score, total, dur, replay){
   const pct = score/total;
   const badge = pct>=0.9?'🥇 Champion(ne) !':pct>=0.7?'🏅 Très solide !':pct>=0.5?'✅ Bonne base — rejoue pour battre ton record':'💪 Ça se dompte en rejouant !';
   let recordMsg = '';
-  if(child!=='visiteur'){
+  if(child !== 'visiteur' && child !== 'parent'){   // 'visiteur' = anonyme : on n'enregistre rien
     await db.from('adalix_qcm_scores').insert({child, quiz_id:qid, score, total, duration_s:dur});
-    checkBadges();
+    if(!isVisitor()) checkBadges();
     // record battu ?
     try {
       const {data} = await db.from('adalix_qcm_scores').select('child,score').eq('quiz_id',qid);
       const rows = data||[];
-      const myBest = Math.max(...rows.filter(r=>r.child===child).map(r=>r.score));
-      const other = child==='adam'?'alix':'adam';
-      const otherBest = Math.max(0, ...rows.filter(r=>r.child===other).map(r=>r.score));
+      const mine = rows.filter(r=>r.child===child).map(r=>r.score);
+      const myBest = mine.length ? Math.max(...mine) : 0;
       if(score >= myBest && score > 0) recordMsg = '🎉 Nouveau record personnel !';
-      if(otherBest && score > otherBest) recordMsg += ` Et tu passes devant ${other==='adam'?'Adam':'Alix'} ! 👑`;
+      if(isVisitor()){
+        // le visiteur se compare à toute la famille
+        const autres = rows.filter(r=>r.child !== child);
+        const meilleur = autres.length ? autres.reduce((a,b)=> b.score > a.score ? b : a) : null;
+        if(meilleur && score > meilleur.score) recordMsg += ` Et tu prends la tête du classement, devant ${joueurNom(meilleur.child)} ! 👑`;
+      } else {
+        const other = child==='adam'?'alix':'adam';
+        const otherBest = Math.max(0, ...rows.filter(r=>r.child===other).map(r=>r.score));
+        if(otherBest && score > otherBest) recordMsg += ` Et tu passes devant ${other==='adam'?'Adam':'Alix'} ! 👑`;
+      }
     } catch(e){}
   }
   $('#main').innerHTML = `
@@ -2055,7 +2160,7 @@ async function renderDashboard(){
   const assistantOf = k => (AS.find(r=>r.child===k)||{}).name;
   const badgeCountOf = k => BD.filter(r=>r.child===k).length;
   const kids = ['adam','alix'];
-  const kidName = k => k==='adam'?'🚀 Adam':'🎨 Alix';
+  const kidName = k => (k==='adam'||k==='alix'||isVisitor(k)) ? joueurNom(k) : (k||'—');
   const streakOf = k => {
     const map = Object.fromEntries(C.filter(r=>r.child===k).map(r=>[r.day,r.completed]));
     let s=0; for(let i=0;i<60;i++){ const d=new Date(); d.setDate(d.getDate()-i); const key=d.toISOString().slice(0,10);
