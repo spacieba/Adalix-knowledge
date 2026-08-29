@@ -104,6 +104,37 @@ body.theme-adam nav button.active { color:#c9962c; }
 main { max-width:860px; margin:0 auto; padding:16px 14px 60px; }
 .narrow { max-width:760px; margin:0 auto; }
 
+/* ---- Correction affichée après chaque réponse ---- */
+.quiz-fb { border-radius:var(--radius-btn); padding:12px 14px; margin-top:12px; font-size:14px; line-height:1.5;
+  border-left:5px solid; animation: fadeUp .2s ease both; }
+.quiz-fb.ok { background:#dff2e5; border-color:#3e9c7a; color:#1a3d2c; }
+.quiz-fb.ko { background:#fbe4e4; border-color:#c9636a; color:#4a1f22; }
+.quiz-opt[disabled] { opacity:.75; }
+.quiz-opt.correct[disabled], .quiz-opt.wrong[disabled] { opacity:1; }
+.pts-detail { display:inline-block; text-align:left; font-size:13.5px; line-height:1.7; margin-top:10px;
+  background:rgba(0,0,0,.045); border-radius:var(--radius-btn); padding:10px 16px; }
+
+/* ---- Tableaux de scores (classement) ---- */
+.tbl-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+table.score-tbl { width:100%; border-collapse:collapse; font-size:13.5px; }
+table.score-tbl th { text-align:left; font-weight:700; color:var(--accent2); opacity:.85; font-size:11.5px;
+  text-transform:uppercase; letter-spacing:.4px; padding:6px 8px; border-bottom:2px solid rgba(0,0,0,.09); white-space:nowrap; }
+table.score-tbl td { padding:9px 8px; border-bottom:1px solid rgba(0,0,0,.06); white-space:nowrap; }
+table.score-tbl td.num, table.score-tbl th.num { text-align:right; font-variant-numeric:tabular-nums; }
+table.score-tbl tr:last-child td { border-bottom:none; }
+table.score-tbl tr.me td { background:rgba(0,0,0,.05); font-weight:800; }
+body.theme-adam table.score-tbl th { color:#c9962c; }
+body.theme-adam table.score-tbl td { border-bottom-color:rgba(0,0,0,.12); }
+.me-tag { font-size:10.5px; background:var(--accent); color:#fff; border-radius:10px; padding:1px 7px; font-weight:700; vertical-align:1px; }
+details.epr { background:var(--card-bg); color:var(--card-text); border:1px solid var(--card-border); border-left:5px solid var(--accent);
+  border-radius:var(--radius-card); box-shadow:var(--shadow); margin-bottom:10px; padding:0 14px; animation: fadeUp .3s ease both; }
+details.epr > summary { cursor:pointer; padding:13px 0; font-weight:700; font-size:14px; list-style:none;
+  display:flex; gap:9px; align-items:center; font-family:var(--font-display); }
+details.epr > summary::-webkit-details-marker { display:none; }
+details.epr > summary::before { content:'▸'; opacity:.5; font-size:13px; }
+details.epr[open] > summary::before { content:'▾'; }
+details.epr > .tbl-wrap { padding-bottom:12px; }
+
 /* ---- Ergonomie grand écran (PC/Mac) ---- */
 @media (min-width:900px){
   main { max-width:1100px; padding:22px 20px 70px; }
@@ -121,6 +152,63 @@ main { max-width:860px; margin:0 auto; padding:16px 14px 60px; }
 @media (min-width:1200px){
   main { max-width:1240px; }
   .day-list { grid-template-columns:1fr 1fr 1fr; }
+  .gal-grid2 { grid-template-columns:repeat(auto-fill,minmax(175px,1fr)); }
+  .stat-row { grid-template-columns:repeat(4,1fr); }
+}
+/* le survol n'a de sens qu'avec une souris — sur écran tactile il « colle » */
+@media (hover:none){
+  .card:hover, .day-item:hover, .quiz-list button:hover, .pcard:hover { transform:none !important; box-shadow:var(--shadow) !important; }
+}
+
+/* ---- Ergonomie téléphone : cibles larges, texte lisible, rien qui déborde ---- */
+@media (max-width:640px){
+  html { -webkit-text-size-adjust:100%; }
+  body { -webkit-tap-highlight-color:rgba(0,0,0,.06); }
+  main { padding:12px 11px 84px; }
+  header { padding:10px 12px; }
+  header .who { font-size:16px; }
+  header .streak { font-size:12px; padding:5px 10px; }
+  header button { min-height:40px; padding:8px 12px; }
+  /* barre d'onglets : on la fait défiler au doigt plutôt que d'écraser les libellés */
+  nav { top:48px; scrollbar-width:none; }
+  nav::-webkit-scrollbar { display:none; }
+  nav .inner { width:max-content; min-width:100%; }
+  nav button { flex:0 0 auto; min-width:0; min-height:46px; padding:10px 14px; font-size:13.5px; }
+  /* toutes les zones cliquables : au moins 44 px de haut (recommandation Apple/Google) */
+  .btn { min-height:46px; padding:12px 20px; font-size:15px; }
+  .quiz-list button { padding:15px 16px; min-height:56px; font-size:15px; }
+  .quiz-opt { min-height:52px; padding:14px 15px; font-size:15.5px; }
+  .quiz-q { font-size:17.5px; }
+  .day-item { padding:14px; }
+  .chk-item { padding:14px; min-height:52px; }
+  .perso-chip, .gal-filter button, .week-pills button, .imgchip { min-height:42px; padding:10px 15px; font-size:13.5px; }
+  .back-btn { min-height:42px; padding:6px 2px; font-size:15px; }
+  .links a { padding:13px 14px; }
+  details.epr > summary { padding:15px 0; }
+  /* les champs de saisie : 16 px sinon iOS zoome tout seul à chaque clic */
+  textarea, input[type=text], input[type=password], input { font-size:16px; padding:12px; }
+  /* fenêtres : quasi plein écran, collées en bas — plus faciles à atteindre au pouce */
+  .modal-bg { padding:0; align-items:flex-end; }
+  .modal { max-width:100%; max-height:88vh; border-radius:20px 20px 0 0; padding:20px 18px calc(20px + env(safe-area-inset-bottom)); }
+  .modal .actions { flex-wrap:wrap; }
+  .modal .actions .btn { flex:1; min-width:120px; }
+  /* images et tableaux : jamais de débordement horizontal de la page */
+  .quiz-img { max-height:250px; }
+  table.score-tbl { font-size:13px; }
+  table.score-tbl td, table.score-tbl th { padding:8px 6px; }
+  .gal-grid2 { grid-template-columns:repeat(auto-fill,minmax(108px,1fr)); gap:8px; }
+  .pcard { min-height:96px; padding:10px 8px; }
+  .big-score { font-size:38px; }
+  .stat-row { grid-template-columns:1fr 1fr; gap:8px; }
+  #chat-box { max-height:48vh; }
+  .msg { max-width:88%; }
+  .profile-card { width:100%; max-width:340px; padding:18px 20px; text-align:left;
+    display:grid; grid-template-columns:auto 1fr; column-gap:16px; align-items:center; }
+  .profile-card .avatar { grid-row:1 / 3; font-size:44px; }
+  .profile-card .name { margin-top:0; }
+  .profiles { width:100%; gap:12px; }
+  #screen-profile { padding:22px 18px calc(22px + env(safe-area-inset-bottom)); gap:18px; }
+  #parent-link { padding:10px; }
 }
 
 .card { background:var(--card-bg); color:var(--card-text); border-radius:var(--radius-card); padding:16px 18px; margin-bottom:14px; box-shadow:var(--shadow); border:1px solid var(--card-border); }

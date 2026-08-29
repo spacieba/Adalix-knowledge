@@ -116,37 +116,118 @@ function startVisitor(anonyme){
 }
 
 /* ---------- classement de la famille ---------- */
+let classRows = null, classFilter = 'all';
+const CLASS_FILTRES = [
+  {k:'all',   label:'Tout'},
+  {k:'quiz',  label:'🎯 Quiz'},
+  {k:'geo',   label:'🌍 Géo'},
+  {k:'autre', label:'📝 Autres'},
+];
+function classGroup(qid){
+  if(qid.indexOf(':')>0) return 'quiz';
+  if(/^drapeaux/.test(qid)) return 'geo';
+  const base = qid.replace(/_n[23]$/,'');
+  if(typeof GEO_QIDS !== 'undefined' && GEO_QIDS.indexOf(base) >= 0) return 'geo';
+  return 'autre';
+}
+/* Clé de classement d'une partie : les points si la partie en a (bonnes réponses + rapidité),
+   sinon on retombe sur l'ancien barème pour ne pas effacer les records d'avant. */
+function valPartie(r){ return (r && r.points != null) ? r.points : (r ? r.score * PTS_BONNE : -1); }
+function mieuxQue(a, b){   // a est-il meilleur que b ?
+  if(!b) return true;
+  if(valPartie(a) !== valPartie(b)) return valPartie(a) > valPartie(b);
+  return (a.duration_s||1e9) < (b.duration_s||1e9);
+}
+function triPartie(a, b){ return valPartie(b) - valPartie(a) || (a.duration_s||1e9) - (b.duration_s||1e9); }
 async function renderClassement(){
   $('#main').innerHTML = '<div class="card">Chargement du classement…</div>';
-  const {data} = await db.from('adalix_qcm_scores').select('child,quiz_id,score,total,duration_s,created_at');
-  const rows = data || [];
+  const {data} = await db.from('adalix_qcm_scores').select('child,quiz_id,score,total,duration_s,points,created_at');
+  classRows = (data||[]).filter(r=>r.child && r.child!=='parent' && r.child!=='visiteur');
+  drawClassement();
+}
+function setClassFilter(f){ classFilter = f; drawClassement(); }
+function dureeTxt(sec){
+  if(!sec && sec!==0) return '—';
+  return Math.floor(sec/60)+'m'+String(sec%60).padStart(2,'0')+'s';
+}
+function drawClassement(){
+  const rows = classRows || [];
   // meilleur score de chaque joueur, pour chaque épreuve
   const parEpreuve = {};
   rows.forEach(r=>{
-    if(!r.child) return;
     const e = parEpreuve[r.quiz_id] || (parEpreuve[r.quiz_id] = {});
-    const cur = e[r.child];
-    if(!cur || r.score > cur.score || (r.score === cur.score && (r.duration_s||1e9) < (cur.duration_s||1e9))) e[r.child] = r;
+    if(mieuxQue(r, e[r.child])) e[r.child] = r;
   });
-  const epreuves = Object.keys(parEpreuve).sort((a,b)=>quizTitle(a).localeCompare(quizTitle(b),'fr'));
-  const podium = ['🥇','🥈','🥉'];
-  const joueurs = [...new Set(rows.map(r=>r.child))];
-  const corps = epreuves.map(qid=>{
-    const tri = Object.values(parEpreuve[qid])
-      .sort((a,b)=> b.score-a.score || (a.duration_s||1e9)-(b.duration_s||1e9)).slice(0,3);
-    return `<div class="card">
-      <h3>${esc(quizTitle(qid))}</h3>
-      ${tri.map((r,i)=>`<div style="display:flex;align-items:center;gap:10px;padding:5px 0;${r.child===child?'font-weight:800;':''}">
-        <div style="font-size:19px;width:26px;">${podium[i]}</div>
-        <div style="flex:1;font-size:14px;">${esc(joueurNom(r.child))}${r.child===child?' <span style="font-size:11px;background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;">toi</span>':''}</div>
-        <div style="font-size:14px;font-weight:800;">${r.score}${r.total?'<span style="font-weight:400;opacity:.55;font-size:12px;"> / '+r.total+'</span>':''}</div>
-      </div>`).join('')}
-    </div>`;
+  const toutes = Object.keys(parEpreuve);
+  // ---- tableau général : tout compte, quel que soit le filtre ----
+  const stats = {};
+  const S = k => stats[k] || (stats[k] = {k:k, n:0, pct:0, pn:0, or:0, ar:0, br:0, pts:0});
+  toutes.forEach(qid=>{
+    const tri = Object.values(parEpreuve[qid]).sort(triPartie);
+    tri.forEach((r,i)=>{
+      const st = S(r.child);
+      st.n++;
+      if(r.total){ st.pct += r.score/r.total; st.pn++; }
+      if(i===0){ st.or++; st.pts += 5; }
+      else if(i===1){ st.ar++; st.pts += 3; }
+      else if(i===2){ st.br++; st.pts += 2; }
+      else st.pts += 1;
+    });
+  });
+  const general = Object.values(stats).sort((a,b)=> b.pts-a.pts || b.or-a.or || b.n-a.n);
+  const medaille = i => ['🥇','🥈','🥉'][i] || (i+1)+'ᵉ';
+  const ligneGen = (st,i)=>`<tr class="${st.k===child?'me':''}">
+    <td class="num">${medaille(i)}</td>
+    <td>${esc(joueurNom(st.k))}${st.k===child?' <span class="me-tag">toi</span>':''}</td>
+    <td class="num">${st.n}</td>
+    <td class="num" style="white-space:nowrap;">🥇 ${st.or} · 🥈 ${st.ar} · 🥉 ${st.br}</td>
+    <td class="num">${st.pn ? Math.round(100*st.pct/st.pn)+' %' : '—'}</td>
+    <td class="num"><b>${st.pts}</b></td>
+  </tr>`;
+  const tblGeneral = general.length ? `<div class="tbl-wrap"><table class="score-tbl">
+      <thead><tr><th>#</th><th>Joueur</th><th class="num">Épreuves</th><th class="num">Podiums</th><th class="num">Moyenne</th><th class="num">Pts classement</th></tr></thead>
+      <tbody>${general.map(ligneGen).join('')}</tbody></table></div>
+    <div style="font-size:11.5px;color:#999;margin-top:8px;">Pts classement : 5 pour une 1ʳᵉ place, 3 pour une 2ᵉ, 2 pour une 3ᵉ, 1 pour avoir joué — plus tu joues d'épreuves différentes, plus tu montes. À ne pas confondre avec les points d'une partie (colonne Points ci-dessous) : ${PTS_REGLE}</div>` : '';
+
+  const ligneEpr = (r,i) => `<tr class="${r.child===child?'me':''}">
+    <td class="num">${medaille(i)}</td>
+    <td>${esc(joueurNom(r.child))}${r.child===child?' <span class="me-tag">toi</span>':''}</td>
+    <td class="num"><b>${r.points != null ? r.points : '—'}</b></td>
+    <td class="num">${r.score}${r.total?' <span style="opacity:.55;font-weight:400;">/ '+r.total+'</span>':''}</td>
+    <td class="num">${dureeTxt(r.duration_s)}</td>
+    <td class="num">${r.created_at ? new Date(r.created_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'}) : '—'}</td>
+  </tr>`;
+  // ---- un tableau par épreuve ----
+  const epreuves = toutes.filter(q=>classFilter==='all' || classGroup(q)===classFilter)
+    .sort((a,b)=> quizTitle(a).localeCompare(quizTitle(b),'fr'));
+  const cartes = epreuves.map(qid=>{
+    const tous = Object.values(parEpreuve[qid]).sort(triPartie);
+    const chef = tous[0];
+    // top 10 — et si le joueur courant est plus loin, on ajoute quand même sa ligne à la fin
+    const tri = tous.slice(0,10);
+    const monRang = tous.findIndex(r=>r.child===child);
+    const horsTop = monRang >= 10 ? {r:tous[monRang], rang:monRang} : null;
+    return `<details class="epr"${epreuves.length<=6?' open':''}>
+      <summary><span style="flex:1;">${esc(quizTitle(qid))}</span>
+        <span style="font-size:12.5px;font-weight:600;opacity:.75;white-space:nowrap;">🥇 ${esc(joueurNom(chef.child))} · ${chef.score}</span></summary>
+      <div class="tbl-wrap"><table class="score-tbl">
+        <thead><tr><th>#</th><th>Joueur</th><th class="num">Points</th><th class="num">Bonnes rép.</th><th class="num">Temps</th><th class="num">Le</th></tr></thead>
+        <tbody>${tri.map((r,i)=>ligneEpr(r,i)).join('')}
+        ${horsTop ? `<tr><td colspan="6" style="text-align:center;opacity:.45;padding:2px;">⋯</td></tr>` + ligneEpr(horsTop.r, horsTop.rang) : ''}</tbody></table></div>
+      ${tous.length>10 ? `<div style="font-size:11.5px;color:#999;padding-bottom:10px;">Top 10 sur ${tous.length} joueurs.</div>` : ''}
+    </details>`;
   }).join('');
+
+  const joueurs = general.length;
   $('#main').innerHTML = `
     <div class="card"><h3>🏆 Le classement de la famille</h3>
-      <div style="font-size:13.5px;line-height:1.55;">Le meilleur score de chacun, épreuve par épreuve. ${joueurs.length} joueur${joueurs.length>1?'s':''} pour l'instant${isVisitor()?" — dont toi !":''} À toi de monter sur le podium : chaque jeu peut se rejouer autant de fois que tu veux.</div></div>
-    ${corps || '<div class="card"><div style="font-size:14px;">Personne n\'a encore joué. Sois le premier : va dans 🌍 Jeux géo ou 🎯 Quiz !</div></div>'}`;
+      <div style="font-size:13.5px;line-height:1.55;">Adam, Alix et tous les visiteurs qui ont mis leur prénom : ${joueurs} joueur${joueurs>1?'s':''} en lice. Chaque jeu peut se rejouer autant de fois que tu veux — c'est ton <b>meilleur</b> score qui compte.</div></div>
+    <div class="card"><h3>📊 Tableau général</h3>
+      ${tblGeneral || '<div style="font-size:14px;">Personne n\'a encore joué. Sois le premier : va dans 🌍 Jeux géo ou 🎯 Quiz !</div>'}</div>
+    ${toutes.length ? `<div class="card" style="padding:12px 14px;"><h3 style="margin-bottom:10px;">🎮 Épreuve par épreuve</h3>
+      <div class="gal-filter">${CLASS_FILTRES.map(f=>`<button class="${classFilter===f.k?'active':''}" onclick="setClassFilter('${f.k}')">${f.label}</button>`).join('')}</div>
+      <div style="font-size:12px;color:#888;">Touche une épreuve pour dérouler son top 10. Le classement se fait aux <b>points</b> : bonnes réponses + rapidité.</div></div>
+    ${cartes || '<div class="card"><div style="font-size:14px;">Aucune épreuve dans cette catégorie pour l\'instant.</div></div>'}` : ''}`;
 }
 
 /* ---------- profile ---------- */
@@ -461,12 +542,15 @@ function renderGallery(){
 let quizState = null;
 function renderQuizList(){
   $('#main').innerHTML = `
-    <div class="card"><h3>🧠 Les quiz du Grand Été</h3><div style="font-size:13px;color:#888;">Chronométré, noté, enregistré. Objectif : 7/10 minimum. Le grand quiz final pioche dans tout le mois !</div></div>
+    <div class="card"><h3>🧠 Les quiz du Grand Été</h3><div style="font-size:13px;color:#888;">Chronométré et noté en points : ${PTS_REGLE}</div></div>
     <div class="quiz-list">
       <button onclick="showTab('geo')" style="border-left-color:#3e9c7a;">🌍 LES JEUX DE GÉOGRAPHIE — cartes, villes, drapeaux… avec records !</button>
       ${Object.entries(D.quizzes).map(([id,qz])=>`<button onclick="startQuiz('${id}')">📝 ${esc(qz.title)}</button>`).join('')}
       <button onclick="startQuiz('final')" style="border-left-color:#c98f2f;">🏆 LE GRAND QUIZ FINAL — 20 questions sur tout le mois</button>
-      ${Object.entries(D.quizzes2||{}).map(([id,qz])=>`<button onclick="startQuiz('${id}')" style="border-left-color:#7a5ca8;">🎯 ${esc(qz.title)}</button>`).join('')}
+      ${Object.entries(D.quizzes2||{}).map(([id,qz])=>`<button onclick="renderQuizNiveaux('${id}')" style="border-left-color:#7a5ca8;">
+        <div style="font-weight:700;">${qz.icon||'🎯'} ${esc(qz.title)}</div>
+        <div style="font-size:12px;color:#888;">${esc(qz.sub||'')} · 3 niveaux</div>
+      </button>`).join('')}
     </div>
     <div class="card"><h3>📈 Tes derniers scores</h3><div id="score-history">Chargement…</div></div>`;
   loadScores();
@@ -475,10 +559,13 @@ function renderQuizList(){
 function renderQuizV(){
   $('#main').innerHTML = `
     <div class="card"><h3>🎯 Les quiz du Grand Été</h3>
-      <div style="font-size:13px;color:#888;">${isVisitor() ? "Quatre quiz pour te tester — les réponses changent de place à chaque partie. Tes scores sont enregistrés : retrouve-toi dans l\'onglet 🏆 Classement." : "Quatre quiz pour te tester — les réponses changent de place à chaque partie. Ton score s\'affiche à la fin (tu joues sans enregistrer)."}</div></div>
+      <div style="font-size:13px;color:#888;">${isVisitor() ? "Six quiz pour te tester — les réponses changent de place à chaque partie. Tes scores sont enregistrés : retrouve-toi dans l\'onglet 🏆 Classement." : "Six quiz pour te tester — les réponses changent de place à chaque partie. Ton score s\'affiche à la fin (tu joues sans enregistrer)."}</div></div>
     <div class="quiz-list">
       <button onclick="showTab('geo')" style="border-left-color:#3e9c7a;">🌍 LES JEUX DE GÉOGRAPHIE — cartes, villes, drapeaux, 3 niveaux chacun</button>
-      ${Object.entries(D.quizzes2||{}).map(([id,qz])=>`<button onclick="startQuiz('${id}')">🎯 ${esc(qz.title)}</button>`).join('')}
+      ${Object.entries(D.quizzes2||{}).map(([id,qz])=>`<button onclick="renderQuizNiveaux('${id}')">
+        <div style="font-weight:700;">${qz.icon||'🎯'} ${esc(qz.title)}</div>
+        <div style="font-size:12px;color:#888;">${esc(qz.sub||'')} · 🌱 facile · 🌿 moyen · 🌋 difficile</div>
+      </button>`).join('')}
     </div>`;
 }
 async function loadScores(){
@@ -489,6 +576,10 @@ async function loadScores(){
 }
 function quizTitle(id){
   if(id==='final') return 'Grand quiz final';
+  if(id.indexOf(':')>0){
+    const part = id.split(':'), qz = (D.quizzes2||{})[part[0]], nv = (D.niveauxQuiz||{})[part[1]];
+    if(qz) return (qz.icon?qz.icon+' ':'') + qz.title + (nv?' · '+nv.icon+' '+nv.label:'');
+  }
   if(id==='drapeaux_difficile') return '🌋 Drapeaux · Difficile';
   if(id==='drapeaux_expert') return '🔥 Drapeaux · Expert';
   if(/_n[23]$/.test(id)){
@@ -501,14 +592,76 @@ function quizTitle(id){
   if(D.quizzes2 && D.quizzes2[id]) return D.quizzes2[id].title.split('—')[0].trim();
   return D.quizzes[id] ? D.quizzes[id].title.split('—')[0].trim() : id;
 }
+/* ---- barème : chaque bonne réponse rapporte des points, et la vitesse en rapporte davantage ---- */
+const PTS_BONNE = 100;      // points d'une bonne réponse
+const PTS_BONUS_PCT = 5;    // bonus de rapidité, en % des points gagnés — PLAFONNÉ
+const PTS_T_RAPIDE = 2;     // <= 2 s par question en moyenne : bonus maximal
+const PTS_T_LENT = 15;      // >= 15 s par question en moyenne : aucun bonus
+/* Le bonus est volontairement plafonné à 5 % : c'est la valeur qui garantit, jusqu'à
+   20 questions, qu'une bonne réponse de plus l'emporte TOUJOURS sur de la rapidité
+   (19 bonnes réponses très rapides = 1995 pts, contre 2000 pour 20 lentes).
+   Les bonnes réponses passent d'abord, la rapidité ne fait que départager. */
+function tauxRapidite(secParQuestion){
+  const t = Math.max(PTS_T_RAPIDE, Math.min(PTS_T_LENT, secParQuestion));
+  return (PTS_T_LENT - t) / (PTS_T_LENT - PTS_T_RAPIDE);   // 1 = très rapide, 0 = lent
+}
+function calcPoints(bonnes, secTotalReponses, nbQuestions){
+  const base = bonnes * PTS_BONNE;
+  if(!base) return {base:0, bonus:0, pct:0, total:0};
+  const pct = Math.round(tauxRapidite(secTotalReponses / Math.max(1, nbQuestions)) * PTS_BONUS_PCT);
+  const bonus = Math.round(base * pct / 100);
+  return {base, bonus, pct, total: base + bonus};
+}
+function ptsMax(nbQuestions){ return Math.round(nbQuestions * PTS_BONNE * (1 + PTS_BONUS_PCT/100)); }
+/* règle du barème, en une phrase, pour l'afficher partout où c'est utile */
+const PTS_REGLE = `${PTS_BONNE} points par bonne réponse, plus un bonus de rapidité jusqu'à +${PTS_BONUS_PCT} % (bonus maximal à ${PTS_T_RAPIDE} s par question, plus rien au-delà de ${PTS_T_LENT} s). Une partie sans faute reste toujours devant une partie rapide avec une erreur.`;
+
 /* mélange les réponses d'une question à chaque partie (sinon la bonne réponse garde sa position d'origine) */
 function shuffleOpts(q){
   const idx = q.opts.map((_,i)=>i).sort(()=>Math.random()-0.5);
   return Object.assign({}, q, { opts: idx.map(i=>q.opts[i]), a: idx.indexOf(q.a) });
 }
+/* sous-menu : choix du niveau pour les quiz à niveaux (histoire, culture, maths, art) */
+function renderQuizNiveaux(id){
+  const qz = (D.quizzes2||{})[id];
+  if(!qz || !qz.niveaux){ startQuiz(id); return; }
+  const NV = D.niveauxQuiz || {};
+  const retour = (child==='visiteur' || isVisitor()) ? 'renderQuizV()' : 'renderQuizList()';
+  const niveaux = Object.keys(qz.niveaux);
+  $('#main').innerHTML = `
+    <div class="narrow">
+    <button class="back-btn" onclick="${retour}">← Tous les quiz</button>
+    <div class="card"><h3>${qz.icon||'🎯'} ${esc(qz.title)}</h3>
+      <div style="font-size:13px;color:#888;">${esc(qz.sub||'')} — choisis ton niveau. Chaque niveau garde son propre record, et les réponses changent de place à chaque partie.</div></div>
+    <div class="quiz-list">
+      ${niveaux.map(nv=>`<button onclick="startQuiz('${id}:${nv}')">
+        <div style="font-weight:700;">${(NV[nv]||{}).icon||''} ${esc((NV[nv]||{}).label||nv)}</div>
+        <div style="font-size:12px;color:#888;">${qz.niveaux[nv].length} questions${nv==='facile'?" — pour se lancer":nv==='moyen'?" — il faut réfléchir":" — pour les costauds"}</div>
+        ${child==='visiteur' ? '' : `<div style="font-size:12px;margin-top:4px;" id="qrec-${nv}">…</div>`}
+      </button>`).join('')}
+    </div>
+    </div>`;
+  if(child!=='visiteur') loadQuizRecords(id, niveaux);
+}
+async function loadQuizRecords(id, niveaux){
+  const qids = niveaux.map(nv=>id+':'+nv);
+  const {data} = await db.from('adalix_qcm_scores').select('child,quiz_id,score,total,duration_s,points').in('quiz_id', qids);
+  const rows = data||[];
+  const bestOf = (k,qid) => rows.filter(r=>r.child===k && r.quiz_id===qid).sort(triPartie)[0];
+  const fmt = r => r ? (r.points != null ? `${r.points} pts (${r.score}/${r.total||10})` : `${r.score}/${r.total||10}`) : '—';
+  niveaux.forEach(nv=>{
+    const el = $('#qrec-'+nv); if(!el) return;
+    const qid = id+':'+nv, mine = bestOf(child, qid);
+    const top = rows.filter(r=>r.child!==child && r.child!=='parent' && r.quiz_id===qid).sort(triPartie)[0];
+    el.innerHTML = `🏆 Toi : <b>${fmt(mine)}</b>`
+      + (top ? ` · meilleur : <b>${fmt(top)}</b> (${esc(joueurNom(top.child))})` : '')
+      + (top && (!mine || valPartie(top) > valPartie(mine)) ? ' 🔥' : '');
+  });
+}
 function quizExit(id){
   quizState = null;
-  if(child==='visiteur'){ if(id==='capitales') renderGeo(); else renderQuizV(); }
+  if(id && id.indexOf(':')>0){ renderQuizNiveaux(id.split(':')[0]); return; }
+  if(child==='visiteur' || isVisitor()){ if(id==='capitales') renderGeo(); else renderQuizV(); }
   else renderQuizList();
 }
 function startQuiz(id){
@@ -517,9 +670,17 @@ function startQuiz(id){
     // le grand final pioche dans les QCM hebdo (pas dans le quiz des capitales, qui a son propre match S1 vs S4)
     const all = Object.entries(D.quizzes).filter(([qid])=>qid.startsWith('s')).flatMap(([,q])=>q.questions);
     questions = all.sort(()=>Math.random()-0.5).slice(0,20);
-  } else { questions = (D.quizzes[id] || (D.quizzes2||{})[id]).questions; }
+  } else if(id.indexOf(':')>0){
+    const part = id.split(':'), qz = (D.quizzes2||{})[part[0]];
+    questions = qz && qz.niveaux && qz.niveaux[part[1]];
+    if(!questions){ toast('Quiz introuvable'); renderQuizV(); return; }
+  } else {
+    const qz = D.quizzes[id] || (D.quizzes2||{})[id];
+    if(!qz){ toast('Quiz introuvable'); return; }
+    questions = qz.questions || (qz.niveaux && qz.niveaux[Object.keys(qz.niveaux)[0]]);
+  }
   questions = questions.map(shuffleOpts);
-  quizState = { id, questions, idx:0, score:0, t0:Date.now(), answered:false };
+  quizState = { id, questions, idx:0, score:0, pts:0, tRep:0, t0:Date.now(), tq:Date.now(), answered:false, done:false };
   renderQuizQ();
 }
 function renderQuizQ(){
@@ -528,43 +689,90 @@ function renderQuizQ(){
     <div class="narrow">
     <button class="back-btn" onclick="quizExit('${s.id}')">← Quitter</button>
     <div class="card">
-      <div class="quiz-progress">Question ${s.idx+1} / ${s.questions.length} · Score : ${s.score}</div>
+      <div class="quiz-progress">Question ${s.idx+1} / ${s.questions.length} · ${s.score} bonne${s.score>1?'s':''} réponse${s.score>1?'s':''} · <b>${s.score*PTS_BONNE} pts</b></div>
       ${q.img?`<img class="quiz-img" src="${q.img}" alt="œuvre mystère">`:''}
       <div class="quiz-q">${esc(q.q)}</div>
       ${q.opts.map((o,i)=>`<button class="quiz-opt" id="opt-${i}" onclick="answerQ(${i})">${String.fromCharCode(65+i)}. ${esc(o)}</button>`).join('')}
+      <div id="quiz-apres"></div>
     </div>
     </div>`;
+  s.tq = Date.now();   // le chrono du bonus de rapidité démarre quand la question s'affiche
 }
 function answerQ(i){
   const s = quizState, q = s.questions[s.idx];
   if(s.answered) return; s.answered = true;
-  if(i===q.a){ s.score++; $('#opt-'+i).classList.add('correct'); }
+  const sec = Math.min(60, (Date.now() - (s.tq || Date.now())) / 1000);   // au-delà d'une minute, on ne compte plus
+  s.tRep += sec;
+  const bon = (i === q.a);
+  if(bon){ s.score++; $('#opt-'+i).classList.add('correct'); }
   else { $('#opt-'+i).classList.add('wrong'); $('#opt-'+q.a).classList.add('correct'); }
-  setTimeout(()=>{
-    s.idx++; s.answered=false;
-    if(s.idx < s.questions.length) renderQuizQ(); else finishQuiz();
-  }, 900);
+  document.querySelectorAll('.quiz-opt').forEach(b=>{ b.disabled = true; b.style.cursor = 'default'; });
+  const dernier = (s.idx + 1 >= s.questions.length);
+  const zone = $('#quiz-apres');
+  if(!zone){ setTimeout(quizSuivant, 900); return; }
+  zone.innerHTML = `
+    <div class="quiz-fb ${bon?'ok':'ko'}">
+      <div style="font-weight:800;">${bon
+        ? `✅ Bravo ! <b>+${PTS_BONNE} points</b> <span style="opacity:.75;font-weight:600;">en ${sec.toFixed(1)} s</span>`
+        : `❌ Raté — la bonne réponse était : <b>${esc(q.opts[q.a])}</b>`}</div>
+      ${q.exp ? `<div style="margin-top:7px;font-weight:500;line-height:1.5;">💡 ${esc(q.exp)}</div>` : ''}
+    </div>
+    <div class="actions" style="justify-content:flex-end;">
+      <button class="btn" onclick="quizSuivant()">${dernier ? 'Voir mon résultat →' : 'Question suivante →'}</button></div>`;
+  const btn = zone.querySelector('.btn'); if(btn) btn.focus();
+}
+function quizSuivant(){
+  const s = quizState; if(!s || s.done) return;
+  s.idx++; s.answered = false;
+  if(s.idx < s.questions.length) renderQuizQ(); else finishQuiz();
 }
 async function finishQuiz(){
   const s = quizState;
+  if(!s || s.done) return;   // double clic sur « Voir mon résultat » : on n'enregistre qu'une fois
+  s.done = true;
   const dur = Math.round((Date.now()-s.t0)/1000);
-  const pct = s.score/s.questions.length;
-  const badge = pct===1?'🥇 PARFAIT !':pct>=0.85?'🏅 Expert':pct>=0.7?'✅ Objectif atteint':'💪 Retente ta chance';
+  const n = s.questions.length;
+  const P = calcPoints(s.score, s.tRep, n);
+  s.pts = P.total;
+  const max = ptsMax(n);
+  const pct = s.score / n;
+  const badge = s.score===n && P.pct >= PTS_BONUS_PCT*0.7 ? '👑 SANS-FAUTE ÉCLAIR !'
+    : s.score===n ? '🥇 SANS FAUTE !'
+    : pct>=0.8 ? '🏅 Expert' : pct>=0.6 ? '✅ Objectif atteint' : '💪 Retente ta chance';
+  let mieux = '';
   if(child !== 'visiteur' && child !== 'parent'){   // 'visiteur' = anonyme : on n'enregistre rien
-    await db.from('adalix_qcm_scores').insert({child, quiz_id:s.id, score:s.score, total:s.questions.length, duration_s:dur});
+    await db.from('adalix_qcm_scores').insert({child, quiz_id:s.id, score:s.score, total:n, duration_s:dur, points:s.pts});
     if(!isVisitor()) checkBadges();
+    try {
+      const {data} = await db.from('adalix_qcm_scores').select('child,score,total,duration_s,points').eq('quiz_id', s.id);
+      const val = r => (r.points != null) ? r.points : r.score * PTS_BONNE;
+      const rows = (data||[]).filter(r=>r.child && r.child!=='parent');
+      const mesAvant = rows.filter(r=>r.child===child).map(val).sort((a,b)=>b-a);
+      if(mesAvant.length && s.pts >= mesAvant[0]) mieux = '🎉 Nouveau record personnel !';
+      const autres = rows.filter(r=>r.child!==child);
+      if(autres.length){
+        const chef = autres.reduce((a,b)=> val(b) > val(a) ? b : a);
+        if(s.pts > val(chef)) mieux += ` Tu prends la tête du classement, devant ${esc(joueurNom(chef.child))} ! 👑`;
+      }
+    } catch(e){}
   }
   $('#main').innerHTML = `
     <div class="narrow">
     <div class="card" style="text-align:center;">
       <h3>${esc(quizTitle(s.id))}</h3>
-      <div class="big-score">${s.score} / ${s.questions.length}</div>
+      <div class="big-score">${s.pts} <span style="font-size:20px;font-weight:600;opacity:.6;">pts</span></div>
       <div style="font-size:20px;">${badge}</div>
-      <div style="font-size:13px;color:#888;margin-top:6px;">⏱️ ${Math.floor(dur/60)}m${String(dur%60).padStart(2,'0')}s</div>
+      <div class="pts-detail">
+        <div><b>${s.score} / ${n}</b> bonnes réponses <span style="opacity:.6;">→ ${P.base} pts</span></div>
+        <div>⚡ rapidité : <b>${(s.tRep/n).toFixed(1)} s</b> par question <span style="opacity:.6;">→ bonus +${P.pct} % = +${P.bonus} pts</span></div>
+        <div style="opacity:.6;">⏱️ ${Math.floor(dur/60)}m${String(dur%60).padStart(2,'0')}s en tout · maximum possible : ${max} pts</div>
+      </div>
+      ${mieux?`<div style="margin-top:10px;font-weight:800;color:var(--accent2);">${mieux}</div>`:''}
       <div class="actions" style="justify-content:center;">
         <button class="btn" onclick="startQuiz('${s.id}')">Rejouer</button>
         <button class="btn ghost" onclick="quizExit('${s.id}')">Retour</button>
       </div>
+      <div style="font-size:11.5px;color:#999;margin-top:12px;line-height:1.5;">${PTS_REGLE}</div>
     </div>
     </div>`;
 }
@@ -920,24 +1128,22 @@ async function renderFlagsMenu(){
     </div>`;
   if(child==='visiteur') return;
   const qids = Object.values(FLAG_LEVELS).map(c=>c.qid);
-  const {data} = await db.from('adalix_qcm_scores').select('child,quiz_id,score,duration_s').in('quiz_id', qids);
+  const {data} = await db.from('adalix_qcm_scores').select('child,quiz_id,score,duration_s,points').in('quiz_id', qids);
   const rows = data||[];
   const other = child==='adam' ? 'alix' : 'adam';
   const otherName = other==='adam' ? 'Adam' : 'Alix';
-  const bestOf = (k, qid) => rows.filter(r=>r.child===k && r.quiz_id===qid)
-    .sort((a,b)=> b.score-a.score || (a.duration_s||1e9)-(b.duration_s||1e9))[0];
+  const bestOf = (k, qid) => rows.filter(r=>r.child===k && r.quiz_id===qid).sort(triPartie)[0];
   Object.entries(FLAG_LEVELS).forEach(([lv,c])=>{
     const el = $('#frec-'+lv); if(!el) return;
     const mine = bestOf(child, c.qid), theirs = bestOf(other, c.qid);
-    const fmt = r => r ? `${r.score}/20` : '—';
+    const fmt = r => r ? (r.points != null ? `${r.points} pts (${r.score}/20)` : `${r.score}/20`) : '—';
     if(isVisitor()){
-      const top = rows.filter(r=>r.child!==child && r.quiz_id===c.qid)
-        .sort((a,b)=> b.score-a.score || (a.duration_s||1e9)-(b.duration_s||1e9))[0];
+      const top = rows.filter(r=>r.child!==child && r.quiz_id===c.qid).sort(triPartie)[0];
       el.innerHTML = `🏆 Toi : <b>${fmt(mine)}</b>` + (top ? ` · meilleur : <b>${fmt(top)}</b> (${esc(joueurNom(top.child))})` : '')
-        + (top && (!mine || top.score > mine.score) ? ' 🔥' : '');
+        + (top && (!mine || valPartie(top) > valPartie(mine)) ? ' 🔥' : '');
       return;
     }
-    el.innerHTML = `🏆 Toi : <b>${fmt(mine)}</b> · ${otherName} : <b>${fmt(theirs)}</b>${theirs && (!mine || theirs.score > mine.score) ? ' 🔥' : ''}`;
+    el.innerHTML = `🏆 Toi : <b>${fmt(mine)}</b> · ${otherName} : <b>${fmt(theirs)}</b>${theirs && (!mine || valPartie(theirs) > valPartie(mine)) ? ' 🔥' : ''}`;
   });
 }
 function flagQuestions(level){
@@ -973,7 +1179,7 @@ function flagQuestions(level){
 function startFlagsGame(level){
   level = FLAG_LEVELS[level] ? level : 'facile';
   const cfg = FLAG_LEVELS[level];
-  flagGame = { qs: flagQuestions(level), idx:0, score:0, locked:false, t0:Date.now(), level, qid:cfg.qid, label:cfg.label };
+  flagGame = { qs: flagQuestions(level), idx:0, score:0, tRep:0, locked:false, t0:Date.now(), tq:Date.now(), level, qid:cfg.qid, label:cfg.label };
   renderFlagGame();
 }
 function renderFlagGame(){
@@ -983,7 +1189,7 @@ function renderFlagGame(){
     <div class="narrow">
     <button class="back-btn" onclick="flagGame=null;renderFlagsMenu()">← Quitter</button>
     <div class="card">
-      <div class="quiz-progress">${FLAG_LEVELS[g.level].icon} ${esc(FLAG_LEVELS[g.level].label)} · Drapeau ${g.idx+1} / ${g.qs.length} · Score : ${g.score}</div>
+      <div class="quiz-progress">${FLAG_LEVELS[g.level].icon} ${esc(FLAG_LEVELS[g.level].label)} · Drapeau ${g.idx+1} / ${g.qs.length} · ${g.score} trouvé${g.score>1?'s':''} · <b>${g.score*PTS_BONNE} pts</b></div>
       <div class="quiz-q">🚩 Quel est le drapeau ${flagArticle(q.name)}<span style="color:var(--accent2);">${esc(q.name)}</span> ?</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         ${q.opts.map(([n,iso],i)=>`<button id="flag-${i}" onclick="flagClick(${i})" style="border:2.5px solid #ccd4e0;border-radius:12px;background:white;padding:10px;cursor:pointer;">
@@ -998,13 +1204,14 @@ function flagClick(i){
   g.locked = true;
   const q = g.qs[g.idx];
   const ok = q.opts[i][1] === q.iso;
+  g.tRep += Math.min(60, (Date.now() - (g.tq||Date.now()))/1000);
   if(ok) g.score++;
   const el = $('#flag-'+i); if(el) el.style.borderColor = ok ? '#3e9c7a' : '#c9636a';
   const goodIdx = q.opts.findIndex(o=>o[1]===q.iso);
   const good = $('#flag-'+goodIdx); if(good) good.style.borderColor = '#3e9c7a';
   setTimeout(()=>{
     if(!flagGame) return;
-    flagGame.locked = false; flagGame.idx++;
+    flagGame.locked = false; flagGame.idx++; flagGame.tq = Date.now();
     if(flagGame.idx >= flagGame.qs.length){ finishFlagGame(); } else { renderFlagGame(); }
   }, 900);
 }
@@ -1012,33 +1219,36 @@ async function finishFlagGame(){
   const g = flagGame; if(!g) return;
   const dur = Math.round((Date.now()-g.t0)/1000);
   flagGame = null;
-  await geoEndScreen(g.label, g.qid, g.score, g.qs.length, dur, `startFlagsGame('${g.level}')`);
+  await geoEndScreen(g.label, g.qid, g.score, g.qs.length, dur, `startFlagsGame('${g.level}')`, calcPoints(g.score, g.tRep, g.qs.length).total);
 }
 
 /* ---- écran de fin commun aux jeux géo ---- */
-async function geoEndScreen(label, qid, score, total, dur, replay){
+async function geoEndScreen(label, qid, score, total, dur, replay, pts){
   const pct = score/total;
   const badge = pct>=0.9?'🥇 Champion(ne) !':pct>=0.7?'🏅 Très solide !':pct>=0.5?'✅ Bonne base — rejoue pour battre ton record':'💪 Ça se dompte en rejouant !';
   let recordMsg = '';
   if(child !== 'visiteur' && child !== 'parent'){   // 'visiteur' = anonyme : on n'enregistre rien
-    await db.from('adalix_qcm_scores').insert({child, quiz_id:qid, score, total, duration_s:dur});
+    await db.from('adalix_qcm_scores').insert(Object.assign({child, quiz_id:qid, score, total, duration_s:dur}, pts!=null?{points:pts}:{}));
     if(!isVisitor()) checkBadges();
     // record battu ?
     try {
-      const {data} = await db.from('adalix_qcm_scores').select('child,score').eq('quiz_id',qid);
-      const rows = data||[];
-      const mine = rows.filter(r=>r.child===child).map(r=>r.score);
+      const {data} = await db.from('adalix_qcm_scores').select('child,score,points').eq('quiz_id',qid);
+      const rows = (data||[]).filter(r=>r.child && r.child!=='parent');
+      // on compare aux points quand la partie en donne (drapeaux), au score sinon (cartes, villes)
+      const val = pts != null ? valPartie : (r=>r.score);
+      const moi = pts != null ? pts : score;
+      const mine = rows.filter(r=>r.child===child).map(val);
       const myBest = mine.length ? Math.max(...mine) : 0;
-      if(score >= myBest && score > 0) recordMsg = '🎉 Nouveau record personnel !';
+      if(moi >= myBest && moi > 0) recordMsg = '🎉 Nouveau record personnel !';
       if(isVisitor()){
         // le visiteur se compare à toute la famille
         const autres = rows.filter(r=>r.child !== child);
-        const meilleur = autres.length ? autres.reduce((a,b)=> b.score > a.score ? b : a) : null;
-        if(meilleur && score > meilleur.score) recordMsg += ` Et tu prends la tête du classement, devant ${joueurNom(meilleur.child)} ! 👑`;
+        const meilleur = autres.length ? autres.reduce((a,b)=> val(b) > val(a) ? b : a) : null;
+        if(meilleur && moi > val(meilleur)) recordMsg += ` Et tu prends la tête du classement, devant ${joueurNom(meilleur.child)} ! 👑`;
       } else {
         const other = child==='adam'?'alix':'adam';
-        const otherBest = Math.max(0, ...rows.filter(r=>r.child===other).map(r=>r.score));
-        if(otherBest && score > otherBest) recordMsg += ` Et tu passes devant ${other==='adam'?'Adam':'Alix'} ! 👑`;
+        const otherBest = Math.max(0, ...rows.filter(r=>r.child===other).map(val));
+        if(otherBest && moi > otherBest) recordMsg += ` Et tu passes devant ${other==='adam'?'Adam':'Alix'} ! 👑`;
       }
     } catch(e){}
   }
@@ -1046,10 +1256,16 @@ async function geoEndScreen(label, qid, score, total, dur, replay){
     <div class="narrow">
     <div class="card" style="text-align:center;">
       <h3>${esc(label)}</h3>
-      <div class="big-score">${score} / ${total}</div>
+      <div class="big-score">${pts != null ? `${pts} <span style="font-size:20px;font-weight:600;opacity:.6;">pts</span>` : `${score} / ${total}`}</div>
       <div style="font-size:20px;">${badge}</div>
       ${recordMsg?`<div style="font-size:15px;color:#b06a1a;font-weight:700;margin-top:6px;">${recordMsg}</div>`:''}
-      <div style="font-size:13px;color:#888;margin-top:6px;">⏱️ ${Math.floor(dur/60)}m${String(dur%60).padStart(2,'0')}s</div>
+      ${pts != null
+        ? `<div class="pts-detail">
+             <div><b>${score} / ${total}</b> bonnes réponses <span style="opacity:.6;">→ ${score*PTS_BONNE} pts</span></div>
+             <div>⚡ bonus de rapidité <span style="opacity:.6;">→ +${pts - score*PTS_BONNE} pts</span></div>
+             <div style="opacity:.6;">⏱️ ${Math.floor(dur/60)}m${String(dur%60).padStart(2,'0')}s en tout · maximum : ${ptsMax(total)} pts</div>
+           </div>`
+        : `<div style="font-size:13px;color:#888;margin-top:6px;">⏱️ ${Math.floor(dur/60)}m${String(dur%60).padStart(2,'0')}s</div>`}
       <div class="actions" style="justify-content:center;">
         <button class="btn" onclick="${replay}">Rejouer</button>
         <button class="btn ghost" onclick="renderGeo()">Tous les jeux</button>
