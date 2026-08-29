@@ -115,14 +115,43 @@ function startVisitor(anonyme){
   showTab('geo');
 }
 
+/* Enregistre une partie — et le DIT quand ça échoue. Une erreur silencieuse ici a fait
+   perdre toutes les parties des visiteurs pendant plusieurs jours : le message compte
+   autant que l'enregistrement. */
+async function enregistrerPartie(ligne){
+  try {
+    const { error } = await db.from('adalix_qcm_scores').insert(ligne);
+    if(error){
+      console.error('score non enregistré', error, ligne);
+      toast("⚠️ Score non enregistré — préviens papa (" + (error.message||'erreur inconnue').slice(0,60) + ")");
+      return false;
+    }
+    return true;
+  } catch(e){
+    console.error('score non enregistré', e, ligne);
+    toast("⚠️ Score non enregistré — vérifie ta connexion.");
+    return false;
+  }
+}
+
 /* ---------- classement de la famille ---------- */
 let classRows = null, classFilter = 'all';
 const CLASS_FILTRES = [
   {k:'all',   label:'Tout'},
   {k:'quiz',  label:'🎯 Quiz'},
   {k:'geo',   label:'🌍 Géo'},
-  {k:'autre', label:'📝 Autres'},
 ];
+/* Le classement ne retient que les épreuves auxquelles TOUT LE MONDE peut jouer,
+   c'est-à-dire celles du mode visiteur : jeux géo (tous niveaux), drapeaux, et les
+   quiz à niveaux. Le grand quiz final et les QCM de la semaine, réservés à Adam et
+   Alix dans leur programme, en sont exclus — sinon la comparaison n'aurait pas de sens. */
+function epreuveVisiteur(qid){
+  if(!qid) return false;
+  if(qid.indexOf(':') > 0) return !!(D.quizzes2 && D.quizzes2[qid.split(':')[0]]);
+  if(/^drapeaux(_difficile|_expert|_legendaire)?$/.test(qid)) return true;
+  const base = qid.replace(/_n[234]$/, '');
+  return typeof GEO_QIDS !== 'undefined' && GEO_QIDS.indexOf(base) >= 0;
+}
 function classGroup(qid){
   if(qid.indexOf(':')>0) return 'quiz';
   if(/^drapeaux/.test(qid)) return 'geo';
@@ -142,7 +171,7 @@ function triPartie(a, b){ return valPartie(b) - valPartie(a) || (a.duration_s||1
 async function renderClassement(){
   $('#main').innerHTML = '<div class="card">Chargement du classement…</div>';
   const {data} = await db.from('adalix_qcm_scores').select('child,quiz_id,score,total,duration_s,points,created_at');
-  classRows = (data||[]).filter(r=>r.child && r.child!=='parent' && r.child!=='visiteur');
+  classRows = (data||[]).filter(r=>r.child && r.child!=='parent' && r.child!=='visiteur' && epreuveVisiteur(r.quiz_id));
   drawClassement();
 }
 function setClassFilter(f){ classFilter = f; drawClassement(); }
@@ -221,7 +250,7 @@ function drawClassement(){
   const joueurs = general.length;
   $('#main').innerHTML = `
     <div class="card"><h3>🏆 Le classement de la famille</h3>
-      <div style="font-size:13.5px;line-height:1.55;">Adam, Alix et tous les visiteurs qui ont mis leur prénom : ${joueurs} joueur${joueurs>1?'s':''} en lice. Chaque jeu peut se rejouer autant de fois que tu veux — c'est ton <b>meilleur</b> score qui compte.</div></div>
+      <div style="font-size:13.5px;line-height:1.55;">Tout le monde joue dans le même classement : Adam, Alix et chaque visiteur qui a mis son prénom — ${joueurs} joueur${joueurs>1?'s':''} en lice. Seules comptent les épreuves ouvertes à tous : les jeux de géographie, les drapeaux et les quiz. Chaque jeu se rejoue autant de fois que tu veux, c'est ton <b>meilleur</b> score qui est retenu.</div></div>
     <div class="card"><h3>📊 Tableau général</h3>
       ${tblGeneral || '<div style="font-size:14px;">Personne n\'a encore joué. Sois le premier : va dans 🌍 Jeux géo ou 🎯 Quiz !</div>'}</div>
     ${toutes.length ? `<div class="card" style="padding:12px 14px;"><h3 style="margin-bottom:10px;">🎮 Épreuve par épreuve</h3>
@@ -746,7 +775,7 @@ async function finishQuiz(){
     : pct>=0.8 ? '🏅 Expert' : pct>=0.6 ? '✅ Objectif atteint' : '💪 Retente ta chance';
   let mieux = '';
   if(child !== 'visiteur' && child !== 'parent'){   // 'visiteur' = anonyme : on n'enregistre rien
-    await db.from('adalix_qcm_scores').insert({child, quiz_id:s.id, score:s.score, total:n, duration_s:dur, points:s.pts});
+    await enregistrerPartie({child, quiz_id:s.id, score:s.score, total:n, duration_s:dur, points:s.pts});
     if(!isVisitor()) checkBadges();
     try {
       const {data} = await db.from('adalix_qcm_scores').select('child,score,total,duration_s,points').eq('quiz_id', s.id);
@@ -1269,7 +1298,7 @@ async function geoEndScreen(label, qid, score, total, dur, replay, pts){
   const badge = pct>=0.9?'🥇 Champion(ne) !':pct>=0.7?'🏅 Très solide !':pct>=0.5?'✅ Bonne base — rejoue pour battre ton record':'💪 Ça se dompte en rejouant !';
   let recordMsg = '';
   if(child !== 'visiteur' && child !== 'parent'){   // 'visiteur' = anonyme : on n'enregistre rien
-    await db.from('adalix_qcm_scores').insert(Object.assign({child, quiz_id:qid, score, total, duration_s:dur}, pts!=null?{points:pts}:{}));
+    await enregistrerPartie(Object.assign({child, quiz_id:qid, score, total, duration_s:dur}, pts!=null?{points:pts}:{}));
     if(!isVisitor()) checkBadges();
     // record battu ?
     try {
