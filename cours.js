@@ -729,6 +729,16 @@ async function drawRevisionFin() {
 }
 function quitterRevision() { const id = revState && revState.coursId; revState = null; if (id) openCours(id); else renderCours(); }
 
+/* ---------- pastille sur l'écran des deux espaces ----------
+   Les révisions espacées ne servent à rien si l'enfant ne pense pas à y revenir :
+   le nombre de notions dues s'affiche dès l'écran d'accueil, sur la carte Tuteur. */
+async function coursBadgeEspace() {
+  const el = $('#espace-tuteur-info'); if (!el) return;
+  const { data } = await db.from('adalix_cours_notions').select('id').eq('child', child).lte('due', todayStr());
+  const n = (data || []).length;
+  if (n) el.innerHTML = `<div class="ec-pastille">🔁 ${n} notion${n > 1 ? 's' : ''} à revoir</div>`;
+}
+
 /* ---------- carte du tableau de bord parent ---------- */
 async function fillCoursParentCard() {
   const el = $('#cours-parent-card'); if (!el) return;

@@ -269,14 +269,12 @@ function selectProfile(c){
   $('#hdr-who').textContent = c === 'adam' ? '🐉 Adam' : '🦊 Alix';
   localStorage.setItem('adalix_child', c);
   if(dbOffline) setTimeout(()=>toast("⚠️ Connexion à la base impossible — rien ne sera enregistré aujourd'hui."), 900);
-  buildNav(c === 'adam'
-    ? ['programme','cours','quiz','geo','orientation','les100','checklist','projet','fabrique','chat','guide']
-    : ['programme','cours','quiz','geo','les100','checklist','projet','fabrique','chat','guide']);
+  $('#hdr-home').classList.remove('hidden');
   assistantName = null;
   fabMsgs = []; fabCode = ''; fabUrl = ''; fabLoaded = false; fabStep = 0;
   loadUnlocked(); refreshStreak(); loadAssistantName();
   loadBadges().then(checkBadges);
-  showTab('programme');
+  showEspaces();
 }
 async function loadAssistantName(){
   const {data} = await db.from('adalix_assistant').select('*').eq('child',child).maybeSingle();
@@ -322,7 +320,68 @@ const THEME_ICONS = {
 };
 function tabIcon(t){ return (THEME_ICONS[child] && THEME_ICONS[child][t]) || TABS[t].icon; }
 function buildNav(tabs){
+  const nav = document.querySelector('nav');
+  if(nav) nav.classList.remove('hidden');   // l'écran des espaces l'avait masquée
   $('#navbar').innerHTML = tabs.map(t=>`<button id="nav-${t}" onclick="showTab('${t}')">${tabIcon(t)} ${TABS[t].label}</button>`).join('');
+}
+
+/* ---------- les deux espaces ----------
+   « Le Grand Été » est un programme daté ; le tuteur accompagne l'année scolaire.
+   Les onze onglets dans une seule barre devenaient illisibles, surtout sur téléphone :
+   chaque univers a désormais la sienne, courte, et on passe de l'un à l'autre par 🏠. */
+let espace = null;
+const ESPACES = {
+  ete: {
+    emoji:'🌞', titre:'Le Grand Été',
+    sous:"Le programme des 4 semaines, les quiz, les jeux géo, les 100 personnalités, ton projet et la Fabrique.",
+    tabs: c => c === 'adam'
+      ? ['programme','quiz','geo','orientation','les100','projet','fabrique','guide']
+      : ['programme','quiz','geo','les100','projet','fabrique','guide'],
+  },
+  tuteur: {
+    emoji:'🎓', titre:'Tuteur',
+    sous:"Tes cours de l'année : tu les photographies, ils reviennent au propre, et on les révise ensemble. Ta checklist et ton assistant sont ici aussi.",
+    tabs: () => ['cours','checklist','chat'],
+  },
+};
+/* l'en-tête rappelle en permanence dans quel espace on se trouve */
+function majEnTete(){
+  const base = child === 'adam' ? '🐉 Adam' : '🦊 Alix';
+  const e = espace && ESPACES[espace];
+  $('#hdr-who').textContent = e ? `${base} · ${e.emoji} ${e.titre}` : base;
+}
+function showEspaces(){
+  espace = null;
+  majEnTete();
+  const nav = document.querySelector('nav');
+  if(nav) nav.classList.add('hidden');
+  const prenom = child === 'adam' ? 'Adam' : 'Alix';
+  $('#main').innerHTML = `<div class="narrow">
+    <div class="espaces-titre">Salut ${prenom} 👋</div>
+    <div class="espaces-sous">Où va-t-on aujourd'hui ?</div>
+    ${Object.keys(ESPACES).map(k=>{
+      const e = ESPACES[k];
+      return `<div class="espace-card" onclick="enterEspace('${k}')">
+        <div class="ec-emoji">${e.emoji}</div>
+        <div>
+          <div class="ec-titre">${e.titre}</div>
+          <div class="ec-sous">${e.sous}</div>
+          ${k === 'tuteur' ? '<div id="espace-tuteur-info"></div>' : ''}
+        </div>
+        <div class="ec-fleche">›</div>
+      </div>`;
+    }).join('')}
+  </div>`;
+  coursBadgeEspace();   // cours.js : annonce les notions à revoir, s'il y en a
+}
+function enterEspace(k){
+  const e = ESPACES[k];
+  if(!e) return;
+  espace = k;
+  majEnTete();
+  const tabs = e.tabs(child);
+  buildNav(tabs);
+  showTab(tabs[0]);
 }
 function showTab(t){
   tab = t;

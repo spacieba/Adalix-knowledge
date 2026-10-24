@@ -373,6 +373,31 @@ body.theme-alix .imgchip.sel { background:linear-gradient(135deg, #e8798f, #f0a3
 .profile-card .avatar { transition:transform .25s; }
 .profile-card:hover .avatar { transform:scale(1.15) rotate(-4deg); }
 
+/* ---- Les deux espaces : Le Grand Été / Tuteur ---- */
+.espaces-titre { font-family:var(--font-display); font-size:22px; font-weight:800; color:var(--accent2);
+  margin:6px 0 2px; }
+body.theme-adam .espaces-titre { color:#c9962c; }
+.espaces-sous { font-size:13.5px; opacity:.7; margin-bottom:16px; }
+.espace-card { display:flex; align-items:center; gap:18px; background:var(--card-bg); color:var(--card-text);
+  border:1px solid var(--card-border); border-left:6px solid var(--accent); border-radius:var(--radius-card);
+  padding:22px 20px; margin-bottom:14px; box-shadow:var(--shadow); cursor:pointer;
+  transition:transform .15s, box-shadow .15s; animation: fadeUp .3s ease both; }
+.espace-card:hover { transform:translateY(-3px); box-shadow:0 10px 26px rgba(0,0,0,.16); }
+.espace-card:active { transform:scale(.99); }
+.espace-card .ec-emoji { font-size:46px; line-height:1; flex-shrink:0; }
+.espace-card .ec-titre { font-family:var(--font-display); font-size:22px; font-weight:800; color:var(--accent2); }
+body.theme-adam .espace-card .ec-titre { color:#c9962c; }
+.espace-card .ec-sous { font-size:13.5px; opacity:.72; margin-top:3px; line-height:1.5; }
+.espace-card .ec-fleche { margin-left:auto; font-size:30px; opacity:.3; flex-shrink:0; }
+.espace-card .ec-pastille { display:inline-block; margin-top:7px; font-size:12.5px; font-weight:700;
+  background:var(--accent); color:#fff; border-radius:var(--radius-chip); padding:4px 11px; }
+@media (max-width:640px){
+  .espace-card { padding:18px 15px; gap:14px; }
+  .espace-card .ec-emoji { font-size:38px; }
+  .espace-card .ec-titre { font-size:19px; }
+  .espace-card .ec-fleche { font-size:24px; }
+}
+
 /* ---- Mes cours : le cours mis au propre ---- */
 .cours-md { font-size:14.5px; line-height:1.65; }
 .cours-md h4 { font-family:var(--font-display); color:var(--accent2); font-size:17px; margin:18px 0 6px;
@@ -430,6 +455,7 @@ body.theme-adam .cours-md b { color:#8a6a1e; }
       <div class="who" id="hdr-who"></div>
       <div class="streak" id="hdr-streak">🔥 0</div>
       <button class="streak" id="hdr-badges" onclick="openBadges()">🎖️ 0</button>
+      <button id="hdr-home" class="hidden" onclick="showEspaces()" title="Revenir au choix des espaces">🏠</button>
       <button onclick="logout()">changer</button>
     </div>
   </header>

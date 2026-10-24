@@ -16,7 +16,7 @@ api/image.js       fonction serverless Vercel — proxy vers l'API Runware (gén
 api/cours.js       fonction serverless Vercel — module des cours (transcription, exercices, correction, interro)
 manifest.json      installation sur l'écran d'accueil (PWA)
 sw.js              service worker minimal, sans cache — ne sert qu'à rendre l'app installable
-tests/             tests Node sans dépendance (voir tests/README.md)
+tests/             tests Node sans dépendance, 257 au total (voir tests/README.md)
 ```
 
 Pas de build : c'est du HTML/JS statique + des fonctions serverless Node. Vercel déploie ce dossier tel quel.
@@ -45,6 +45,24 @@ Clé publique déjà en dur dans `app.js` (`SUPA_URL` / `SUPA_KEY`) — c'est la
 ## Sécurité
 
 Le fichier `tokens adalix_knowledge.txt` dans ce dossier contient des clés en clair (Runware, Supabase, Vercel) — à ne jamais pousser sur un repo public. Si ce dossier est versionné avec git, pense à l'ajouter au `.gitignore` ou à le supprimer une fois les clés bien enregistrées ailleurs (gestionnaire de mots de passe).
+
+## Les deux espaces
+
+Quand Adam ou Alix choisit son profil, l'app ne montre plus une barre de onze onglets
+mais deux cartes :
+
+- **🌞 Le Grand Été** — le programme des 4 semaines, les quiz, les jeux géo, les 100
+  personnalités, le projet du mois, la Fabrique, le guide, et l'orientation pour Adam.
+- **🎓 Tuteur** — l'année scolaire : Mes cours, la checklist et l'assistant.
+
+Un onglet n'appartient qu'à un seul espace, sinon les deux barres redeviennent identiques.
+Le bouton 🏠 de l'en-tête ramène aux deux cartes depuis n'importe où, et l'en-tête rappelle
+en permanence l'espace courant (« 🦊 Alix · 🎓 Tuteur »). Tout se règle dans `ESPACES`
+(app.js) : une liste d'onglets par espace, dérivée de l'enfant. `tests/espaces.test.mjs`
+vérifie qu'aucun onglet n'est en double, perdu, ou absent de la table de routage.
+
+La checklist a déménagé dans Tuteur mais son contenu est resté celui de l'été
+(`D.checklist` dans data.js) — à revoir si elle doit cadrer l'année scolaire.
 
 ## Module « Mes cours »
 
