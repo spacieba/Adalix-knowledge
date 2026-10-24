@@ -270,8 +270,8 @@ function selectProfile(c){
   localStorage.setItem('adalix_child', c);
   if(dbOffline) setTimeout(()=>toast("⚠️ Connexion à la base impossible — rien ne sera enregistré aujourd'hui."), 900);
   buildNav(c === 'adam'
-    ? ['programme','quiz','geo','orientation','les100','checklist','projet','fabrique','chat','guide']
-    : ['programme','quiz','geo','les100','checklist','projet','fabrique','chat','guide']);
+    ? ['programme','cours','quiz','geo','orientation','les100','checklist','projet','fabrique','chat','guide']
+    : ['programme','cours','quiz','geo','les100','checklist','projet','fabrique','chat','guide']);
   assistantName = null;
   fabMsgs = []; fabCode = ''; fabUrl = ''; fabLoaded = false; fabStep = 0;
   loadUnlocked(); refreshStreak(); loadAssistantName();
@@ -313,11 +313,12 @@ const TABS = {
   projet:{icon:'💻',label:'Mon projet'}, fabrique:{icon:'🏭',label:'Fabrique'},
   chat:{icon:'💬',label:'Mon assistant'}, guide:{icon:'📖',label:'Guide'}, dashboard:{icon:'📊',label:'Tableau de bord'},
   quizv:{icon:'🎯',label:'Quiz'}, orientation:{icon:'🧭',label:'Orientation'}, classement:{icon:'🏆',label:'Classement'},
+  cours:{icon:'📸',label:'Mes cours'},
 };
 // icônes réhabillées selon le profil — mêmes intitulés, juste l'esprit visuel qui change
 const THEME_ICONS = {
-  adam: {programme:'🗺️', quiz:'🐲', geo:'🌍', les100:'🏆', checklist:'📜', projet:'⚒️', fabrique:'🏭', chat:'🔮', guide:'🧭'},
-  alix: {programme:'🌿', quiz:'🦊', geo:'🌍', les100:'🦋', checklist:'🐣', projet:'🎨', fabrique:'🏭', chat:'🐰', guide:'📖'},
+  adam: {programme:'🗺️', quiz:'🐲', geo:'🌍', les100:'🏆', checklist:'📜', projet:'⚒️', fabrique:'🏭', chat:'🔮', guide:'🧭', cours:'📜'},
+  alix: {programme:'🌿', quiz:'🦊', geo:'🌍', les100:'🦋', checklist:'🐣', projet:'🎨', fabrique:'🏭', chat:'🐰', guide:'📖', cours:'📒'},
 };
 function tabIcon(t){ return (THEME_ICONS[child] && THEME_ICONS[child][t]) || TABS[t].icon; }
 function buildNav(tabs){
@@ -327,7 +328,7 @@ function showTab(t){
   tab = t;
   document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
   const nb = $('#nav-'+t); if(nb) nb.classList.add('active');
-  ({programme:renderProgramme, quiz:renderQuizList, quizv:renderQuizV, classement:renderClassement, orientation:renderOrientation, geo:renderGeo, les100:renderGallery, checklist:renderChecklist, projet:renderProjet, fabrique:renderFabrique, chat:renderChat, guide:renderGuide, dashboard:renderDashboard}[t])();
+  ({programme:renderProgramme, cours:renderCours, quiz:renderQuizList, quizv:renderQuizV, classement:renderClassement, orientation:renderOrientation, geo:renderGeo, les100:renderGallery, checklist:renderChecklist, projet:renderProjet, fabrique:renderFabrique, chat:renderChat, guide:renderGuide, dashboard:renderDashboard}[t])();
 }
 
 /* ---------- guide ---------- */
@@ -2513,8 +2514,10 @@ async function renderDashboard(){
     <div class="card"><h3>💬 Leurs conversations</h3>
       <div style="font-size:12px;color:#888;margin-bottom:4px;">${kids.map(k=>`${kidName(k)} a baptisé son assistant : <b>${esc(assistantOf(k)||'pas encore choisi')}</b>`).join(' · ')}</div>
       ${CH.slice(0,30).reverse().map(r=>`<div style="font-size:13px;padding:4px 0;border-bottom:1px solid #f0f2f6;"><b>${kidName(r.child)}${r.role==='assistant'?` ← ${esc(assistantOf(r.child)||'assistant')}`:''} :</b> ${esc(r.content.slice(0,180))}${r.content.length>180?'…':''}</div>`).join('')||'<span style="color:#999;font-size:13px;">Aucune conversation encore</span>'}</div>
+    <div id="cours-parent-card"></div>
     ${renderAdminPanel()}
   </div>`;
+  fillCoursParentCard();   // module des cours (cours.js) — chargé à part pour ne pas retarder le reste
 }
 
 /* ---------- profils enfants pour l'assistant (parent) ---------- */

@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Adalix Knowledge — Le Grand Été</title>
+<!-- installable sur l'écran d'accueil : l'app s'ouvre alors en plein écran, comme un vrai programme -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2b4c7e">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Adalix">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=MedievalSharp&family=Baloo+2:wght@500;700;800&family=Quicksand:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -364,6 +372,41 @@ body.theme-alix .imgchip.sel { background:linear-gradient(135deg, #e8798f, #f0a3
 /* cartes de profil à l'accueil : petite vie */
 .profile-card .avatar { transition:transform .25s; }
 .profile-card:hover .avatar { transform:scale(1.15) rotate(-4deg); }
+
+/* ---- Mes cours : le cours mis au propre ---- */
+.cours-md { font-size:14.5px; line-height:1.65; }
+.cours-md h4 { font-family:var(--font-display); color:var(--accent2); font-size:17px; margin:18px 0 6px;
+  padding-bottom:4px; border-bottom:2px solid rgba(0,0,0,.08); }
+.cours-md h5 { font-family:var(--font-display); font-size:15px; margin:14px 0 4px; opacity:.92; }
+body.theme-adam .cours-md h4 { color:#a8761c; }
+.cours-md > h4:first-child, .cours-md > h5:first-child { margin-top:10px; }
+.cours-md p { margin:7px 0; }
+.cours-md ul, .cours-md ol { margin:7px 0; padding-left:22px; }
+.cours-md li { margin:4px 0; }
+.cours-md b { color:var(--accent2); }
+body.theme-adam .cours-md b { color:#8a6a1e; }
+.cours-md blockquote { margin:10px 0; padding:10px 14px; background:rgba(232,150,63,.13);
+  border-left:4px solid #e8963f; border-radius:8px; }
+.cours-md hr { border:none; border-top:1px dashed rgba(0,0,0,.2); margin:16px 0; }
+.cours-ul { margin:6px 0 0; padding-left:22px; font-size:14px; line-height:1.6; }
+.cours-ul li { margin:5px 0; }
+/* QCM d'une fiche d'exercices : la réponse choisie, avant correction */
+.quiz-opt.sel-opt { border-color:var(--accent); background:rgba(0,0,0,.09); font-weight:700; }
+
+/* ---- impression : la fiche de révision, et rien d'autre ---- */
+@media print {
+  body, body.theme-adam, body.theme-alix, body.theme-parent { background:#fff !important; color:#000 !important; }
+  header, nav, #modal-root, .no-print, .back-btn { display:none !important; }
+  main { max-width:none !important; padding:0 !important; }
+  .card { box-shadow:none !important; border:none !important; border-radius:0 !important;
+    padding:0 0 8px !important; margin-bottom:12px !important; page-break-inside:avoid; animation:none !important; }
+  .card h3, .cours-md h4, .cours-md h5, .day-detail h2 { color:#000 !important; page-break-after:avoid; }
+  .card h3::after { background:#000 !important; }
+  .cours-md b { color:#000 !important; }
+  .ecrit-box, .cours-md blockquote { background:#f3f3f3 !important; border-left-color:#999 !important; }
+  .links a { background:none !important; padding:2px 0 !important; color:#000 !important; }
+  .links a::after { content:' → ' attr(href); font-size:9.5px; font-weight:400; word-break:break-all; }
+}
 </style>
 </head>
 <body>
@@ -400,7 +443,16 @@ body.theme-alix .imgchip.sel { background:linear-gradient(135deg, #e8798f, #f0a3
 <script src="map.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="app.js"></script>
+<script src="cours.js"></script>
 <script>
+/* Installation sur l'écran d'accueil : ce service worker ne sert qu'à rendre l'app
+   installable, il ne met rien en cache (voir sw.js). Sur file:// il n'y a rien à faire. */
+if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('sw.js').catch(function(e){ console.warn('sw', e); });
+  });
+}
+
 /* Filet de sécurité : si app.js n'a pas pu s'exécuter (script bloqué, réseau coupé,
    fichier incomplet), la page resterait muette au clic. On affiche un message clair. */
 window.addEventListener('load', function(){
