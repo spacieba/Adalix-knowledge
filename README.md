@@ -30,6 +30,7 @@ Pas de build : c'est du HTML/JS statique + des fonctions serverless Node. Vercel
    - `ANTHROPIC_MODEL` — optionnel, ex. `claude-haiku-4-5` pour un coût minimal (par défaut `claude-sonnet-4-5`)
    - `RUNWARE_API_KEY` — clé API Runware pour activer l'atelier d'images (optionnel)
    - `RUNWARE_MODEL` — optionnel (par défaut `bytedance:5@0`)
+   - `FAMILY_CODE` — **recommandé** : sans lui, toutes les fonctions IA sont ouvertes à qui connaît l'URL, et chaque transcription de photo coûte. Les enfants le saisissent une fois par appareil (stocké en `localStorage`). Défini en type `encrypted` et non `sensitive`, donc relisible dans le dashboard Vercel si on l'oublie.
    - `ANTHROPIC_MODEL_COURS` — optionnel, modèle qui LIT les photos de cours (par défaut `claude-sonnet-5-5`)
    - `ANTHROPIC_MODEL_COURS_LEGER` — optionnel, modèle des exercices, corrections et interros (par défaut `claude-haiku-5-5`)
 
