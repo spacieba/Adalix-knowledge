@@ -353,6 +353,11 @@ async function enregistrerCours() {
         box: 1, due: todayStr(),
       })));
     }
+    // les mots mal orthographiés dans le cahier rejoignent le carnet (lecture.js), en
+    // « proposé » : une écriture mal déchiffrée ne doit jamais devenir une faute à réviser
+    const motsVus = (d.mots_a_revoir || []).length;
+    if (motsVus) await motsAjoute(d.mots_a_revoir, 'cours', id, 'propose');
+
     // les photos d'origine, dans leur propre table pour ne pas alourdir la liste des cours
     if (coursPhotos.length) {
       const { error: ePhoto } = await db.from('adalix_cours_photos').insert(coursPhotos.map((p, i) => ({
@@ -361,7 +366,7 @@ async function enregistrerCours() {
       if (ePhoto) console.error('photos non enregistrées', ePhoto);
     }
     coursPhotos = []; coursDraft = null;
-    toast('Cours enregistré 💾');
+    toast(motsVus ? `Cours enregistré 💾 — ${motsVus} mot${motsVus > 1 ? 's' : ''} à regarder dans « Mes mots »` : 'Cours enregistré 💾');
     await renderCours();
     openCours(id);
   } finally {
@@ -390,6 +395,7 @@ function drawCours() {
     <div class="card no-print">
       <h3>🎓 Réviser ce cours</h3>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+        <button class="btn" onclick="openLecture(coursCur.texte, coursCur.titre)">👓 Lire ce cours</button>
         <button class="btn" onclick="startInterro()">🎤 Interroge-moi</button>
         <button class="btn" onclick="openExosMenu()">✍️ Des exercices</button>
         ${nbDue ? `<button class="btn ghost" onclick="startRevision(${c.id})">🔁 ${nbDue} notion${nbDue > 1 ? 's' : ''} à revoir</button>` : ''}

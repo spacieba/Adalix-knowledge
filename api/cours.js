@@ -82,13 +82,17 @@ LES AUTRES CHAMPS (là, tu as le droit d'apporter ton aide)
 - "points_cles" : 3 à 6 phrases, l'essentiel à ne pas rater.
 - "vocabulaire" : 0 à 8 mots difficiles du cours, définis simplement et pour SON âge.
 - "a_retenir" : 4 à 10 cartes question/réponse tirées du cours, qui serviront à l'interroger plus tard. Questions précises et vérifiables (pas "parle-moi de la Révolution"), réponses courtes. Donne à chaque carte une "notion" de 2-4 mots.
+- "mots_a_revoir" : 0 à 8 mots que L'ENFANT a mal orthographiés dans son cahier. Tu ne les signales que si tu es SÛR : un mot que tu as simplement eu du mal à déchiffrer va dans "incertitudes", jamais ici — on ferait réviser à l'enfant une faute qu'il n'a pas commise. Écarte les noms propres, les mots étrangers et les termes techniques du chapitre, sauf faute évidente. Pour chaque mot : "ecrit" (ce qu'il a écrit), "correct" (l'orthographe juste), "syllabes" (le mot correct découpé en syllabes avec des traits d'union, par ex. "ba-teau"), et "type" :
+  · "phonetique" — ça ne s'entend pas pareil ou ça ne peut pas se lire ainsi (bato → bateau, ils son → ils sont)
+  · "grammatical" — accord, conjugaison, homophone (les chien mange, a/à, et/est, ses/ces)
+  · "visuel" — le son est bon mais la forme du mot est fausse (fame → femme, ortografe → orthographe)
 - "ressources" : 2 à 4 pistes pour aller plus loin SUR CE CHAPITRE PRÉCIS — au moins une vidéo et au moins un article. Tu ne donnes pas d'adresse internet : tu choisis un identifiant de site dans le catalogue ci-dessous et tu écris la requête de recherche exacte. Choisis le site selon la matière et selon l'âge (Vikidia plutôt que Wikipédia pour Alix). "pourquoi" dit en une phrase ce que l'enfant va y gagner.
 
 CATALOGUE DES SITES AUTORISÉS (identifiant — nom)
 ${CATALOGUE}
 
 RÉPONSE — UNIQUEMENT ce JSON, sans texte autour, sans bloc de code :
-{"titre":"titre du cours","matiere":"histoire|geo|emc|francais|maths|svt|physique|techno|anglais|espagnol|allemand|latin|arts|musique|autre","niveau":"6e|5e|4e|3e|?","chapitre":"nom du chapitre si visible","resume":"...","texte":"le cours au propre en mini-Markdown","points_cles":["..."],"vocabulaire":[{"mot":"...","def":"..."}],"a_retenir":[{"notion":"...","q":"...","r":"..."}],"ressources":[{"site":"identifiant","requete":"...","titre":"...","pourquoi":"..."}],"incertitudes":["..."]}`;
+{"titre":"titre du cours","matiere":"histoire|geo|emc|francais|maths|svt|physique|techno|anglais|espagnol|allemand|latin|arts|musique|autre","niveau":"6e|5e|4e|3e|?","chapitre":"nom du chapitre si visible","resume":"...","texte":"le cours au propre en mini-Markdown","points_cles":["..."],"vocabulaire":[{"mot":"...","def":"..."}],"a_retenir":[{"notion":"...","q":"...","r":"..."}],"mots_a_revoir":[{"ecrit":"bato","correct":"bateau","syllabes":"ba-teau","type":"phonetique"}],"ressources":[{"site":"identifiant","requete":"...","titre":"...","pourquoi":"..."}],"incertitudes":["..."]}`;
 }
 
 /* ---------- mode exos : une fiche d'exercices sur ce cours ---------- */
@@ -199,6 +203,54 @@ function jsonDe(texte) {
 
 const str = (v, n) => String(v == null ? '' : v).slice(0, n);
 const liste = (v, n) => (Array.isArray(v) ? v : []).slice(0, n);
+const TYPES_FAUTE = ['phonetique', 'grammatical', 'visuel', 'autre'];
+const typeFaute = t => TYPES_FAUTE.includes(t) ? t : 'autre';
+
+/* ---------- mode dictee : un texte court, bâti sur SES mots ---------- */
+function systemDictee(child, mots, longueur) {
+  return `Tu prépares une dictée pour un collégien français. L'enfant est ${qui(child)}.
+
+CE QUI COMPTE
+- ${longueur} phrases, pas une de plus. Une dictée courte et réussie vaut mieux qu'une longue et décourageante.
+- Le texte doit avoir du SENS et être agréable : une petite scène, une anecdote, un fait curieux — jamais une suite de phrases sans lien fabriquées autour de mots imposés.
+- Tu places naturellement les mots à retravailler ci-dessous. S'ils ne rentrent pas tous sans forcer le texte, garde-en moins : le naturel passe avant l'exhaustivité.
+- Vocabulaire de son âge. Pas de mot rare en plus, pas de piège gratuit : on travaille ce qui est ciblé, pas la chance.
+- Attention : cette dictée sera LUE À VOIX HAUTE par une voix de synthèse. Évite ce qui s'entend mal (chiffres en chiffres, sigles, parenthèses).
+
+TU RENDS DEUX VERSIONS DU TEXTE
+- "texte" : ce que l'enfant doit écrire, avec sa ponctuation normale.
+- "a_dire" : le même texte tel qu'un maître le dicterait, avec la ponctuation énoncée — « ... virgule ... point » — et rien d'autre de changé.
+
+${mots.length ? `MOTS À RETRAVAILLER (ce sont SES fautes récentes) :\n${mots.map(m => `- ${m.mot}${m.erreur ? ` (il avait écrit « ${m.erreur} »)` : ''}`).join('\n')}` : "Aucun mot imposé : écris une dictée de son niveau, avec des difficultés d'orthographe courantes."}
+
+RÉPONSE — UNIQUEMENT ce JSON, sans texte autour, sans bloc de code :
+{"titre":"un titre court","texte":"...","a_dire":"...","pieges":["ce qui est travaillé, en 3 mots"]}`;
+}
+
+/* ---------- mode corriger_dictee : analyser, pas compter les fautes ---------- */
+function systemCorrigerDictee(child) {
+  return `Tu corriges la dictée d'un collégien français. L'enfant est ${qui(child)}.
+
+CE QU'ON ATTEND DE TOI
+Tu ne comptes pas les fautes : tu dis à quoi elles tiennent. C'est la seule chose qui permette de progresser, et c'est aussi ce qu'un orthophoniste ou un professeur a besoin de savoir.
+
+Aligne le texte de l'enfant sur le texte attendu, mot à mot, en tenant compte des mots oubliés ou ajoutés. Pour chaque écart :
+- "attendu" : le mot juste. "ecrit" : ce qu'il a écrit (vide s'il l'a oublié).
+- "type" :
+  · "phonetique" — ça ne peut pas se lire ainsi (bato → bateau, ils son → ils sont, enfin → en fin)
+  · "grammatical" — accord, conjugaison, homophone grammatical (les chien, il mange*nt*, a/à, et/est, ses/ces/s'est)
+  · "visuel" — le son est bon mais la forme du mot est fausse (fame → femme, ortografe → orthographe, apeler → appeler)
+  · "autre" — ponctuation, majuscule, mot oublié ou ajouté
+- "explication" : une phrase, adressée à l'enfant, qui donne la RÈGLE ou le moyen de retenir — pas « il fallait écrire X ». Par exemple : « Après "les", le nom prend un s. » ou « "femme" se prononce [fam] mais s'écrit avec e-m-m-e : c'est un mot à photographier. »
+- "syllabes" : le mot attendu découpé avec des traits d'union ("fem-me").
+
+Ne signale PAS : un accent manquant sur une majuscule, une variante typographique (apostrophe droite ou courbe), une espace en trop.
+
+"commentaire" : 2 phrases maximum, adressées à l'enfant. Tu commences TOUJOURS par ce qui est réussi, et c'est sincère : cite un mot difficile qu'il a bien écrit. Puis une seule chose à retenir pour la prochaine fois. Jamais de reproche, jamais de total de fautes.
+
+RÉPONSE — UNIQUEMENT ce JSON, sans texte autour, sans bloc de code :
+{"fautes":[{"attendu":"...","ecrit":"...","type":"phonetique|grammatical|visuel|autre","explication":"...","syllabes":"..."}],"mots_justes":12,"total_mots":15,"commentaire":"..."}`;
+}
 
 /* ---------- point d'entrée ---------- */
 module.exports = async (req, res) => {
@@ -215,10 +267,12 @@ module.exports = async (req, res) => {
   if (!['adam', 'alix'].includes(child)) { res.status(400).json({ error: 'enfant inconnu' }); return; }
 
   try {
-    if (mode === 'transcrire') return await transcrire(req, res, key, child);
-    if (mode === 'exos')       return await exos(req, res, key, child);
-    if (mode === 'corriger')   return await corriger(req, res, key, child);
-    if (mode === 'interro')    return await interro(req, res, key, child);
+    if (mode === 'transcrire')       return await transcrire(req, res, key, child);
+    if (mode === 'exos')             return await exos(req, res, key, child);
+    if (mode === 'corriger')         return await corriger(req, res, key, child);
+    if (mode === 'interro')          return await interro(req, res, key, child);
+    if (mode === 'dictee')           return await dictee(req, res, key, child);
+    if (mode === 'corriger_dictee')  return await corrigerDictee(req, res, key, child);
     res.status(400).json({ error: 'mode inconnu' });
   } catch (e) {
     console.error('cours', mode, e);
@@ -274,6 +328,10 @@ async function transcrire(req, res, key, child) {
       a_retenir: liste(out.a_retenir, 12)
         .map(c => ({ notion: str(c && c.notion, 60), q: str(c && c.q, 300), r: str(c && c.r, 400) }))
         .filter(c => c.q && c.r),
+      mots_a_revoir: liste(out.mots_a_revoir, 8).map(m => ({
+        ecrit: str(m && m.ecrit, 40), correct: str(m && m.correct, 40),
+        syllabes: str(m && m.syllabes, 60), type: typeFaute(m && m.type),
+      })).filter(m => m.correct && m.ecrit && m.correct.toLowerCase() !== m.ecrit.toLowerCase()),
       ressources: construitRessources(out.ressources),
       incertitudes: liste(out.incertitudes, 6).map(i => str(i, 200)).filter(Boolean),
     },
@@ -348,6 +406,69 @@ async function corriger(req, res, key, child) {
       return { ok: !!x.ok, commentaire: str(x.commentaire, 600) || (x.ok ? "C'est juste !" : `La réponse attendue : ${it.attendu}`) };
     }),
   });
+}
+
+/* ---- dictée sur mesure ---- */
+async function dictee(req, res, key, child) {
+  const { mots, cours, longueur } = req.body || {};
+  const n = Math.max(2, Math.min(6, Math.round(Number(longueur) || 3)));
+  const liste_mots = liste(mots, 12)
+    .map(m => ({ mot: str(m && m.mot, 40), erreur: str(m && m.erreur, 40) }))
+    .filter(m => m.mot);
+  const c = cours || {};
+
+  const r = await appelClaude(key, {
+    model: process.env.ANTHROPIC_MODEL_COURS_LEGER || 'claude-haiku-5-5',
+    max_tokens: 1500,
+    system: systemDictee(child, liste_mots, n),
+    messages: [{
+      role: 'user', content: (c.titre
+        ? `Si tu peux, inspire-toi du thème de mon cours « ${str(c.titre, 120)} »${c.resume ? ` (${str(c.resume, 300)})` : ''} — sans en faire un résumé.\n\n`
+        : '') + 'Prépare-moi la dictée.',
+    }],
+  }, false);
+
+  if (!r.ok) { console.error('cours dictee', r.j); res.status(200).json({ error: "La dictée n'a pas pu être préparée — réessaie." }); return; }
+  const out = jsonDe(texteDe(r.j));
+  if (!out || !out.texte) { res.status(200).json({ error: "La dictée n'a pas pu être préparée — réessaie." }); return; }
+
+  res.status(200).json({
+    dictee: {
+      titre: str(out.titre, 80) || 'Dictée',
+      texte: str(out.texte, 1200),
+      a_dire: str(out.a_dire, 1500) || str(out.texte, 1200),
+      pieges: liste(out.pieges, 5).map(p => str(p, 60)).filter(Boolean),
+    },
+  });
+}
+
+/* ---- correction de la dictée ---- */
+async function corrigerDictee(req, res, key, child) {
+  const attendu = str((req.body || {}).attendu, 1200);
+  const reponse = str((req.body || {}).reponse, 2000);
+  if (!attendu) { res.status(400).json({ error: 'texte attendu manquant' }); return; }
+  if (!reponse.trim()) { res.status(200).json({ error: "Écris d'abord la dictée !" }); return; }
+
+  const r = await appelClaude(key, {
+    model: process.env.ANTHROPIC_MODEL_COURS_LEGER || 'claude-haiku-5-5',
+    max_tokens: 2500,
+    system: systemCorrigerDictee(child),
+    messages: [{ role: 'user', content: `TEXTE ATTENDU :\n${attendu}\n\nCE QUE J'AI ÉCRIT :\n${reponse}` }],
+  }, false);
+
+  if (!r.ok) { console.error('cours corriger_dictee', r.j); res.status(200).json({ error: 'La correction a échoué — réessaie.' }); return; }
+  const out = jsonDe(texteDe(r.j));
+  if (!out) { res.status(200).json({ error: 'La correction a échoué — réessaie.' }); return; }
+
+  const fautes = liste(out.fautes, 30).map(f => ({
+    attendu: str(f && f.attendu, 40), ecrit: str(f && f.ecrit, 40),
+    type: typeFaute(f && f.type), explication: str(f && f.explication, 300),
+    syllabes: str(f && f.syllabes, 60),
+  })).filter(f => f.attendu);
+
+  const total = Math.max(1, Math.round(Number(out.total_mots) || attendu.split(/\s+/).length));
+  const justes = Math.max(0, Math.min(total, Math.round(Number(out.mots_justes) || (total - fautes.length))));
+  res.status(200).json({ fautes, justes, total, commentaire: str(out.commentaire, 400) });
 }
 
 /* ---- interro orale ---- */

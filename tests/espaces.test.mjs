@@ -38,13 +38,13 @@ function chargeApp(profil) {
   const appels = [];
   const bouchon = nom => (...a) => { appels.push({ nom, a }); };
   const f = new Function('window', 'document', 'localStorage', 'console', 'fetch', 'setTimeout',
-    'coursBadgeEspace', 'renderCours', 'fillCoursParentCard', 'Image', 'URL',
+    'coursBadgeEspace', 'renderCours', 'renderMots', 'fillCoursParentCard', 'fillMotsParentCard', 'Image', 'URL',
     src + '\n;return {TABS, ESPACES, showEspaces, enterEspace, showTab, buildNav, majEnTete, '
     + 'get espace(){return espace}, set espace(v){espace=v}, get child(){return child}, set child(v){child=v}, '
     + 'get tab(){return tab}};');
   const C = f(win, doc, stockage, { log() {}, warn() {}, error() {} }, async () => ({ json: async () => ({}) }),
     fn => { appels.push({ nom: 'setTimeout' }); return 0; },
-    bouchon('coursBadgeEspace'), bouchon('renderCours'), bouchon('fillCoursParentCard'),
+    bouchon('coursBadgeEspace'), bouchon('renderCours'), bouchon('renderMots'), bouchon('fillCoursParentCard'), bouchon('fillMotsParentCard'),
     function () { return {}; }, { createObjectURL: () => '', revokeObjectURL() {} });
   C.child = profil || 'alix';
   return { C, el, elements, appels };
@@ -81,15 +81,15 @@ console.log('\n— aucun onglet en double, aucun onglet perdu —');
 
     // tout ce que l'enfant avait avant la séparation doit rester atteignable
     const avant = enfant === 'adam'
-      ? ['programme', 'cours', 'quiz', 'geo', 'orientation', 'les100', 'checklist', 'projet', 'fabrique', 'chat', 'guide']
-      : ['programme', 'cours', 'quiz', 'geo', 'les100', 'checklist', 'projet', 'fabrique', 'chat', 'guide'];
+      ? ['programme', 'cours', 'mots', 'quiz', 'geo', 'orientation', 'les100', 'checklist', 'projet', 'fabrique', 'chat', 'guide']
+      : ['programme', 'cours', 'mots', 'quiz', 'geo', 'les100', 'checklist', 'projet', 'fabrique', 'chat', 'guide'];
     const apres = ete.concat(tut);
     eq(`[${enfant}] aucun onglet perdu dans la réorganisation`, avant.filter(t => !apres.includes(t)), []);
     eq(`[${enfant}] aucun onglet apparu par erreur`, apres.filter(t => !avant.includes(t)), []);
   });
   eq("l'orientation reste réservée à Adam", C.ESPACES.ete.tabs('alix').includes('orientation'), false);
   vrai("l'orientation est bien dans Le Grand Été pour Adam", C.ESPACES.ete.tabs('adam').includes('orientation'));
-  eq('Tuteur contient les cours, la checklist et l\'assistant', C.ESPACES.tuteur.tabs('alix'), ['cours', 'checklist', 'chat']);
+  eq('Tuteur : cours, mots, checklist, assistant', C.ESPACES.tuteur.tabs('alix'), ['cours', 'mots', 'checklist', 'chat']);
 }
 
 /* ---------- l'écran des deux cartes ---------- */
@@ -118,9 +118,9 @@ console.log('\n— entrer dans un espace —');
   vrai("l'espace courant est mémorisé", C.espace === 'tuteur');
   vrai('la barre d\'onglets réapparaît', !el('nav').classList.contains('hidden'));
   const nav = el('navbar').innerHTML;
-  vrai('la barre ne contient que les onglets du Tuteur', /nav-cours/.test(nav) && /nav-checklist/.test(nav) && /nav-chat/.test(nav));
+  vrai('la barre ne contient que les onglets du Tuteur', /nav-cours/.test(nav) && /nav-mots/.test(nav) && /nav-checklist/.test(nav) && /nav-chat/.test(nav));
   vrai('elle ne contient rien du Grand Été', !/nav-programme/.test(nav) && !/nav-quiz/.test(nav) && !/nav-geo/.test(nav));
-  eq('trois onglets, pas plus', (nav.match(/<button/g) || []).length, 3);
+  eq('quatre onglets, pas plus', (nav.match(/<button/g) || []).length, 4);
   vrai("l'en-tête indique où on se trouve", /Adam · 🎓 Tuteur/.test(el('hdr-who').textContent), el('hdr-who').textContent);
   vrai('le premier onglet est ouvert', C.tab === 'cours');
 

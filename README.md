@@ -10,13 +10,14 @@ En ligne : https://adalix-knowledge.vercel.app
 index.html        page unique de l'appli (shell + styles)
 app.js             toute la logique cliente (Supabase, quiz, checklist, chat, dashboard...)
 cours.js           module « Mes cours » : photo du cours → cours au propre, tuteur, exercices, révisions
+lecture.js         lire et écrire : lecture guidée à voix haute, carnet de mots, dictées
 data.js            contenu du programme : semaines, quiz, 100 personnalités, checklist
 api/chat.js        fonction serverless Vercel — proxy vers l'API Anthropic (Claude)
 api/image.js       fonction serverless Vercel — proxy vers l'API Runware (génération d'images)
 api/cours.js       fonction serverless Vercel — module des cours (transcription, exercices, correction, interro)
 manifest.json      installation sur l'écran d'accueil (PWA)
 sw.js              service worker minimal, sans cache — ne sert qu'à rendre l'app installable
-tests/             tests Node sans dépendance, 257 au total (voir tests/README.md)
+tests/             tests Node sans dépendance, 429 au total (voir tests/README.md)
 ```
 
 Pas de build : c'est du HTML/JS statique + des fonctions serverless Node. Vercel déploie ce dossier tel quel.
@@ -99,6 +100,45 @@ sur la clé, le serveur bascule tout seul sur `claude-sonnet-4-5` et l'écrit da
 
 **Les photos d'origine sont conservées** dans `adalix_cours_photos` (copie compressée, ~100 Ko) : elles
 permettent de vérifier une transcription douteuse et de retrouver un schéma que le texte ne rend pas.
+
+## Lire et écrire (lecture.js)
+
+Trois outils, volontairement fondus dans le Tuteur sans étiquette : rien dans l'interface
+ne désigne une difficulté, ce sont juste des outils disponibles.
+
+**Lecture guidée** — bouton « 👓 Lire ce cours ». Le Markdown est retiré, le texte est lu
+par la voix du téléphone (`speechSynthesis`, gratuite) et le mot en cours est surligné via
+les évènements `onboundary`. Un mot se relit seul au clic. Réglages mémorisés par enfant et
+par appareil : taille, espacement des lettres et des lignes, vitesse, syllabes colorées.
+L'espacement est la seule adaptation typographique dont l'effet soit mesuré chez les lecteurs
+en difficulté — davantage que les polices dites « spéciales ». Si la voix manque sur
+l'appareil, l'écran le dit et le confort de lecture reste disponible.
+
+**Carnet de mots** — onglet « ✏️ Mes mots ». Il se remplit **tout seul** : pendant la
+transcription d'un cahier, le modèle remonte les mots mal orthographiés (`mots_a_revoir`),
+qui arrivent au statut `propose`. L'enfant garde ou écarte — une écriture mal déchiffrée ne
+doit jamais devenir une faute à réviser. Les mots validés passent dans les boîtes de Leitner
+déjà utilisées par les cours, avec la routine regarde → cache → écris → vérifie. La
+comparaison lettre à lettre (plus longue sous-séquence commune) met en couleur ce qui a
+changé **sur l'orthographe juste**, jamais sur la faute : c'est le mot correct qu'il faut
+photographier. Ce mode ne consomme aucun appel API.
+
+**Dictées** — texte court bâti sur les mots de son carnet, lu à voix haute, avec deux
+versions : `texte` (à écrire) et `a_dire` (ponctuation énoncée, « virgule », « point »).
+La correction ne compte pas les fautes, elle les **classe** — phonétique, grammaticale,
+visuelle — et donne la règle plutôt que la réponse. Les mots repris rejoignent le carnet.
+
+Partout où l'enfant écrit un mot qui sera évalué, les champs portent
+`spellcheck="false" autocorrect="off" autocomplete="off"` : sans ça le téléphone fait
+l'exercice à sa place.
+
+**Côté parent** : répartition des erreurs par nature, mots qui résistent, et un
+**récapitulatif imprimable** (`openRecapOrtho`) avec exemples concrets et dates — le genre
+d'observations qu'on demande en premier rendez-vous et dont on ne se souvient jamais sur le
+moment. Le document dit explicitement qu'il ne constitue pas un bilan.
+
+Tables : `adalix_mots` (contrainte d'unicité sur `child, mot`, donc pas de doublon) et
+`adalix_dictees`.
 
 ## Installation sur l'écran d'accueil
 

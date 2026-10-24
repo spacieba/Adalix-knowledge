@@ -141,6 +141,82 @@ console.log('\n— handler exos : normalisation des exercices —');
   eq('le QCM garde ses options', o.body.exercices[0].options.length, 4);
 }
 
+console.log('\n— transcrire : les mots mal orthographiés remontent —');
+{
+  const reponseIA = {
+    titre: 'T', matiere: 'francais', texte: 'x', points_cles: [], vocabulaire: [], a_retenir: [],
+    ressources: [], incertitudes: [],
+    mots_a_revoir: [
+      { ecrit: 'bato', correct: 'bateau', syllabes: 'ba-teau', type: 'phonetique' },
+      { ecrit: 'chat', correct: 'chat', type: 'visuel' },          // identique : pas une faute
+      { ecrit: 'fame', correct: 'femme', type: 'nimportequoi' },   // type inconnu
+      { ecrit: '', correct: 'seul' },                              // incomplet
+    ],
+  };
+  const A = chargeApi(async () => ({ ok: true, status: 200, json: async () => ({ content: [{ type: 'text', text: JSON.stringify(reponseIA) }], stop_reason: 'end_turn' }) }));
+  const o = { code: 0, body: null };
+  const R = { status(c) { o.code = c; return this; }, json(b) { o.body = b; return this; } };
+  await A.handler({ method: 'POST', body: { mode: 'transcrire', child: 'alix', photos: [{ media_type: 'image/jpeg', data: 'A' }] } }, R);
+  const m = o.body.cours.mots_a_revoir;
+  eq('seuls les vrais écarts sont gardés', m.length, 2);
+  eq('le mot juste est conservé', m[0].correct, 'bateau');
+  eq('le découpage en syllabes suit', m[0].syllabes, 'ba-teau');
+  eq('un type inconnu devient « autre »', m[1].type, 'autre');
+  vrai('un mot écrit correctement n\'est pas signalé', !m.some(x => x.correct === 'chat'));
+}
+
+console.log('\n— dictée : un texte à écrire et un texte à dire —');
+{
+  let corps = null;
+  const A = chargeApi(async (url, opts) => {
+    corps = JSON.parse(opts.body);
+    return { ok: true, status: 200, json: async () => ({ content: [{ type: 'text', text: JSON.stringify({
+      titre: 'Le chat', texte: 'Le chat dort, paisible.', a_dire: 'Le chat dort virgule paisible point', pieges: ['accords'],
+    }) }] }) };
+  });
+  const o = { code: 0, body: null };
+  const R = { status(c) { o.code = c; return this; }, json(b) { o.body = b; return this; } };
+  await A.handler({ method: 'POST', body: { mode: 'dictee', child: 'alix', longueur: 3,
+    mots: [{ mot: 'femme', erreur: 'fame' }, { mot: '' }] } }, R);
+  eq('statut 200', o.code, 200);
+  eq('le texte à écrire garde sa ponctuation', o.body.dictee.texte, 'Le chat dort, paisible.');
+  vrai('le texte à dire énonce la ponctuation', /virgule/.test(o.body.dictee.a_dire));
+  vrai('ses propres mots sont transmis au modèle', /femme/.test(corps.system) && /fame/.test(corps.system), corps.system.slice(-300));
+  vrai('les mots vides ne polluent pas la consigne', !/- \n/.test(corps.system));
+  vrai('la voix de synthèse est prise en compte dans la consigne', /voix de synthèse/.test(corps.system));
+
+  // longueur hors bornes
+  await A.handler({ method: 'POST', body: { mode: 'dictee', child: 'alix', longueur: 99, mots: [] } }, R);
+  vrai('une dictée démesurée est ramenée à 6 phrases', /6 phrases/.test(corps.system), (corps.system.match(/- \d+ phrases/) || [])[0]);
+}
+
+console.log('\n— correction de dictée : on classe, on ne compte pas —');
+{
+  const A = chargeApi(async () => ({ ok: true, status: 200, json: async () => ({ content: [{ type: 'text', text: JSON.stringify({
+    fautes: [
+      { attendu: 'chat', ecrit: 'chas', type: 'phonetique', explication: 'Un t muet.', syllabes: 'chat' },
+      { attendu: 'dort', ecrit: 'dor', type: 'zzz', explication: 'Le verbe prend un t.' },
+      { attendu: '', ecrit: 'x', type: 'visuel' },
+    ],
+    mots_justes: 99, total_mots: 4, commentaire: 'Bravo pour « paisible ».',
+  }) }] }) }));
+  const o = { code: 0, body: null };
+  const R = { status(c) { o.code = c; return this; }, json(b) { o.body = b; return this; } };
+
+  await A.handler({ method: 'POST', body: { mode: 'corriger_dictee', child: 'alix', attendu: 'Le chat dort.', reponse: 'Le chas dor' } }, R);
+  eq('les écarts sans mot attendu sont écartés', o.body.fautes.length, 2);
+  eq('un type inconnu devient « autre »', o.body.fautes[1].type, 'autre');
+  eq('les mots justes ne dépassent pas le total', o.body.justes, 4);
+  vrai('la règle est transmise à l\'enfant', /t muet/.test(o.body.fautes[0].explication));
+  vrai('le commentaire est conservé', /paisible/.test(o.body.commentaire));
+
+  await A.handler({ method: 'POST', body: { mode: 'corriger_dictee', child: 'alix', attendu: 'Le chat.', reponse: '   ' } }, R);
+  vrai('une copie vide est signalée sans planter', /Écris/.test(o.body.error), JSON.stringify(o.body));
+
+  await A.handler({ method: 'POST', body: { mode: 'corriger_dictee', child: 'alix', reponse: 'x' } }, R);
+  eq('sans texte attendu : refus propre', o.code, 400);
+}
+
 /* ---------- cours.js (client) ---------- */
 console.log('\n— coursMd : rendu du cours, et sécurité —');
 {
