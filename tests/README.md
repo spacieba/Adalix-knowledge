@@ -7,6 +7,7 @@ node tests/cours-api.test.mjs .      # api/cours.js : liens, JSON, repli de mod�
 node tests/cours-rendu.test.mjs .    # cours.js : chaque écran rendu avec un DOM et une base simulés
 node tests/espaces.test.mjs .        # app.js : découpage Grand Été / Tuteur, navigation, en-tête
 node tests/lecture.test.mjs .        # lecture.js : syllabes, lecture guidée, carnet de mots, dictées
+node tests/checklist.test.mjs .      # app.js : gestes de la journée, série 🔥 qui saute le week-end, les deux guides
 ```
 
 Les scripts chargent les fichiers réellement servis (sans les modifier) et sortent en
@@ -21,4 +22,6 @@ Ce qu'ils protègent en priorité :
   mot évalué, sinon l'exercice s'écrit tout seul ;
 - aucun lien externe n'est inventé ;
 - aucun onglet ne devient inatteignable après une réorganisation de la navigation ;
-- le découpage en syllabes ne perd jamais une lettre.
+- le découpage en syllabes ne perd jamais une lettre ;
+- la série 🔥 ne se remet pas à zéro un samedi, et un seul calcul la produit partout ;
+- un raccourci de la checklist navigue sans cocher la case à la place de l’enfant.

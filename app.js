@@ -312,11 +312,12 @@ const TABS = {
   chat:{icon:'💬',label:'Mon assistant'}, guide:{icon:'📖',label:'Guide'}, dashboard:{icon:'📊',label:'Tableau de bord'},
   quizv:{icon:'🎯',label:'Quiz'}, orientation:{icon:'🧭',label:'Orientation'}, classement:{icon:'🏆',label:'Classement'},
   cours:{icon:'📸',label:'Mes cours'}, mots:{icon:'✏️',label:'Mes mots'},
+  aide:{icon:'📖',label:'Guide'},   // le guide du Tuteur ; « guide » reste celui du Grand Été
 };
 // icônes réhabillées selon le profil — mêmes intitulés, juste l'esprit visuel qui change
 const THEME_ICONS = {
-  adam: {programme:'🗺️', quiz:'🐲', geo:'🌍', les100:'🏆', checklist:'📜', projet:'⚒️', fabrique:'🏭', chat:'🔮', guide:'🧭', cours:'📜', mots:'🖋️'},
-  alix: {programme:'🌿', quiz:'🦊', geo:'🌍', les100:'🦋', checklist:'🐣', projet:'🎨', fabrique:'🏭', chat:'🐰', guide:'📖', cours:'📒', mots:'🖍️'},
+  adam: {programme:'🗺️', quiz:'🐲', geo:'🌍', les100:'🏆', checklist:'📜', projet:'⚒️', fabrique:'🏭', chat:'🔮', guide:'🧭', cours:'📜', mots:'🖋️', aide:'🧭'},
+  alix: {programme:'🌿', quiz:'🦊', geo:'🌍', les100:'🦋', checklist:'🐣', projet:'🎨', fabrique:'🏭', chat:'🐰', guide:'📖', cours:'📒', mots:'🖍️', aide:'📖'},
 };
 function tabIcon(t){ return (THEME_ICONS[child] && THEME_ICONS[child][t]) || TABS[t].icon; }
 function buildNav(tabs){
@@ -340,8 +341,8 @@ const ESPACES = {
   },
   tuteur: {
     emoji:'🎓', titre:'Tuteur',
-    sous:"Tes cours de l'année : tu les photographies, ils reviennent au propre, et on les révise ensemble. Ta checklist et ton assistant sont ici aussi.",
-    tabs: () => ['cours','mots','checklist','chat'],
+    sous:"Tes cours de l'année : tu les photographies, ils reviennent au propre, et on les révise ensemble. Ta checklist, ton assistant et ton guide sont ici aussi.",
+    tabs: () => ['cours','mots','checklist','chat','aide'],
   },
 };
 /* l'en-tête rappelle en permanence dans quel espace on se trouve */
@@ -387,13 +388,24 @@ function showTab(t){
   tab = t;
   document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
   const nb = $('#nav-'+t); if(nb) nb.classList.add('active');
-  ({programme:renderProgramme, cours:renderCours, mots:renderMots, quiz:renderQuizList, quizv:renderQuizV, classement:renderClassement, orientation:renderOrientation, geo:renderGeo, les100:renderGallery, checklist:renderChecklist, projet:renderProjet, fabrique:renderFabrique, chat:renderChat, guide:renderGuide, dashboard:renderDashboard}[t])();
+  ({programme:renderProgramme, cours:renderCours, mots:renderMots, quiz:renderQuizList, quizv:renderQuizV, classement:renderClassement, orientation:renderOrientation, geo:renderGeo, les100:renderGallery, checklist:renderChecklist, projet:renderProjet, fabrique:renderFabrique, chat:renderChat, guide:renderGuide, aide:renderAide, dashboard:renderDashboard}[t])();
 }
 
-/* ---------- guide ---------- */
+/* ---------- guide ----------
+   Deux guides, un par espace : « guide » raconte Le Grand Été, « aide » (renderAide)
+   raconte le Tuteur. Un seul guide pour les deux mélangeait un programme daté et un
+   outil d'année scolaire, et obligeait à mettre le même onglet dans les deux barres. */
+const gcard = (emoji, titre, html) => `<div class="card"><h3>${emoji} ${titre}</h3><div style="font-size:14px;line-height:1.6;">${html}</div></div>`;
+/* rappelé en tête des deux guides : sans ça, on peut vivre dans un espace sans
+   soupçonner l'existence de l'autre. */
+const gcardEspaces = () => gcard('🏠', 'Les deux espaces',
+  `L'app a deux univers, et tu choisis à l'ouverture :<br><br>
+  <b>🌞 Le Grand Été</b> — le programme des quatre semaines, les quiz, les jeux géo, les 100 personnalités, ton projet et la Fabrique.<br><br>
+  <b>🎓 Tuteur</b> — l'année scolaire : tes cours photographiés, ton carnet de mots, ta journée et ton assistant.<br><br>
+  Chaque espace a sa propre barre d'onglets, courte, en bas de l'écran. Le bouton <b>🏠</b> en haut à droite te ramène au choix des deux — tu peux passer de l'un à l'autre autant de fois que tu veux, rien n'est perdu. L'en-tête t'indique en permanence où tu te trouves.`);
 function renderGuide(){
-  const gcard = (emoji, titre, html) => `<div class="card"><h3>${emoji} ${titre}</h3><div style="font-size:14px;line-height:1.6;">${html}</div></div>`;
   $('#main').innerHTML = `<div class="narrow">
+    ${gcardEspaces()}
     ${gcard('🌞', 'Bienvenue dans Le Grand Été',
       `Quatre semaines, du 27 juillet au 22 août, pour apprendre autrement : pas de notes, pas de profs — juste toi, des idées passionnantes, et environ 1h à 1h30 par jour. L'app s'ouvre chaque matin sur <b>le programme du jour</b> : tout ce qu'il y a à faire est sur cette page, dans l'ordre. Six jours par semaine, repos le dimanche. Chaque semaine a son grand thème : <b>S1 douter et vérifier</b>, <b>S2 raconter et convaincre</b>, <b>S3 comprendre les mécanismes</b>, <b>S4 penser par toi-même</b>.`)}
     ${gcard('📅', "L'onglet Programme",
@@ -411,8 +423,6 @@ function renderGuide(){
       `Douze jeux de géographie à records : cliquer les <b>pays</b> (Europe, monde, Union européenne), les <b>régions</b> et <b>départements</b> français, placer les <b>villes</b> (France, Europe, monde, USA) au kilomètre près, la <b>géo physique</b> (Everest, Amazone, Sahara…), les <b>capitales</b> et les <b>drapeaux</b>. Chaque jeu affiche TON record et celui d’${child==='adam'?'Alix':'Adam'} — le petit 🔥 signale qu'il faut reprendre la couronne !`)}
     ${gcard('🏆', "L'onglet Les 100 — ta collection",
       `103 personnalités qui ont changé le monde : scientifiques, résistants, artistes, sportifs, explorateurs… <b>C'est toi qui choisis</b> qui découvrir : parcours la galerie, clique sur les cartes qui t'intriguent. Tu peux en ajouter <b>3 nouvelles par jour</b> à ta collection (la lecture, elle, est illimitée). Chaque fiche propose un lien vidéo vers la chaîne <b>« Quelle Histoire »</b> pour aller plus loin. La fiche du jour te suggère des personnalités en lien avec le thème, mais rien n'est imposé. Objectif du mois : la collection complète ?`)}
-    ${gcard('✅', "L'onglet Checklist",
-      `Tes ${D.checklist.length} gestes quotidiens : lit fait, lecture, balade, programme du jour, projet, nettoyage, chambre, écriture du soir… Chaque journée complète allume ta série 🔥 en haut de l'écran. L'<b>écriture du soir</b> (ce que j'ai appris / ce qui m'a étonné) construit jour après jour ton journal du mois — tu seras fier(e) de le relire en septembre.`)}
     ${gcard('💻', "L'onglet Mon projet — ton poste de pilotage",
       `Un vrai projet personnel, mené sur tout le mois, avec un <b>coach IA</b> qui t'accompagne de l'idée jusqu'au produit fini. En haut : ton idée et ta barre d'avancement. Le coach te pose <b>une question à la fois</b> — tu réponds, et il ajuste automatiquement ta <b>feuille de route</b> (la liste des étapes jusqu'à la démo finale). Il te fait aussi des <b>suggestions</b> : à toi de décider « je garde » ✓ ou « j'élimine » ✕ — c'est TON projet, c'est toi le chef. Tout est sauvegardé : tes réponses, tes choix, tes étapes cochées. En bas de la page, l'<b>École du code</b> : 8 mini-leçons pour comprendre comment on fabrique une vraie appli (code, langages, internet, bases de données…). Le <b>rendu final</b> se montre à la fête du 22 août, avec une mini-présentation de 2-3 minutes.`)}
     ${gcard('🏭', "L'onglet Fabrique — ton atelier de création",
@@ -425,6 +435,56 @@ function renderGuide(){
       `18 badges à débloquer (bouton en haut de l'écran) : assiduité, savoir, collection, créativité, curiosité, discipline. Trois sont rares et déclenchent une vraie célébration. Ils se débloquent tout seuls au fil de tes actions.`)}
     ${gcard('💛', 'Le mot de la fin',
       `Ce programme n'est pas une école bis : c'est TON été. Avance à ton rythme, creuse ce qui te passionne, saute ce qui t'ennuie un jour et reviens-y le lendemain. La seule vraie règle : rester curieux — et garder ton esprit critique allumé, même (surtout !) face à cette app.`)}
+  </div>`;
+}
+
+/* ---------- guide du Tuteur ---------- */
+function renderAide(){
+  const autre = child === 'adam' ? 'Alix' : 'Adam';
+  $('#main').innerHTML = `<div class="narrow">
+    ${gcardEspaces()}
+    ${gcard('🎓', 'Bienvenue dans ton espace Tuteur',
+      `Ici, c'est l'année scolaire. Pas de notes, pas de programme imposé : quatre outils qui travaillent ensemble, et dont tu te sers quand tu en as besoin.<br><br>
+      <b>📸 Mes cours</b> — tu photographies ton cahier, le cours revient au propre.<br>
+      <b>✏️ Mes mots</b> — les mots qui te résistent, réunis dans un carnet.<br>
+      <b>✅ Ma journée</b> — les gestes de la journée d'école, et ta série 🔥.<br>
+      <b>💬 Mon assistant</b> — à qui tout demander.<br><br>
+      Le plus important à retenir : <b>rien ici n'est noté, rien n'est comparé avec ${autre}</b>. C'est ton atelier à toi.`)}
+
+    ${gcard('📸', "Mes cours — du cahier au cours au propre",
+      `Tu prends ton cours en <b>photo</b> (plusieurs pages à la suite, c'est permis), tu dis la matière, et quelques secondes plus tard il est là : <b>remis au propre</b>, avec des titres, des listes, le vocabulaire en gras — lisible, et imprimable (🖨️).<br><br>
+      Une fois le cours enregistré, tu peux :<br>
+      • <b>👓 Lire ce cours</b> — en grand, à ton rythme, et l'app peut te le lire à voix haute ;<br>
+      • <b>🎤 Interroge-moi</b> — le tuteur te pose des questions sur CE cours et t'explique quand tu te trompes ;<br>
+      • <b>✍️ Des exercices</b> — il en fabrique à partir du cours, de quoi s'entraîner pour de vrai ;<br>
+      • <b>✏️ Corriger le texte</b> — si une photo était floue et qu'un mot est passé de travers, tu le répares toi-même.<br><br>
+      La machine lit une écriture manuscrite, elle n'est pas infaillible : <b>relis toujours ton cours au propre</b> avant de réviser dessus. Si une phrase te paraît bizarre, c'est probablement elle qui a mal lu — corrige-la.`)}
+
+    ${gcard('🔁', "Pourquoi l'app te redemande les mêmes choses",
+      `Quand un cours arrive, l'app en extrait les <b>notions</b> importantes et les suit une par une. Elle te les represente <b>le lendemain, puis trois jours après, puis une semaine, puis deux</b> — un peu plus espacé chaque fois que tu les sais.<br><br>
+      Ce n'est pas pour t'embêter : c'est la façon dont la mémoire fonctionne vraiment. Revoir une notion <b>trois minutes au bon moment</b> la fixe mieux qu'une heure de relecture la veille du contrôle. Le bouton <b>🔁 notions à revoir</b> apparaît dans Mes cours (et sur la carte Tuteur de l'accueil) quand c'est le moment. Quand une notion est bien installée, elle arrête de revenir.`)}
+
+    ${gcard('✏️', "Mes mots — ton carnet d'orthographe",
+      `Les mots qui te résistent sont rassemblés ici, et ils y arrivent de deux façons : <b>tout seuls</b>, quand l'app repère dans ton cahier un mot écrit autrement que l'orthographe habituelle, ou parce que <b>tu l'ajoutes toi-même</b> (➕).<br><br>
+      Les mots repérés dans le cahier te sont d'abord <b>proposés</b> : tu gardes ✓ ceux que tu veux travailler et tu écartes ✕ les autres. Normal — il arrive que l'app déchiffre mal une écriture, et c'est toi qui décides de ton carnet.<br><br>
+      Ensuite, <b>💪 M'entraîner</b> : le mot s'affiche découpé en syllabes de couleur, tu l'écoutes 🔊, tu le regardes, puis tu l'écris de mémoire. Chaque mot a <b>cinq points</b> : à chaque fois que tu le réussis, il en gagne un, et au cinquième il est <b>gagné 🎉</b>. Il y a aussi des <b>📣 dictées</b> faites de tes propres mots.<br><br>
+      Ce qu'on compte ici, ce sont les <b>mots gagnés</b> — jamais les fautes. Quand tu te trompes, c'est l'<b>orthographe juste</b> qui s'affiche en couleur, pour que ce soit elle que tes yeux retiennent.`)}
+
+    ${gcard('👓', "Lire à voix haute, sans se fatiguer",
+      `Dans la lecture guidée (👓), tout se règle, et tes réglages sont retenus sur cet appareil : <b>la taille</b> du texte, <b>l'espacement</b> des lettres et des lignes, le <b>découpage en syllabes</b> colorées, et la <b>vitesse</b> de la voix. Laisse l'app lire pendant que tu suis le mot surligné, ou lis toi-même et touche un mot pour l'entendre.<br><br>
+      Un détail utile : si la voix ne se déclenche pas, c'est qu'il manque une <b>voix française</b> sur l'appareil (ça s'installe dans les réglages du téléphone, à la rubrique synthèse vocale). Tout le reste fonctionne sans elle.`)}
+
+    ${gcard('✅', `Ma journée — ${D.checklist.length} gestes, et ta série 🔥`,
+      `La liste des gestes d'une journée d'école : le matin, après l'école (<b>devoirs</b>, <b>notions à revoir</b>, <b>photo du cours du jour</b>, <b>lecture</b>, <b>mots du carnet</b>), puis le soir (<b>un coup de main à la maison</b>, <b>cartable prêt</b>, <b>écriture du soir</b>). Le petit chevron <b>›</b> sur une ligne t'emmène directement à l'outil concerné sans cocher la case.<br><br>
+      Elle s'affiche <b>du lundi au vendredi</b>. Le week-end, l'onglet te souhaite un bon repos : ta série 🔥 est alors <b>en pause</b>, pas remise à zéro. Et une journée compte pour la série dès <b>${CHK_SEUIL} gestes sur ${D.checklist.length}</b> — pas besoin d'être parfait tous les soirs.<br><br>
+      L'<b>écriture du soir</b> (ce que j'ai appris / ce qui m'a étonné) demande trois lignes et construit ton journal, jour après jour.`)}
+
+    ${gcard('💬', "Mon assistant",
+      `Ton assistant a de la <b>mémoire</b> : il se souvient de vos conversations. Pose-lui tout — une leçon que tu n'as pas comprise, un exercice sur lequel tu bloques, une idée de dessin, ou juste pour discuter. Colle-lui une <b>photo</b> ou une capture d'écran, garde ses meilleures réponses en <b>pépites</b> ⭐, et lance <b>🎓 Interroge-moi</b> pour réviser en jouant.<br><br>
+      Règle d'or : sers-t'en pour <b>comprendre plus</b>, pas pour arrêter de réfléchir. Un devoir qu'il a fait à ta place ne t'apprend rien — un devoir qu'il t'a aidé à comprendre, si.`)}
+
+    ${gcard('💛', 'Le mot de la fin',
+      `Un cours photographié, trois minutes de révision au bon moment, un mot de plus gagné dans le carnet : ce sont des petits gestes, et c'est exactement comme ça que ça marche. Personne ici ne compte tes erreurs — on compte ce que tu as gagné.`)}
   </div>`;
 }
 
@@ -1622,28 +1682,63 @@ async function finishOrient(){
   renderOrientation();
 }
 
-/* ---------- checklist ---------- */
+/* ---------- checklist ----------
+   La checklist cadre une journée d'école : elle ne s'affiche que du lundi au vendredi.
+   Le week-end, l'onglet propose le repos et la série 🔥 est mise en PAUSE — un samedi
+   non coché ne la remet pas à zéro, il est sauté. (Les vacances scolaires, elles, ne
+   sont pas distinguées : un mardi de vacances affiche la liste d'école.) */
 let todayItems = {};
+/* Une journée compte pour la série dès les trois quarts des gestes. Exiger les 13
+   rendrait la série inatteignable un soir chargé, et une série jamais allumée ne
+   motive personne. (Avant, ce seuil était le nombre 10 écrit en dur, hérité d'une
+   liste de 14 gestes : il ne suivait pas le contenu de data.js.) */
+const CHK_SEUIL = Math.max(1, Math.ceil(D.checklist.length * 3 / 4));
+/* Le jour de la semaine est lu depuis la clef de la journée — la même formule que
+   todayStr() — pour que la clef enregistrée et le jour testé ne puissent pas diverger. */
+function estJourEcole(clef){ const n = new Date(clef + 'T12:00:00Z').getUTCDay(); return n >= 1 && n <= 5; }
+
 async function renderChecklist(){
+  if(!estJourEcole(todayStr())){ todayItems = {}; drawChecklistRepos(); return; }
   const {data} = await db.from('adalix_checklist').select('*').eq('child',child).eq('day',todayStr()).maybeSingle();
   todayItems = (data && data.items) || {};
   drawChecklist();
 }
+function drawChecklistRepos(){
+  $('#main').innerHTML = `
+    <div class="narrow">
+    <div class="card" style="text-align:center;">
+      <div style="font-size:42px;">😌</div>
+      <h3>Pas d'école aujourd'hui</h3>
+      <div style="font-size:14px;line-height:1.6;">Ta checklist revient lundi. Ta série 🔥 est juste en pause — elle ne repart pas de zéro.</div>
+      <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+        <button class="btn ghost" onclick="showTab('cours')">${tabIcon('cours')} Mes cours</button>
+        <button class="btn ghost" onclick="showTab('mots')">${tabIcon('mots')} Mes mots</button>
+      </div>
+    </div>
+    </div>`;
+}
 function drawChecklist(){
   const done = D.checklist.filter(it=>todayItems[it.id]).length;
+  const reste = CHK_SEUIL - done;
   $('#main').innerHTML = `
     <div class="narrow">
     <div class="card"><h3>✅ Ma journée — ${new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}</h3>
-      <div style="font-size:14px;">${done} / ${D.checklist.length} ${done===D.checklist.length?'— journée complète, bravo ! 🎉':''}</div></div>
+      <div style="font-size:14px;">${done} / ${D.checklist.length} ${done===D.checklist.length?'— journée complète, bravo ! 🎉':''}</div>
+      <div style="font-size:12.5px;opacity:.7;margin-top:6px;">${reste<=0
+        ? 'Cette journée compte pour ta série 🔥'
+        : `Encore ${reste} pour que la journée compte dans ta série 🔥`}</div></div>
     ${D.checklist.map(it=>`<div class="chk-item ${todayItems[it.id]?'done':''}" onclick="toggleItem('${it.id}')">
       <div class="box">${todayItems[it.id]?'✓':''}</div><div class="emoji">${it.emoji}</div><div class="lbl">${esc(it.label)}</div>
+      ${it.tab ? `<button class="chk-go" title="Y aller" onclick="event.stopPropagation();showTab('${it.tab}')">›</button>` : ''}
     </div>`).join('')}
     </div>`;
 }
 async function toggleItem(id){
+  if(!estJourEcole(todayStr())) return;   // week-end : rien n'est affiché, rien ne se coche
   if(id==='ecriture' && !todayItems[id]){ openJournal(); return; }
-  // 'projet' se coche directement comme les autres (avant : redirection vers l'onglet projet
-  // sans jamais cocher — l'enfant croyait avoir validé et retrouvait la case vide)
+  // Le clic sur la ligne coche, toujours : c'est le chevron › qui navigue (drawChecklist).
+  // Un geste qui renvoyait vers un onglet sans cocher a déjà trompé un enfant, qui croyait
+  // avoir validé et retrouvait la case vide.
   todayItems[id] = !todayItems[id];
   drawChecklist(); saveChecklist();
 }
@@ -1672,20 +1767,26 @@ async function saveChecklist(){
 }
 async function refreshStreak(){
   if(child==='parent') return;
-  const {data} = await db.from('adalix_checklist').select('day,completed').eq('child',child).order('day',{ascending:false}).limit(40);
-  let streak = 0;
-  if(data){
-    const map = Object.fromEntries(data.map(r=>[r.day, r.completed]));
-    for(let i=0;i<40;i++){
-      const d = new Date(); d.setDate(d.getDate()-i);
-      const key = d.toISOString().slice(0,10);
-      const c = map[key]||0;
-      if(c >= 10) streak++;
-      else if(i===0) continue;   // today not finished yet doesn't break the streak
-      else break;
-    }
+  const {data} = await db.from('adalix_checklist').select('day,completed').eq('child',child).order('day',{ascending:false}).limit(60);
+  $('#hdr-streak').textContent = '🔥 ' + calculeSerie(data, todayStr());
+}
+/* Fonction pure, donc testable : combien de jours d'école consécutifs ont atteint le
+   seuil ? Les samedis et dimanches sont sautés (ils ne comptent ni ne rompent), et la
+   journée en cours ne rompt pas la série si elle n'est pas encore terminée. */
+function calculeSerie(rows, clefDuJour){
+  const map = Object.fromEntries((rows||[]).map(r=>[r.day, r.completed]));
+  const base = new Date(clefDuJour + 'T12:00:00Z').getTime();
+  let serie = 0;
+  for(let i=0;i<60;i++){
+    const d = new Date(base); d.setUTCDate(d.getUTCDate()-i);
+    const clef = d.toISOString().slice(0,10);
+    if(!estJourEcole(clef)) continue;
+    const c = map[clef] || 0;
+    if(c >= CHK_SEUIL) serie++;
+    else if(i===0) continue;
+    else break;
   }
-  $('#hdr-streak').textContent = '🔥 ' + streak;
+  return serie;
 }
 
 /* ---------- projet du mois : poste de pilotage ---------- */
@@ -1833,7 +1934,6 @@ async function callCoach(answer){
     });
     if(typeof j.board.progress === 'number') board.progress = j.board.progress;
     await saveBoard();
-    markChecklistItemDone('projet');
   } catch(e){ toast('Erreur de connexion — réessaie !'); }
   finally { boardBusy = false; renderProjet(); }
 }
@@ -1858,7 +1958,6 @@ function toggleStep(i){
   if(!board || !board.steps[i]) return;
   board.steps[i].done = !board.steps[i].done;
   saveBoard(); renderProjet();
-  if(board.steps[i].done) markChecklistItemDone('projet');
 }
 function addStep(){
   const el = $('#step-add'); const t = el ? el.value.trim() : '';
@@ -1895,8 +1994,12 @@ const ECOLE = {
     {t:"L'IA qui t'aide à créer", x:"Le Bâtisseur écrit le code pour toi — mais la cheffe, c'est TOI : c'est toi qui décides quoi créer, qui vérifies, qui améliores. L'IA est ton pinceau magique, pas l'artiste. L'artiste, c'est toi. 🎨"},
   ],
 };
-// coche un item de la checklist du jour sans écraser les autres (utile depuis un autre onglet que "checklist")
+/* Coche un geste du jour sans écraser les autres (utile depuis un autre onglet que
+   « checklist »). Un id absent de D.checklist est ignoré : sinon on écrirait en base
+   une clef que plus rien ne lit, et le total resterait muet sur l'incohérence. */
 async function markChecklistItemDone(id){
+  if(!D.checklist.some(it=>it.id===id)) return;
+  if(!estJourEcole(todayStr())) return;
   const {data} = await db.from('adalix_checklist').select('*').eq('child',child).eq('day',todayStr()).maybeSingle();
   const items = (data && data.items) || {};
   items[id] = true;
@@ -2363,10 +2466,10 @@ const BADGE_CATS = {
   discipline:{label:'Discipline', emoji:'✅'},
 };
 const BADGES = [
-  {id:'streak3', cat:'assiduite', emoji:'🔥', label:"3 jours d'affilée", desc:'Checklist complète 3 jours de suite.'},
-  {id:'streak7', cat:'assiduite', emoji:'🔥🔥', label:'Une semaine', desc:'Checklist complète 7 jours de suite.'},
-  {id:'streak14', cat:'assiduite', emoji:'🔥🔥🔥', label:'Deux semaines', desc:'Checklist complète 14 jours de suite.'},
-  {id:'streak28', cat:'assiduite', emoji:'👑', label:'Streak parfait', desc:'Checklist complète sur les 4 semaines.', rare:true},
+  {id:'streak3', cat:'assiduite', emoji:'🔥', label:"3 jours d'affilée", desc:"Trois jours d'école d'affilée."},
+  {id:'streak7', cat:'assiduite', emoji:'🔥🔥', label:'Sept jours', desc:"Sept jours d'école d'affilée."},
+  {id:'streak14', cat:'assiduite', emoji:'🔥🔥🔥', label:'Quatorze jours', desc:"Quatorze jours d'école d'affilée."},
+  {id:'streak28', cat:'assiduite', emoji:'👑', label:'Série parfaite', desc:"Vingt-huit jours d'école d'affilée — plus d'un mois.", rare:true},
   {id:'quiz_first', cat:'savoir', emoji:'🥇', label:'Premier quiz réussi', desc:'Un quiz réussi à 70% ou plus.'},
   {id:'quiz_perfect', cat:'savoir', emoji:'💯', label:'Premier sans-faute', desc:'Un quiz réussi à 100%.'},
   {id:'quiz_5', cat:'savoir', emoji:'🧠', label:'5 quiz complétés', desc:'5 quiz terminés, peu importe le score.'},
@@ -2384,20 +2487,8 @@ const BADGES = [
 ];
 async function computeStreak(){
   if(child==='parent') return 0;
-  const {data} = await db.from('adalix_checklist').select('day,completed').eq('child',child).order('day',{ascending:false}).limit(40);
-  let streak = 0;
-  if(data){
-    const map = Object.fromEntries(data.map(r=>[r.day, r.completed]));
-    for(let i=0;i<40;i++){
-      const d = new Date(); d.setDate(d.getDate()-i);
-      const key = d.toISOString().slice(0,10);
-      const c = map[key]||0;
-      if(c >= 10) streak++;
-      else if(i===0) continue;
-      else break;
-    }
-  }
-  return streak;
+  const {data} = await db.from('adalix_checklist').select('day,completed').eq('child',child).order('day',{ascending:false}).limit(60);
+  return calculeSerie(data, todayStr());   // même calcul que l'en-tête : une seule règle
 }
 async function loadBadges(){
   if(child==='parent') return;
@@ -2507,10 +2598,9 @@ async function renderDashboard(){
   const badgeCountOf = k => BD.filter(r=>r.child===k).length;
   const kids = ['adam','alix'];
   const kidName = k => (k==='adam'||k==='alix'||isVisitor(k)) ? joueurNom(k) : (k||'—');
-  const streakOf = k => {
-    const map = Object.fromEntries(C.filter(r=>r.child===k).map(r=>[r.day,r.completed]));
-    let s=0; for(let i=0;i<60;i++){ const d=new Date(); d.setDate(d.getDate()-i); const key=d.toISOString().slice(0,10);
-      if((map[key]||0)>=10) s++; else if(i===0) continue; else break; } return s; };
+  // même calcul que l'en-tête de l'enfant, sinon parent et enfant lisent deux séries
+  // différentes pour la même semaine
+  const streakOf = k => calculeSerie(C.filter(r=>r.child===k), todayStr());
   $('#main').innerHTML = `<div class="narrow" style="max-width:900px;">
     <div class="stat-row">${kids.map(k=>`
       <div class="stat"><div class="v">${kidName(k)}</div>

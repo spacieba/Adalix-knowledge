@@ -79,17 +79,20 @@ console.log('\n— aucun onglet en double, aucun onglet perdu —');
     const double = ete.filter(t => tut.includes(t));
     eq(`[${enfant}] aucun onglet dans les deux espaces`, double, []);
 
-    // tout ce que l'enfant avait avant la séparation doit rester atteignable
+    // tout ce que l'enfant avait avant la séparation doit rester atteignable ;
+    // « aide » (le guide du Tuteur) s'y ajoute volontairement
     const avant = enfant === 'adam'
       ? ['programme', 'cours', 'mots', 'quiz', 'geo', 'orientation', 'les100', 'checklist', 'projet', 'fabrique', 'chat', 'guide']
       : ['programme', 'cours', 'mots', 'quiz', 'geo', 'les100', 'checklist', 'projet', 'fabrique', 'chat', 'guide'];
+    const attendus = avant.concat(['aide']);
     const apres = ete.concat(tut);
     eq(`[${enfant}] aucun onglet perdu dans la réorganisation`, avant.filter(t => !apres.includes(t)), []);
-    eq(`[${enfant}] aucun onglet apparu par erreur`, apres.filter(t => !avant.includes(t)), []);
+    eq(`[${enfant}] aucun onglet apparu par erreur`, apres.filter(t => !attendus.includes(t)), []);
   });
   eq("l'orientation reste réservée à Adam", C.ESPACES.ete.tabs('alix').includes('orientation'), false);
   vrai("l'orientation est bien dans Le Grand Été pour Adam", C.ESPACES.ete.tabs('adam').includes('orientation'));
-  eq('Tuteur : cours, mots, checklist, assistant', C.ESPACES.tuteur.tabs('alix'), ['cours', 'mots', 'checklist', 'chat']);
+  eq('Tuteur : cours, mots, checklist, assistant, guide', C.ESPACES.tuteur.tabs('alix'), ['cours', 'mots', 'checklist', 'chat', 'aide']);
+  eq('le guide du Grand Été reste dans Le Grand Été', C.ESPACES.ete.tabs('alix').includes('guide'), true);
 }
 
 /* ---------- l'écran des deux cartes ---------- */
@@ -118,9 +121,9 @@ console.log('\n— entrer dans un espace —');
   vrai("l'espace courant est mémorisé", C.espace === 'tuteur');
   vrai('la barre d\'onglets réapparaît', !el('nav').classList.contains('hidden'));
   const nav = el('navbar').innerHTML;
-  vrai('la barre ne contient que les onglets du Tuteur', /nav-cours/.test(nav) && /nav-mots/.test(nav) && /nav-checklist/.test(nav) && /nav-chat/.test(nav));
+  vrai('la barre ne contient que les onglets du Tuteur', /nav-cours/.test(nav) && /nav-mots/.test(nav) && /nav-checklist/.test(nav) && /nav-chat/.test(nav) && /nav-aide/.test(nav));
   vrai('elle ne contient rien du Grand Été', !/nav-programme/.test(nav) && !/nav-quiz/.test(nav) && !/nav-geo/.test(nav));
-  eq('quatre onglets, pas plus', (nav.match(/<button/g) || []).length, 4);
+  eq('cinq onglets, pas plus', (nav.match(/<button/g) || []).length, 5);
   vrai("l'en-tête indique où on se trouve", /Adam · 🎓 Tuteur/.test(el('hdr-who').textContent), el('hdr-who').textContent);
   vrai('le premier onglet est ouvert', C.tab === 'cours');
 

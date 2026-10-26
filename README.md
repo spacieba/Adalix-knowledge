@@ -17,7 +17,7 @@ api/image.js       fonction serverless Vercel — proxy vers l'API Runware (gén
 api/cours.js       fonction serverless Vercel — module des cours (transcription, exercices, correction, interro)
 manifest.json      installation sur l'écran d'accueil (PWA)
 sw.js              service worker minimal, sans cache — ne sert qu'à rendre l'app installable
-tests/             tests Node sans dépendance, 429 au total (voir tests/README.md)
+tests/             tests Node sans dépendance, 559 au total (voir tests/README.md)
 ```
 
 Pas de build : c'est du HTML/JS statique + des fonctions serverless Node. Vercel déploie ce dossier tel quel.
@@ -55,7 +55,8 @@ mais deux cartes :
 
 - **🌞 Le Grand Été** — le programme des 4 semaines, les quiz, les jeux géo, les 100
   personnalités, le projet du mois, la Fabrique, le guide, et l'orientation pour Adam.
-- **🎓 Tuteur** — l'année scolaire : Mes cours, la checklist et l'assistant.
+- **🎓 Tuteur** — l'année scolaire : Mes cours, Mes mots, la journée, l'assistant et son
+  propre guide.
 
 Un onglet n'appartient qu'à un seul espace, sinon les deux barres redeviennent identiques.
 Le bouton 🏠 de l'en-tête ramène aux deux cartes depuis n'importe où, et l'en-tête rappelle
@@ -63,8 +64,34 @@ en permanence l'espace courant (« 🦊 Alix · 🎓 Tuteur »). Tout se règle 
 (app.js) : une liste d'onglets par espace, dérivée de l'enfant. `tests/espaces.test.mjs`
 vérifie qu'aucun onglet n'est en double, perdu, ou absent de la table de routage.
 
-La checklist a déménagé dans Tuteur mais son contenu est resté celui de l'été
-(`D.checklist` dans data.js) — à revoir si elle doit cadrer l'année scolaire.
+Chaque espace a son guide, et c'est pour ça qu'il y a deux onglets : `guide`
+(`renderGuide`) raconte Le Grand Été, `aide` (`renderAide`) raconte le Tuteur. Un guide
+unique mélangeait un programme daté et un outil d'année scolaire, et obligeait à mettre
+le même onglet dans les deux barres. Les deux s'ouvrent sur la même carte « Les deux
+espaces » (`gcardEspaces`) : sans elle, on peut vivre dans un espace sans soupçonner
+l'autre.
+
+## La journée (checklist)
+
+Les 13 gestes de `D.checklist` (data.js) cadrent une **journée d'école** : le matin,
+l'après-école (devoirs, notions à revoir, photo du cours du jour, lecture, mots du
+carnet), puis le soir (maison, cartable, écriture du soir). Un geste peut porter un
+champ `tab` : une ligne affiche alors un chevron `›` qui ouvre l'outil concerné **sans
+cocher la case** — le clic sur la ligne coche, le chevron navigue, et
+`event.stopPropagation()` sépare les deux. (Un geste qui navigue au lieu de cocher a
+déjà trompé un enfant une fois : il croyait avoir validé et retrouvait la case vide.)
+
+L'onglet ne s'affiche que du lundi au vendredi (`estJourEcole`) ; le week-end il propose
+le repos. La série 🔥 est alors **en pause, pas remise à zéro** : `calculeSerie` saute
+les samedis et dimanches, et une journée compte dès `CHK_SEUIL` gestes — les trois
+quarts de la liste, dérivés de data.js. Avant, le seuil était le nombre `10` écrit en
+dur dans **trois** calculs de série différents (en-tête, badges, tableau de bord
+parent), qui pouvaient donc afficher trois valeurs ; il n'en reste qu'un,
+`calculeSerie`, et il est testé.
+
+Limite connue : les **vacances scolaires** ne sont pas distinguées — un mardi de
+vacances affiche la liste d'école. Il faudrait un calendrier des vacances pour faire
+mieux, et ça n'en vaut probablement pas le prix.
 
 ## Module « Mes cours »
 

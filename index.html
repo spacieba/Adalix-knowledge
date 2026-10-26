@@ -282,6 +282,10 @@ body.theme-alix .btn { background:linear-gradient(135deg, #e8798f, #f0a35a); }
 .chk-item.done .box { background:var(--accent); }
 .chk-item.done .lbl { text-decoration:line-through; opacity:.55; }
 .chk-item .emoji { font-size:20px; }
+/* le libellé pousse le chevron « y aller » contre le bord droit ; le chevron ne coche pas la case */
+.chk-item .lbl { flex:1; min-width:0; }
+.chk-item .chk-go { flex-shrink:0; background:transparent; border:1px solid var(--card-border); color:inherit; opacity:.55; border-radius:8px; width:30px; height:30px; font-size:18px; line-height:1; cursor:pointer; }
+.chk-item .chk-go:hover { opacity:1; }
 textarea, input[type=text], input[type=password] { width:100%; border:1.5px solid var(--card-border,#ccd4e0); background:rgba(0,0,0,.03); color:var(--card-text); border-radius:var(--radius-btn); padding:10px 12px; font-size:14px; font-family:var(--font-body); margin:5px 0; }
 
 /* chat */
