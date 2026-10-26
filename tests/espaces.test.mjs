@@ -9,7 +9,8 @@ let ko = 0, ok = 0;
 const vrai = (nom, c, info) => { if (c) { ok++; } else { ko++; console.log('  ✗ ' + nom + (info ? '\n     ' + info : '')); } };
 const eq = (nom, a, b) => vrai(nom, JSON.stringify(a) === JSON.stringify(b), 'attendu ' + JSON.stringify(b) + ', obtenu ' + JSON.stringify(a));
 
-function chargeApp(profil) {
+function chargeApp(profil, options) {
+  const opt = options || {};
   const elements = {};
   const el = id => elements[id] || (elements[id] = {
     id, innerHTML: '', textContent: '', value: '', disabled: false, dataset: {}, style: {},
@@ -29,7 +30,9 @@ function chargeApp(profil) {
     addEventListener() {},
     body: { className: '' },
   };
-  const win = { matchMedia: () => ({ matches: false }) };
+  // matchMedia sert à savoir si l'app tourne déjà installée (display-mode: standalone)
+  const win = { matchMedia: () => ({ matches: !!opt.installee }) };
+  const nav = { userAgent: opt.ua || 'Test', standalone: !!opt.iosInstallee };
   // data.js tel quel : les fonctions de rendu lisent window.DATA
   new Function('window', fs.readFileSync(path.join(RACINE, 'data.js'), 'utf8'))(win);
 
@@ -38,16 +41,17 @@ function chargeApp(profil) {
   const appels = [];
   const bouchon = nom => (...a) => { appels.push({ nom, a }); };
   const f = new Function('window', 'document', 'localStorage', 'console', 'fetch', 'setTimeout',
-    'coursBadgeEspace', 'renderCours', 'renderMots', 'fillCoursParentCard', 'fillMotsParentCard', 'Image', 'URL',
+    'coursBadgeEspace', 'renderCours', 'renderMots', 'fillCoursParentCard', 'fillMotsParentCard', 'Image', 'URL', 'navigator',
     src + '\n;return {TABS, ESPACES, showEspaces, enterEspace, showTab, buildNav, majEnTete, '
+    + 'majInstall, htmlInstall, estInstallee, estIPhone, lancerInstall, aideInstallIPhone, '
     + 'get espace(){return espace}, set espace(v){espace=v}, get child(){return child}, set child(v){child=v}, '
     + 'get tab(){return tab}};');
   const C = f(win, doc, stockage, { log() {}, warn() {}, error() {} }, async () => ({ json: async () => ({}) }),
     fn => { appels.push({ nom: 'setTimeout' }); return 0; },
     bouchon('coursBadgeEspace'), bouchon('renderCours'), bouchon('renderMots'), bouchon('fillCoursParentCard'), bouchon('fillMotsParentCard'),
-    function () { return {}; }, { createObjectURL: () => '', revokeObjectURL() {} });
+    function () { return {}; }, { createObjectURL: () => '', revokeObjectURL() {} }, nav);
   C.child = profil || 'alix';
-  return { C, el, elements, appels };
+  return { C, el, elements, appels, win };
 }
 
 /* ---------- cohérence du découpage ---------- */
@@ -108,6 +112,7 @@ console.log('\n— rendu de l\'écran des espaces —');
   vrai('elles sont cliquables', /enterEspace\('ete'\)/.test(h) && /enterEspace\('tuteur'\)/.test(h));
   vrai("l'enfant est salué par son prénom", /Salut Alix/.test(h));
   vrai('la pastille des révisions a sa place réservée', /id="espace-tuteur-info"/.test(h));
+  vrai("la proposition d'installation a sa place réservée", /id="install-slot"/.test(h));
   vrai('la barre d\'onglets est masquée', el('nav').classList.contains('hidden'));
   vrai('les notions à revoir sont demandées à cours.js', appels.some(a => a.nom === 'coursBadgeEspace'));
   vrai("l'en-tête ne porte aucun espace", el('hdr-who').textContent === '🦊 Alix', el('hdr-who').textContent);
@@ -146,6 +151,78 @@ console.log('\n— un espace inconnu ne casse rien —');
   C.enterEspace('nimportequoi');
   vrai('aucun changement d\'espace', C.espace === null);
   vrai('la barre reste masquée', el('nav').classList.contains('hidden'));
+}
+
+/* ---------- proposer d'installer l'app ----------
+   Règle : jamais de bouton qui ne marche pas. On ne le montre que si le navigateur a
+   annoncé qu'il savait installer (beforeinstallprompt), ou sur iPhone où l'on explique
+   le geste à la main — et jamais si l'app tourne déjà installée. */
+console.log('\n— proposer d\'installer l\'app —');
+{
+  const { C, el, win } = chargeApp('alix');
+  C.showEspaces();
+  vrai("l'emplacement est vide tant que le navigateur n'a rien annoncé", el('install-slot').innerHTML === '',
+    el('install-slot').innerHTML);
+  vrai("aucun bouton d'installation inutile sur l'écran", !/install-card/.test(el('main').innerHTML));
+
+  // le navigateur se décide, éventuellement après le premier rendu
+  win.__pwaPrompt = { prompt() { this.appelee = true; }, userChoice: Promise.resolve({ outcome: 'accepted' }) };
+  C.majInstall();
+  const h = el('install-slot').innerHTML;
+  vrai('le bouton apparaît', /install-card/.test(h));
+  vrai('il est cliquable', /lancerInstall\(\)/.test(h));
+  vrai("pas d'undefined affiché", !/undefined/.test(h), h);
+  vrai('pas de gabarit non interprété', !/\$\{/.test(h));
+  vrai("il ne renvoie pas vers les instructions iPhone", !/aideInstallIPhone/.test(h));
+}
+
+{
+  // app déjà installée : plus rien à proposer, même si le navigateur insiste
+  const { C, el, win } = chargeApp('adam', { installee: true });
+  win.__pwaPrompt = { prompt() {}, userChoice: Promise.resolve({ outcome: 'accepted' }) };
+  C.showEspaces();
+  vrai("l'app installée reconnaît son état", C.estInstallee() === true);
+  vrai('aucune proposition quand c\'est déjà installé', el('install-slot').innerHTML === '',
+    el('install-slot').innerHTML);
+}
+
+{
+  // iOS installé via « Sur l'écran d'accueil » : navigator.standalone
+  const { C } = chargeApp('alix', { iosInstallee: true });
+  vrai('le cas iOS installé est reconnu', C.estInstallee() === true);
+}
+
+{
+  // iPhone pas encore installé : Safari n'émet jamais l'événement, on explique le geste
+  const { C, el } = chargeApp('alix', { ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Safari/605.1.15' });
+  vrai("l'iPhone est reconnu", C.estIPhone() === true);
+  C.showEspaces();
+  const h = el('install-slot').innerHTML;
+  vrai('le bouton d\'aide apparaît', /install-card/.test(h));
+  vrai('il ouvre les instructions', /aideInstallIPhone\(\)/.test(h));
+  vrai("il n'essaie pas d'ouvrir une boîte de dialogue qui n'existe pas", !/lancerInstall/.test(h));
+
+  C.aideInstallIPhone();
+  const m = el('modal-root').innerHTML;
+  vrai('les instructions parlent du bouton Partager', /Partager/.test(m));
+  vrai("et de « Sur l'écran d'accueil »", /écran d'accueil/.test(m));
+  vrai('pas de gabarit non interprété dans les instructions', !/\$\{/.test(m));
+}
+
+{
+  // le clic : la boîte du navigateur s'ouvre, et l'événement ne se rejoue pas
+  const { C, el, win } = chargeApp('alix');
+  let appelee = false;
+  win.__pwaPrompt = { prompt() { appelee = true; }, userChoice: Promise.resolve({ outcome: 'accepted' }) };
+  C.showEspaces();
+  await C.lancerInstall();
+  vrai('la boîte de dialogue du navigateur a été ouverte', appelee);
+  vrai("l'événement est consommé, pas rejoué", !win.__pwaPrompt);
+  vrai("et la proposition disparaît de l'écran", el('install-slot').innerHTML === '', el('install-slot').innerHTML);
+
+  // deuxième clic sans événement : ne doit pas planter
+  await C.lancerInstall();
+  vrai('un clic sans événement ne casse rien', true);
 }
 
 console.log('\n' + (ko ? `❌ ${ko} échec(s), ${ok} test(s) passés` : `✅ ${ok} tests passés`));

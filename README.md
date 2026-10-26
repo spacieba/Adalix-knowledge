@@ -17,7 +17,7 @@ api/image.js       fonction serverless Vercel — proxy vers l'API Runware (gén
 api/cours.js       fonction serverless Vercel — module des cours (transcription, exercices, correction, interro)
 manifest.json      installation sur l'écran d'accueil (PWA)
 sw.js              service worker minimal, sans cache — ne sert qu'à rendre l'app installable
-tests/             tests Node sans dépendance, 559 au total (voir tests/README.md)
+tests/             tests Node sans dépendance, 581 au total (voir tests/README.md)
 ```
 
 Pas de build : c'est du HTML/JS statique + des fonctions serverless Node. Vercel déploie ce dossier tel quel.
@@ -174,3 +174,22 @@ sur iPhone, Partager → « Sur l'écran d'accueil ». Elle s'ouvre alors en ple
 d'adresse — l'effet d'un vrai programme, sans rien à installer ni à mettre à jour.
 Le service worker ne met **rien** en cache, volontairement : une app scolaire qui sert une vieille
 version depuis un cache est bien pire qu'une app qui exige le réseau.
+
+Depuis le 26/10/2026, l'écran des deux espaces propose l'installation lui-même : il fallait
+sinon aller la chercher dans le menu du navigateur, et personne n'y allait. Le navigateur
+annonce qu'il sait installer en émettant `beforeinstallprompt` ; index.html le capte, empêche
+sa bannière (qui tombe n'importe quand et qu'on ne contrôle pas) et le range dans
+`window.__pwaPrompt`. `majInstall()` (app.js) remplit alors l'emplacement `#install-slot`
+réservé dans `showEspaces` — et index.html rappelle `majInstall` à l'arrivée de l'événement,
+qui peut survenir après le premier rendu.
+
+Règle tenue : **jamais un bouton qui ne marche pas.** Rien ne s'affiche si l'app tourne déjà
+installée (`display-mode: standalone`, ou `navigator.standalone` sur iOS), ni dans un
+navigateur qui ne sait pas installer. Safari n'émet jamais l'événement : sur iPhone, le bouton
+ouvre les deux gestes à faire à la main. Un `vercel dev`/local n'y change rien, l'installation
+marche sur n'importe quelle origine `http(s)`.
+
+Ce qui resterait à faire pour un **vrai exécutable** (.exe/.msi via Tauri, .apk) : rien n'est
+commencé, et ça ne rendrait pas l'app autonome — `api/` doit rester côté serveur, la clé
+Anthropic ne pouvant pas voyager dans un client. Le gain serait cosmétique et le coût réel
+(mises à jour à distribuer, un emballage par plateforme).

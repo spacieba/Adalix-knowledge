@@ -372,8 +372,63 @@ function showEspaces(){
         <div class="ec-fleche">›</div>
       </div>`;
     }).join('')}
+    <div id="install-slot"></div>
   </div>`;
   coursBadgeEspace();   // cours.js : annonce les notions à revoir, s'il y en a
+  majInstall();         // propose d'installer l'app, si le navigateur sait le faire
+}
+
+/* ---------- installer l'app comme un vrai logiciel ----------
+   Le manifeste et le service worker rendent l'app installable depuis le début, mais il
+   fallait aller chercher « Installer » dans le menu du navigateur — ni Adam ni Alix ne
+   l'auraient trouvé, et l'app restait un onglet. Le navigateur nous prévient qu'il sait
+   l'installer en émettant « beforeinstallprompt », capté dans index.html et rangé dans
+   window.__pwaPrompt ; on offre alors un bouton qui ouvre SA boîte de dialogue. On ne
+   peut pas l'ouvrir sans un geste de l'utilisateur, et c'est tant mieux.
+   Safari n'émet jamais cet événement : sur iPhone, on explique le geste à la main. */
+function estInstallee(){
+  try { if(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true; }
+  catch(e){ /* matchMedia absent ou capricieux : on suppose « pas installée » */ }
+  return !!(typeof navigator !== 'undefined' && navigator.standalone);   // iOS installé
+}
+function estIPhone(){
+  const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
+  return /iPad|iPhone|iPod/.test(ua);
+}
+/* Remplit l'emplacement réservé. Appelée au rendu, et de nouveau depuis index.html si le
+   navigateur se décide après coup — beforeinstallprompt arrive quand il veut. */
+function majInstall(){
+  const el = $('#install-slot');
+  if(el) el.innerHTML = htmlInstall();
+}
+function htmlInstall(){
+  const carte = (sous, action) => `<div class="install-card" onclick="${action}">
+    <div class="ic-emoji">📲</div>
+    <div><div class="ic-titre">Installer l'app</div><div class="ic-sous">${sous}</div></div>
+  </div>`;
+  if(estInstallee()) return '';   // c'est déjà un logiciel : rien à proposer
+  if(window.__pwaPrompt) return carte("Elle s'ouvrira comme un vrai programme, avec son icône, sans barre d'adresse.", 'lancerInstall()');
+  if(estIPhone()) return carte('Sur iPhone il y a deux gestes à faire — je te montre.', 'aideInstallIPhone()');
+  return '';   // navigateur qui ne sait pas installer : pas de bouton qui ne marcherait pas
+}
+async function lancerInstall(){
+  const p = window.__pwaPrompt;
+  if(!p){ majInstall(); return; }
+  window.__pwaPrompt = null;   // un même événement ne se rejoue pas
+  try {
+    p.prompt();
+    const r = await p.userChoice;
+    if(r && r.outcome === 'accepted') toast("C'est installé ! 🎉");
+  } catch(e){ console.warn('installation', e); }
+  majInstall();
+}
+function aideInstallIPhone(){
+  modal(`<h3>📲 Installer l'app sur l'iPhone</h3>
+    <p style="font-size:14px;line-height:1.6;">Safari ne sait pas le faire tout seul, mais c'est deux gestes :</p>
+    <p style="font-size:14px;line-height:1.75;">1. Touche le bouton <b>Partager</b> en bas de l'écran (le carré avec une flèche vers le haut).<br>
+    2. Fais défiler, choisis <b>« Sur l'écran d'accueil »</b>, puis <b>Ajouter</b>.</p>
+    <p style="font-size:13.5px;color:#666;">L'app apparaîtra avec son icône et s'ouvrira en plein écran.</p>
+    <div class="actions"><button class="btn" onclick="closeModal()">Compris</button></div>`);
 }
 function enterEspace(k){
   const e = ESPACES[k];

@@ -393,6 +393,14 @@ body.theme-adam .espaces-titre { color:#c9962c; }
 body.theme-adam .espace-card .ec-titre { color:#c9962c; }
 .espace-card .ec-sous { font-size:13.5px; opacity:.72; margin-top:3px; line-height:1.5; }
 .espace-card .ec-fleche { margin-left:auto; font-size:30px; opacity:.3; flex-shrink:0; }
+/* proposition d'installer l'app : en pointillés, pour ne pas se confondre avec les
+   deux espaces, qui sont la vraie décision de cet écran */
+.install-card { display:flex; align-items:center; gap:14px; background:var(--card-bg); color:var(--card-text);
+  border:1px dashed var(--card-border); border-radius:var(--radius-card); padding:14px 16px; margin-top:16px; cursor:pointer; }
+.install-card:hover { border-style:solid; box-shadow:var(--shadow); }
+.install-card .ic-emoji { font-size:28px; flex-shrink:0; }
+.install-card .ic-titre { font-weight:800; font-size:15px; }
+.install-card .ic-sous { font-size:12.5px; opacity:.72; margin-top:2px; line-height:1.45; }
 .espace-card .ec-pastille { display:inline-block; margin-top:7px; font-size:12.5px; font-weight:700;
   background:var(--accent); color:#fff; border-radius:var(--radius-chip); padding:4px 11px; }
 @media (max-width:640px){
@@ -509,6 +517,20 @@ if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
     navigator.serviceWorker.register('sw.js').catch(function(e){ console.warn('sw', e); });
   });
 }
+
+/* Le navigateur annonce qu'il sait installer l'app : on garde son événement de côté
+   (app.js s'en sert pour proposer un bouton) et on empêche sa bannière à lui, qu'on ne
+   contrôle pas et qui tombe n'importe quand. L'événement peut arriver après le premier
+   rendu, d'où le rappel à majInstall. */
+window.addEventListener('beforeinstallprompt', function(e){
+  e.preventDefault();
+  window.__pwaPrompt = e;
+  if (typeof majInstall === 'function') majInstall();
+});
+window.addEventListener('appinstalled', function(){
+  window.__pwaPrompt = null;
+  if (typeof majInstall === 'function') majInstall();
+});
 
 /* Filet de sécurité : si app.js n'a pas pu s'exécuter (script bloqué, réseau coupé,
    fichier incomplet), la page resterait muette au clic. On affiche un message clair. */
