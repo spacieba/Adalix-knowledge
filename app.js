@@ -38,10 +38,14 @@ let quizMode = false;
 let msgsSinceMemo = 0;
 /* code famille : demandé une fois par appareil, exigé par les fonctions IA du serveur */
 let familyCode = localStorage.getItem('adalix_family_code') || '';
-function askFamilyCode(){
+/* Ce qu'on relancera dès que le code sera accepté : sans ça, l'enfant saisit le code,
+   « il ne se passe rien », et il doit deviner qu'il faut refaire son geste. */
+let apresCode = null;
+function askFamilyCode(refuse){
   modal(`<h3>🔐 Code famille</h3>
-    <p style="font-size:13.5px;color:#666;">Pour protéger l'app, les fonctions magiques (assistant, Fabrique, images) demandent le code de la maison. Demande-le à papa — tu ne le saisis qu'une seule fois sur cet appareil.</p>
-    <input type="password" id="famcode-input" inputmode="text">
+    ${refuse ? `<p style="font-size:13.5px;background:rgba(232,150,63,.14);border-radius:10px;padding:9px 12px;">Ce code n'a pas été accepté. Vérifie qu'il n'y a pas de <b>majuscule ajoutée par le clavier</b> ni d'espace à la fin.</p>` : ''}
+    <p style="font-size:13.5px;color:#666;">Pour protéger l'app, les fonctions magiques (assistant, Fabrique, images, mise au propre des cours) demandent le code de la maison. Demande-le à papa — tu ne le saisis qu'une seule fois sur cet appareil.</p>
+    <input type="text" id="famcode-input" inputmode="text" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false">
     <div class="actions"><button class="btn" onclick="saveFamilyCode()">Valider</button><button class="btn ghost" onclick="closeModal()">Plus tard</button></div>`);
   setTimeout(()=>{ const el=$('#famcode-input'); if(el) el.focus(); },50);
 }
@@ -49,12 +53,16 @@ function saveFamilyCode(){
   const el = $('#famcode-input'); if(!el) return;
   familyCode = el.value.trim();
   localStorage.setItem('adalix_family_code', familyCode);
-  closeModal(); toast('Code enregistré 🔐 — relance ta demande !');
+  closeModal();
+  const relance = apresCode; apresCode = null;
+  if(relance){ toast('Code enregistré 🔐 — je relance ta demande…'); relance(); }
+  else toast('Code enregistré 🔐');
 }
-function badFamilyCode(){
+function badFamilyCode(relance){
   familyCode = '';
   localStorage.removeItem('adalix_family_code');
-  askFamilyCode();
+  apresCode = typeof relance === 'function' ? relance : null;
+  askFamilyCode(true);
 }
 const MAX_NEW_PERSONS_PER_DAY = 3;
 let earnedBadges = new Set();

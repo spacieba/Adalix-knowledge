@@ -13,11 +13,11 @@ const vrai = (nom, c, info) => { if (c) ok++; else { ko++; console.log('  ✗ ' 
 
 /* ---------- api/cours.js ---------- */
 const srcApi = fs.readFileSync(path.join(RACINE, 'api/cours.js'), 'utf8');
-function chargeApi(fetchStub) {
+function chargeApi(fetchStub, env) {
   const mod = { exports: {} };
   const f = new Function('module', 'exports', 'fetch', 'process', 'console',
     srcApi + '\n;return {handler: module.exports, construitRessources, jsonDe, SITES, appelClaude};');
-  return f(mod, mod.exports, fetchStub, { env: { ANTHROPIC_API_KEY: 'test-key' } }, console);
+  return f(mod, mod.exports, fetchStub, { env: Object.assign({ ANTHROPIC_API_KEY: 'test-key' }, env || {}) }, console);
 }
 
 console.log('\n— construitRessources : aucun lien inventé —');
@@ -47,6 +47,37 @@ console.log('\n— jsonDe : tolérant au bavardage du modèle —');
   eq('JSON dans un bloc de code', A.jsonDe('Voici :\n```json\n{"a":2}\n```'), { a: 2 });
   eq('JSON invalide', A.jsonDe('pas du json'), null);
   eq('texte vide', A.jsonDe(''), null);
+}
+
+/* ---------- le code famille ----------
+   Il est tapé par un enfant sur un clavier de téléphone, qui ajoute volontiers une
+   majuscule au premier caractère ou un espace à la fin. Un refus silencieux laissait
+   croire que « rien ne se passe » — c'est arrivé au premier vrai essai. */
+console.log('\n— le code famille —');
+{
+  const repondeur = () => { const R = { code: 0, body: null }; R.status = c => { R.code = c; return R; }; R.json = b => { R.body = b; return R; }; return R; };
+  const photo = { media_type: 'image/jpeg', data: 'AAA' };
+  const appel = async (code, fam) => {
+    const A = chargeApi(async () => ({ ok: true, json: async () => ({ content: [{ type: 'text', text: '{"titre":"T","texte":"x"}' }] }) }), { FAMILY_CODE: fam });
+    const R = repondeur();
+    await A.handler({ method: 'POST', body: { mode: 'transcrire', child: 'alix', photos: [photo], code } }, R);
+    return R.body || {};
+  };
+
+  eq('le bon code passe', (await appel('Maison42', 'Maison42')).error, undefined);
+  eq('un mauvais code est refusé', (await appel('pas-le-bon', 'Maison42')).error, 'code_famille');
+  eq('le code vide est refusé', (await appel('', 'Maison42')).error, 'code_famille');
+  eq('le code absent est refusé', (await appel(undefined, 'Maison42')).error, 'code_famille');
+  // ce que fait un clavier de téléphone
+  eq('une majuscule ajoutée par le clavier passe', (await appel('maison42', 'Maison42')).error, undefined);
+  eq('une majuscule en trop passe aussi', (await appel('MAISON42', 'Maison42')).error, undefined);
+  eq('un espace collé à la fin passe', (await appel('Maison42 ', 'Maison42')).error, undefined);
+  eq('un espace au début passe', (await appel('  Maison42', 'Maison42')).error, undefined);
+  // sans code configuré, on ne bloque personne
+  eq('sans FAMILY_CODE, rien n\'est exigé', (await appel(undefined, undefined)).error, undefined);
+  // la tolérance ne va pas jusqu'à laisser passer n'importe quoi
+  eq('un code tronqué reste refusé', (await appel('Maison4', 'Maison42')).error, 'code_famille');
+  eq('un espace au milieu reste refusé', (await appel('Mai son42', 'Maison42')).error, 'code_famille');
 }
 
 console.log('\n— handler transcrire : de la photo au cours normalisé —');

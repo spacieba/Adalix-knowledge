@@ -5,8 +5,13 @@ const REPO = 'Adalix-knowledge';
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return; }
+  /* Comparaison tolérante. Le code est tapé par un enfant sur un clavier de téléphone,
+     qui ajoute volontiers une majuscule au premier caractère ou un espace à la fin. On
+     ne protège pas un compte en banque : on empêche un inconnu de dépenser des crédits
+     IA. Un code juste à la casse et aux espaces près doit donc passer. */
   const fam = process.env.FAMILY_CODE;
-  if (fam && ((req.body || {}).code || '') !== fam) {
+  const normCode = s => String(s == null ? '' : s).trim().toLowerCase();
+  if (fam && normCode((req.body || {}).code) !== normCode(fam)) {
     res.status(200).json({ error: 'code_famille', reply: "🔐 Code famille manquant ou incorrect — clique sur OK et saisis le code que papa t'a donné !" });
     return;
   }

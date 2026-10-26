@@ -88,6 +88,7 @@ async function scenario(nom, fixtures, fn, opts) {
       },
     };
   }
+  const refusCode = [];
   const f = new Function('esc', 'child', 'db', 'toast', 'modal', 'closeModal', 'familyCode', 'badFamilyCode',
     'todayStr', '$', 'document', 'fetch', 'renderDashboard', 'Image', 'URL', 'window', 'navigator', 'console',
     src + '\n;return {renderCours, drawCoursList, openAjoutCours, drawDraft, drawCours, openCours, drawExos, drawRevision, drawInterroScreen, fillCoursParentCard, coursCardsHtml, setCoursFiltre, openExosMenu, exoHtml, drawRevisionFin, coursFiles, ' +
@@ -96,12 +97,16 @@ async function scenario(nom, fixtures, fn, opts) {
     'get coursPhotos(){return coursPhotos}, set coursPhotos(v){coursPhotos=v}, ' +
     'get coursDraft(){return coursDraft}, set coursDraft(v){coursDraft=v}, get coursList(){return coursList}, set coursList(v){coursList=v}, ' +
     'ouvrirCamera, camDeclic, fermerCamera, drawCamera, majCamera, cameraDispo, camRepli, coursPousseImage, ' +
+    'callCours, photosAEnvoyer, lancerTranscription, SEUIL_ENVOI, ' +
     'get camStream(){return camStream}};');
-  const C = f(esc, 'alix', db, m => toasts.push(m), h => { dom.el('modal-root').innerHTML = h; }, () => { dom.el('modal-root').innerHTML = ''; }, 'CODE', () => {},
-    () => '2026-10-24', sel => dom.el(String(sel).replace('#', '')), doc, async () => ({ json: async () => ({}) }),
+  const C = f(esc, 'alix', db, m => toasts.push(m), h => { dom.el('modal-root').innerHTML = h; }, () => { dom.el('modal-root').innerHTML = ''; }, 'CODE',
+    relance => refusCode.push(relance),
+    () => '2026-10-24', sel => dom.el(String(sel).replace('#', '')), doc,
+    async () => (o.reponse || { status: 200, json: async () => ({}) }),
     () => {}, function () { return { onload: null, onerror: null, set src(v) {} }; },
     { createObjectURL: () => 'blob:', revokeObjectURL: () => {} }, win, nav, { log() {}, warn() {}, error() {} });
   dom.cam = cam;
+  dom.refusCode = refusCode;
   try {
     await fn(C, dom, db, toasts, ecouteurs);
   } catch (e) {
@@ -296,6 +301,62 @@ console.log('\n— appareil photo intégré —');
     vrai("l'écran est refermé", !/cam-plein/.test(d.el('modal-root').innerHTML));
   }, { tactile: true, camera: 'ok' });
   if (dom) vrai('la caméra a été coupée', dom.cam.arrets > 0);
+}
+
+/* ---------- ce que le serveur peut répondre ----------
+   Toutes les réponses ne sont pas du JSON : au-delà de ~4,5 Mo de corps, Vercel renvoie
+   lui-même un 413 en texte brut. Et un code refusé doit relancer le geste tout seul,
+   sinon l'enfant saisit le code et « rien ne se passe ». */
+console.log('\n— réponses du serveur —');
+{
+  const dom = await scenario('code famille refusé', {}, async (C, d) => {
+    C.openAjoutCours();
+    C.coursPhotos = [{ media_type: 'image/jpeg', data: 'AAA', archive: 'aa', dataUrl: 'd' }];
+    await C.lancerTranscription();
+  }, { ecranAjout: true, reponse: { status: 200, json: async () => ({ error: 'code_famille' }) } });
+  if (dom) {
+    vrai('le code est redemandé', dom.refusCode.length === 1);
+    vrai('et le geste sera rejoué tout seul', typeof dom.refusCode[0] === 'function');
+  }
+}
+
+{
+  const dom = await scenario('photos trop lourdes', {}, async (C, d, db, toasts) => {
+    C.openAjoutCours();
+    C.coursPhotos = [{ media_type: 'image/jpeg', data: 'AAA', archive: 'aa', dataUrl: 'd' }];
+    await C.lancerTranscription();
+    vrai('le poids est expliqué simplement', toasts.some(t => /trop lourdes/.test(t)), JSON.stringify(toasts));
+  }, { ecranAjout: true, reponse: { status: 413, json: async () => { throw new Error('pas du JSON'); } } });
+  if (dom) vrai('aucune demande de code pour un problème de poids', dom.refusCode.length === 0);
+}
+
+{
+  const dom = await scenario('réponse illisible', {}, async (C, d, db, toasts) => {
+    C.openAjoutCours();
+    C.coursPhotos = [{ media_type: 'image/jpeg', data: 'AAA', archive: 'aa', dataUrl: 'd' }];
+    await C.lancerTranscription();
+    vrai('on le dit au lieu de planter', toasts.some(t => /réessaie/.test(t)), JSON.stringify(toasts));
+  }, { ecranAjout: true, reponse: { status: 500, json: async () => { throw new Error('pas du JSON'); } } });
+  if (dom) vrai('et on ne redemande pas le code', dom.refusCode.length === 0);
+}
+
+console.log('\n— poids de l\'envoi —');
+{
+  await scenario('envoi léger', {}, async C => {
+    C.coursPhotos = [{ media_type: 'image/jpeg', data: 'G'.repeat(1000), archive: 'p'.repeat(100), dataUrl: 'd' }];
+    const env = C.photosAEnvoyer();
+    vrai('sous le seuil, on envoie la bonne qualité', env[0].data[0] === 'G');
+    vrai('le type est conservé', env[0].media_type === 'image/jpeg');
+  }, { ecranAjout: true });
+
+  await scenario('envoi trop lourd', {}, async C => {
+    const gros = 'G'.repeat(Math.ceil(C.SEUIL_ENVOI / 2) + 10);
+    C.coursPhotos = [1, 2, 3].map(() => ({ media_type: 'image/jpeg', data: gros, archive: 'p'.repeat(50), dataUrl: 'd' }));
+    const env = C.photosAEnvoyer();
+    vrai('au-dessus du seuil, on bascule sur les archives', env.every(p => p.data[0] === 'p'),
+      env.map(p => p.data[0]).join(''));
+    vrai('toutes les pages sont quand même envoyées', env.length === 3);
+  }, { ecranAjout: true });
 }
 
 console.log('\n— coller une capture d\'écran (Ctrl + V) —');

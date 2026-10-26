@@ -48,14 +48,35 @@ const jourPlus = n => { const d = new Date(); d.setDate(d.getDate() + n); return
 const dateFr = s => s ? new Date(s).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : '';
 
 /* ---------- appel serveur ---------- */
-async function callCours(payload) {
+/* `relance` est rejouée automatiquement dès que le code famille est accepté : sinon
+   l'enfant saisit le code, rien ne se passe, et il doit deviner qu'il faut refaire son
+   geste — c'est exactement ce qui est arrivé au premier vrai essai. */
+async function callCours(payload, relance) {
   const r = await fetch('/api/cours', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(Object.assign({ child, code: familyCode }, payload)),
   });
-  const j = await r.json();
-  if (j.error === 'code_famille') { badFamilyCode(); return null; }
+  /* Toutes les réponses ne sont pas du JSON : au-delà d'environ 4,5 Mo de corps, Vercel
+     renvoie lui-même un 413 en texte brut, et r.json() lèverait une erreur incompréhensible. */
+  const j = await r.json().catch(() => null);
+  if (!j) {
+    toast(r.status === 413
+      ? 'Tes photos sont trop lourdes — reprends-en moins à la fois.'
+      : "Le serveur n'a pas répondu correctement — réessaie.");
+    return null;
+  }
+  if (j.error === 'code_famille') { badFamilyCode(relance); return null; }
   return j;
+}
+
+/* Vercel refuse un corps de requête au-delà d'environ 4,5 Mo. Cinq pages denses en
+   1500px peuvent dépasser. Dans ce cas on envoie les versions d'archive (1000px) :
+   le cours reste parfaitement lisible, et mieux vaut un peu moins fin qu'un échec. */
+const SEUIL_ENVOI = 3.2 * 1024 * 1024;
+function photosAEnvoyer() {
+  const poids = champ => coursPhotos.reduce((n, p) => n + String(p[champ] || '').length, 0);
+  const champ = poids('data') <= SEUIL_ENVOI ? 'data' : 'archive';
+  return coursPhotos.map(p => ({ media_type: p.media_type, data: p[champ] }));
 }
 
 /* ---------- mini-Markdown : le cours au propre, joliment ----------
@@ -352,9 +373,8 @@ async function lancerTranscription() {
   const notes = ($('#cours-notes') || {}).value || '';
   try {
     const j = await callCours({
-      mode: 'transcrire', matiere: matChoisie, notes,
-      photos: coursPhotos.map(p => ({ media_type: p.media_type, data: p.data })),
-    });
+      mode: 'transcrire', matiere: matChoisie, notes, photos: photosAEnvoyer(),
+    }, lancerTranscription);
     if (!j) return;
     if (j.error || !j.cours) { toast(j.error || 'Échec de la lecture'); return; }
     coursDraft = j.cours;

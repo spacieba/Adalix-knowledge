@@ -17,7 +17,7 @@ api/image.js       fonction serverless Vercel — proxy vers l'API Runware (gén
 api/cours.js       fonction serverless Vercel — module des cours (transcription, exercices, correction, interro)
 manifest.json      installation sur l'écran d'accueil (PWA)
 sw.js              service worker minimal, sans cache — ne sert qu'à rendre l'app installable
-tests/             tests Node sans dépendance, 648 au total (voir tests/README.md)
+tests/             tests Node sans dépendance, 669 au total (voir tests/README.md)
 ```
 
 Pas de build : c'est du HTML/JS statique + des fonctions serverless Node. Vercel déploie ce dossier tel quel.
@@ -138,6 +138,26 @@ rendu**. Ouvrir l'onglet par défaut puis le bon lançait deux rendus asynchrone
 course : le plus lent gagnait, et on voyait « Checklist » surligné au-dessus du contenu
 de « Mes cours ». Vu dans Chrome, invisible aux tests avant qu'ils ne comptent les
 rendus.
+
+## Le code famille, et le poids des envois
+
+Les six fonctions serveur comparent le code **après `trim().toLowerCase()` des deux
+côtés**. Il est tapé par un enfant sur un clavier de téléphone, qui ajoute volontiers une
+majuscule au premier caractère ou un espace à la fin : un code juste à la casse près doit
+passer. On ne protège pas un compte en banque, on empêche un inconnu de dépenser des
+crédits IA. Le champ de saisie coupe `autocapitalize`, `autocorrect`, `autocomplete` et
+`spellcheck` — la règle valait déjà partout où un enfant tape un mot évalué, ce champ-là
+avait été oublié.
+
+Un refus le dit maintenant explicitement, et `apresCode` **rejoue le geste** dès que le
+code est accepté. Avant, l'enfant saisissait le code, rien ne se passait, et il devait
+deviner qu'il fallait refaire sa demande — c'est exactement ce qui est arrivé au premier
+vrai essai.
+
+Vercel refuse un corps de requête au-delà d'environ **4,5 Mo** et répond alors un 413 en
+texte brut, que `r.json()` ne sait pas lire. `callCours` tolère donc une réponse non-JSON
+et l'explique, et `photosAEnvoyer()` bascule sur les versions d'archive (1000px) quand les
+grandes dépassent le seuil — un cours un peu moins fin vaut mieux qu'un échec.
 
 ## Module « Mes cours »
 
