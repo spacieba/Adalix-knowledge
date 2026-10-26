@@ -75,9 +75,16 @@ console.log('\n— le code famille —');
   eq('un espace au début passe', (await appel('  Maison42', 'Maison42')).error, undefined);
   // sans code configuré, on ne bloque personne
   eq('sans FAMILY_CODE, rien n\'est exigé', (await appel(undefined, undefined)).error, undefined);
+  // le tiret oblige à changer de clavier sur un téléphone, et certains le remplacent
+  // par un tiret typographique : lettres et chiffres seuls comptent
+  eq('un tiret manquant passe', (await appel('bleuet2024', 'bleuet-2024')).error, undefined);
+  eq('un tiret typographique passe', (await appel('bleuet\u20132024', 'bleuet-2024')).error, undefined);
+  eq('un espace à la place du tiret passe', (await appel('bleuet 2024', 'bleuet-2024')).error, undefined);
   // la tolérance ne va pas jusqu'à laisser passer n'importe quoi
   eq('un code tronqué reste refusé', (await appel('Maison4', 'Maison42')).error, 'code_famille');
-  eq('un espace au milieu reste refusé', (await appel('Mai son42', 'Maison42')).error, 'code_famille');
+  eq('des chiffres faux restent refusés', (await appel('bleuet-2025', 'bleuet-2024')).error, 'code_famille');
+  eq('un code vide reste refusé face à un code à symboles', (await appel('', '!!!')).error, 'code_famille');
+  eq('un code fait de symboles se compare à l\'identique', (await appel('!!!', '!!!')).error, undefined);
 }
 
 console.log('\n— handler transcrire : de la photo au cours normalisé —');

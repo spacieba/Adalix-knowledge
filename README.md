@@ -17,7 +17,7 @@ api/image.js       fonction serverless Vercel — proxy vers l'API Runware (gén
 api/cours.js       fonction serverless Vercel — module des cours (transcription, exercices, correction, interro)
 manifest.json      installation sur l'écran d'accueil (PWA)
 sw.js              service worker minimal, sans cache — ne sert qu'à rendre l'app installable
-tests/             tests Node sans dépendance, 669 au total (voir tests/README.md)
+tests/             tests Node sans dépendance, 674 au total (voir tests/README.md)
 ```
 
 Pas de build : c'est du HTML/JS statique + des fonctions serverless Node. Vercel déploie ce dossier tel quel.
@@ -141,8 +141,11 @@ rendus.
 
 ## Le code famille, et le poids des envois
 
-Les six fonctions serveur comparent le code **après `trim().toLowerCase()` des deux
-côtés**. Il est tapé par un enfant sur un clavier de téléphone, qui ajoute volontiers une
+Les six fonctions serveur comparent le code en ne gardant que **lettres et chiffres, en
+minuscules**. Le tiret oblige à changer de clavier sur un téléphone et certains le
+remplacent par un tiret typographique ; un code juste aux séparateurs et à la casse près
+doit passer. Repli sur une comparaison stricte si le code configuré ne contient ni lettre
+ni chiffre, pour ne jamais comparer deux chaînes vides. Il est tapé par un enfant sur un clavier de téléphone, qui ajoute volontiers une
 majuscule au premier caractère ou un espace à la fin : un code juste à la casse près doit
 passer. On ne protège pas un compte en banque, on empêche un inconnu de dépenser des
 crédits IA. Le champ de saisie coupe `autocapitalize`, `autocorrect`, `autocomplete` et

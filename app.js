@@ -43,7 +43,7 @@ let familyCode = localStorage.getItem('adalix_family_code') || '';
 let apresCode = null;
 function askFamilyCode(refuse){
   modal(`<h3>🔐 Code famille</h3>
-    ${refuse ? `<p style="font-size:13.5px;background:rgba(232,150,63,.14);border-radius:10px;padding:9px 12px;">Ce code n'a pas été accepté. Vérifie qu'il n'y a pas de <b>majuscule ajoutée par le clavier</b> ni d'espace à la fin.</p>` : ''}
+    ${refuse ? `<p style="font-size:13.5px;background:rgba(232,150,63,.14);border-radius:10px;padding:9px 12px;">Ce code n'a pas été accepté. Vérifie chaque caractère — les majuscules, les espaces et les tirets ne comptent pas, mais les lettres et les chiffres, oui.</p>` : ''}
     <p style="font-size:13.5px;color:#666;">Pour protéger l'app, les fonctions magiques (assistant, Fabrique, images, mise au propre des cours) demandent le code de la maison. Demande-le à papa — tu ne le saisis qu'une seule fois sur cet appareil.</p>
     <input type="text" id="famcode-input" inputmode="text" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false">
     <div class="actions"><button class="btn" onclick="saveFamilyCode()">Valider</button><button class="btn ghost" onclick="closeModal()">Plus tard</button></div>`);
