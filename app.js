@@ -447,7 +447,11 @@ function aideInstallIPhone(){
     <p style="font-size:13.5px;color:#666;">L'app apparaîtra avec son icône et s'ouvrira en plein écran.</p>
     <div class="actions"><button class="btn" onclick="closeModal()">Compris</button></div>`);
 }
-function enterEspace(k){
+/* `tabVoulu` sert à la reprise après un rechargement : il faut ouvrir l'onglet mémorisé
+   en UN seul rendu. Ouvrir d'abord l'onglet par défaut puis le bon lançait deux rendus
+   asynchrones en course, et le plus lent écrasait l'autre — on se retrouvait avec
+   l'onglet « Checklist » surligné et le contenu de « Mes cours » affiché dessous. */
+function enterEspace(k, tabVoulu){
   const e = ESPACES[k];
   if(!e) return;
   espace = k;
@@ -455,7 +459,7 @@ function enterEspace(k){
   majEnTete();
   const tabs = e.tabs(child);
   buildNav(tabs);
-  showTab(tabs[0]);
+  showTab(tabs.indexOf(tabVoulu) >= 0 ? tabVoulu : tabs[0]);
 }
 /* On change de page : on la prend par le début. Sans ça le navigateur garde la
    position de défilement de l'onglet précédent, et on ouvre « Ma journée » au milieu
@@ -2887,8 +2891,5 @@ window.addEventListener('load', function(){
   const c = SES.get('child'), e = SES.get('espace'), t = SES.get('tab');
   if(c !== 'adam' && c !== 'alix') return;   // sinon : « Qui es-tu ? », comme toujours
   selectProfile(c);
-  if(e && ESPACES[e]){
-    enterEspace(e);
-    if(t && ESPACES[e].tabs(c).indexOf(t) >= 0) showTab(t);
-  }
+  if(e && ESPACES[e]) enterEspace(e, t);
 });

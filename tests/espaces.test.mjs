@@ -194,7 +194,7 @@ console.log('\n— reprendre où on en était après un rechargement —');
 
 {
   // rechargement subi : on remet l'enfant exactement où il était
-  const { C, el, ecouteursWin } = chargeApp('alix', {
+  const { C, el, ecouteursWin, appels } = chargeApp('alix', {
     session: { adalix_s_child: 'alix', adalix_s_espace: 'tuteur', adalix_s_tab: 'checklist' },
   });
   C.child = null;
@@ -204,6 +204,10 @@ console.log('\n— reprendre où on en était après un rechargement —');
   eq("l'espace est retrouvé", C.espace, 'tuteur');
   eq("l'onglet est retrouvé", C.tab, 'checklist');
   vrai("l'écran des profils est passé", el('screen-profile').classList.contains('hidden'));
+  // un seul rendu : ouvrir l'onglet par défaut PUIS le bon lançait deux rendus
+  // asynchrones en course, et le plus lent écrasait l'autre à l'écran
+  vrai("l'onglet par défaut n'est jamais rendu au passage",
+    !appels.some(a => a.nom === 'renderCours'), JSON.stringify(appels.map(a => a.nom)));
 }
 
 {

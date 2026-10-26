@@ -17,7 +17,7 @@ api/image.js       fonction serverless Vercel — proxy vers l'API Runware (gén
 api/cours.js       fonction serverless Vercel — module des cours (transcription, exercices, correction, interro)
 manifest.json      installation sur l'écran d'accueil (PWA)
 sw.js              service worker minimal, sans cache — ne sert qu'à rendre l'app installable
-tests/             tests Node sans dépendance, 647 au total (voir tests/README.md)
+tests/             tests Node sans dépendance, 648 au total (voir tests/README.md)
 ```
 
 Pas de build : c'est du HTML/JS statique + des fonctions serverless Node. Vercel déploie ce dossier tel quel.
@@ -132,6 +132,12 @@ Trois garde-fous : le **parent** n'est jamais restauré (il est protégé par un
 **visiteur** non plus (il doit donner son nom), et **« changer » efface la session**
 (`logout`) — sinon le rechargement qui suit restaurerait le profil qu'on vient de
 quitter, et le bouton ne changerait rien.
+
+La reprise passe l'onglet voulu à `enterEspace(k, tabVoulu)` pour n'avoir **qu'un seul
+rendu**. Ouvrir l'onglet par défaut puis le bon lançait deux rendus asynchrones en
+course : le plus lent gagnait, et on voyait « Checklist » surligné au-dessus du contenu
+de « Mes cours ». Vu dans Chrome, invisible aux tests avant qu'ils ne comptent les
+rendus.
 
 ## Module « Mes cours »
 
