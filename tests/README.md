@@ -25,5 +25,6 @@ Ce qu'ils protègent en priorité :
 - le découpage en syllabes ne perd jamais une lettre ;
 - la série 🔥 ne se remet pas à zéro un samedi, et un seul calcul la produit partout ;
 - un raccourci de la checklist navigue sans cocher la case à la place de l’enfant ;
+- changer d’onglet ramène en haut de la nouvelle page ;
 - aucun bouton proposé ne mène nulle part : la proposition d’installer l’app ne s’affiche
   pas si l’app est déjà installée, ni dans un navigateur qui ne sait pas l’installer.

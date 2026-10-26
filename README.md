@@ -17,7 +17,7 @@ api/image.js       fonction serverless Vercel — proxy vers l'API Runware (gén
 api/cours.js       fonction serverless Vercel — module des cours (transcription, exercices, correction, interro)
 manifest.json      installation sur l'écran d'accueil (PWA)
 sw.js              service worker minimal, sans cache — ne sert qu'à rendre l'app installable
-tests/             tests Node sans dépendance, 581 au total (voir tests/README.md)
+tests/             tests Node sans dépendance, 585 au total (voir tests/README.md)
 ```
 
 Pas de build : c'est du HTML/JS statique + des fonctions serverless Node. Vercel déploie ce dossier tel quel.
@@ -63,6 +63,11 @@ Le bouton 🏠 de l'en-tête ramène aux deux cartes depuis n'importe où, et l'
 en permanence l'espace courant (« 🦊 Alix · 🎓 Tuteur »). Tout se règle dans `ESPACES`
 (app.js) : une liste d'onglets par espace, dérivée de l'enfant. `tests/espaces.test.mjs`
 vérifie qu'aucun onglet n'est en double, perdu, ou absent de la table de routage.
+
+Changer d'onglet remonte en haut de la page (`hautDePage`). Sans ça le navigateur garde la
+position de défilement de l'onglet précédent : on ouvrait « Ma journée » au milieu de la
+liste, titre et compteur hors de l'écran. Défaut invisible aux tests sur DOM simulé, trouvé
+en regardant l'app tourner dans Chrome le 26/10/2026.
 
 Chaque espace a son guide, et c'est pour ça qu'il y a deux onglets : `guide`
 (`renderGuide`) raconte Le Grand Été, `aide` (`renderAide`) raconte le Tuteur. Un guide

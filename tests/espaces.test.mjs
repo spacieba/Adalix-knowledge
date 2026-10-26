@@ -31,7 +31,8 @@ function chargeApp(profil, options) {
     body: { className: '' },
   };
   // matchMedia sert à savoir si l'app tourne déjà installée (display-mode: standalone)
-  const win = { matchMedia: () => ({ matches: !!opt.installee }) };
+  const defilements = [];
+  const win = { matchMedia: () => ({ matches: !!opt.installee }), scrollTo: (x, y) => defilements.push([x, y]) };
   const nav = { userAgent: opt.ua || 'Test', standalone: !!opt.iosInstallee };
   // data.js tel quel : les fonctions de rendu lisent window.DATA
   new Function('window', fs.readFileSync(path.join(RACINE, 'data.js'), 'utf8'))(win);
@@ -51,7 +52,7 @@ function chargeApp(profil, options) {
     bouchon('coursBadgeEspace'), bouchon('renderCours'), bouchon('renderMots'), bouchon('fillCoursParentCard'), bouchon('fillMotsParentCard'),
     function () { return {}; }, { createObjectURL: () => '', revokeObjectURL() {} }, nav);
   C.child = profil || 'alix';
-  return { C, el, elements, appels, win };
+  return { C, el, elements, appels, win, defilements };
 }
 
 /* ---------- cohérence du découpage ---------- */
@@ -142,6 +143,25 @@ console.log('\n— entrer dans un espace —');
   C.showEspaces();
   vrai('le retour à l\'accueil efface l\'espace courant', C.espace === null);
   vrai("et nettoie l'en-tête", el('hdr-who').textContent === '🐉 Adam', el('hdr-who').textContent);
+}
+
+console.log('\n— changer de page ramène en haut —');
+{
+  // sinon on ouvre « Ma journée » au milieu de la liste, titre et compteur hors écran
+  const { C, defilements } = chargeApp('alix');
+  C.showEspaces();
+  C.enterEspace('tuteur');
+  vrai("entrer dans un espace remonte en haut", defilements.some(d => d[0] === 0 && d[1] === 0),
+    JSON.stringify(defilements));
+
+  const avant = defilements.length;
+  C.showTab('checklist');
+  vrai("changer d'onglet remonte en haut", defilements.length > avant);
+  eq('on remonte bien tout en haut', defilements[defilements.length - 1], [0, 0]);
+
+  const avant2 = defilements.length;
+  C.showEspaces();
+  vrai("revenir au choix des espaces remonte aussi", defilements.length > avant2);
 }
 
 console.log('\n— un espace inconnu ne casse rien —');

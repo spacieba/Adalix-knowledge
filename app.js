@@ -353,6 +353,7 @@ function majEnTete(){
 }
 function showEspaces(){
   espace = null;
+  hautDePage();
   majEnTete();
   const nav = document.querySelector('nav');
   if(nav) nav.classList.add('hidden');
@@ -439,8 +440,13 @@ function enterEspace(k){
   buildNav(tabs);
   showTab(tabs[0]);
 }
+/* On change de page : on la prend par le début. Sans ça le navigateur garde la
+   position de défilement de l'onglet précédent, et on ouvre « Ma journée » au milieu
+   de la liste, titre et compteur hors de l'écran — vu en vrai dans Chrome. */
+function hautDePage(){ try { if(window.scrollTo) window.scrollTo(0, 0); } catch(e){} }
 function showTab(t){
   tab = t;
+  hautDePage();
   document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
   const nb = $('#nav-'+t); if(nb) nb.classList.add('active');
   ({programme:renderProgramme, cours:renderCours, mots:renderMots, quiz:renderQuizList, quizv:renderQuizV, classement:renderClassement, orientation:renderOrientation, geo:renderGeo, les100:renderGallery, checklist:renderChecklist, projet:renderProjet, fabrique:renderFabrique, chat:renderChat, guide:renderGuide, aide:renderAide, dashboard:renderDashboard}[t])();
@@ -457,7 +463,7 @@ const gcardEspaces = () => gcard('🏠', 'Les deux espaces',
   `L'app a deux univers, et tu choisis à l'ouverture :<br><br>
   <b>🌞 Le Grand Été</b> — le programme des quatre semaines, les quiz, les jeux géo, les 100 personnalités, ton projet et la Fabrique.<br><br>
   <b>🎓 Tuteur</b> — l'année scolaire : tes cours photographiés, ton carnet de mots, ta journée et ton assistant.<br><br>
-  Chaque espace a sa propre barre d'onglets, courte, en bas de l'écran. Le bouton <b>🏠</b> en haut à droite te ramène au choix des deux — tu peux passer de l'un à l'autre autant de fois que tu veux, rien n'est perdu. L'en-tête t'indique en permanence où tu te trouves.`);
+  Chaque espace a sa propre barre d'onglets, courte, juste sous le titre. Le bouton <b>🏠</b> en haut à droite te ramène au choix des deux — tu peux passer de l'un à l'autre autant de fois que tu veux, rien n'est perdu. L'en-tête t'indique en permanence où tu te trouves.`);
 function renderGuide(){
   $('#main').innerHTML = `<div class="narrow">
     ${gcardEspaces()}
