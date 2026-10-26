@@ -307,6 +307,16 @@ table.ptable th { text-align:left; opacity:.6; font-weight:600; padding:6px 8px;
 table.ptable td { padding:7px 8px; border-bottom:1px solid rgba(0,0,0,.05); }
 .jentry { background:#fdf6ec; border-radius:10px; padding:10px 14px; margin-bottom:8px; font-size:13.5px; }
 .jentry .jd { font-size:11px; color:#999; }
+/* appareil photo intégré : plein écran, au-dessus des fenêtres, sous les messages.
+   La page ne passe jamais en arrière-plan, donc le système ne peut rien reprendre. */
+.cam-plein { position:fixed; inset:0; background:#000; z-index:60; display:flex; flex-direction:column; }
+.cam-plein video { flex:1; width:100%; min-height:0; object-fit:contain; background:#000; }
+.cam-aide { color:#fff; opacity:.85; font-size:13px; line-height:1.45; text-align:center; padding:10px 18px; }
+.cam-barre { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 22px 28px; background:#000; }
+.cam-declic { width:70px; height:70px; border-radius:50%; background:#fff; border:5px solid rgba(255,255,255,.35); cursor:pointer; flex-shrink:0; padding:0; }
+.cam-declic:active { transform:scale(.93); }
+.cam-fermer { background:transparent; border:1px solid rgba(255,255,255,.55); color:#fff; border-radius:10px; padding:10px 16px; font-size:14px; cursor:pointer; font-family:var(--font-body); }
+.cam-compteur { color:#fff; font-size:14px; min-width:58px; text-align:right; }
 .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#26282e; color:white; padding:10px 20px; border-radius:20px; font-size:14px; z-index:99; }
 /* jeux géo : survol des zones cliquables */
 .geo-t { transition: filter .12s; }

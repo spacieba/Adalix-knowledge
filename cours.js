@@ -175,7 +175,7 @@ function openAjoutCours() {
         ondragover="event.preventDefault();this.style.outline='2px dashed var(--accent)';this.style.outlineOffset='4px';"
         ondragleave="this.style.outline='';"
         ondrop="event.preventDefault();this.style.outline='';coursFiles(event.dataTransfer.files);">
-        ${tactile ? `<button class="btn" onclick="document.getElementById('cours-cam').click()">📷 Prendre une photo</button>
+        ${tactile ? `<button class="btn" onclick="ouvrirCamera()">📸 Prendre une photo</button>
         <input type="file" id="cours-cam" accept="image/*" capture="environment" style="display:none;" onchange="coursFiles(this.files);this.value='';">` : ''}
         <button class="btn${tactile ? ' ghost' : ''}" onclick="document.getElementById('cours-gal').click()">🖼️ Choisir une image</button>
         <input type="file" id="cours-gal" accept="image/*" multiple style="display:none;" onchange="coursFiles(this.files);this.value='';">
@@ -218,27 +218,118 @@ function coursAjouteFichier(file) {
   if (!file || !file.type.startsWith('image/')) { toast("Ce fichier n'est pas une image"); return; }
   const img = new Image();
   const url = URL.createObjectURL(file);
-  img.onload = () => {
-    URL.revokeObjectURL(url);
-    const rendu = (max, q) => {
-      const s = Math.min(1, max / Math.max(img.width, img.height));
-      const cv = document.createElement('canvas');
-      cv.width = Math.round(img.width * s); cv.height = Math.round(img.height * s);
-      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-      return cv.toDataURL('image/jpeg', q);
-    };
-    const grande = rendu(1500, 0.82);
-    const petite = rendu(1000, 0.68);
-    coursPhotos.push({
-      media_type: 'image/jpeg',
-      data: grande.split(',')[1],
-      archive: petite.split(',')[1],
-      dataUrl: petite,
-    });
-    drawCoursPhotos();
-  };
+  img.onload = () => { URL.revokeObjectURL(url); coursPousseImage(img, img.width, img.height); };
   img.onerror = () => { URL.revokeObjectURL(url); toast('Image illisible — reprends-la'); };
   img.src = url;
+}
+
+/* Deux tailles de chaque page : la grande part au serveur pour être lue, la petite est
+   archivée et sert d'aperçu. Partagé par le fichier choisi et par l'appareil photo
+   intégré — la source est une <img> ou un <canvas>, drawImage accepte les deux. */
+function coursPousseImage(source, w, h) {
+  if (!w || !h) { toast('Image illisible — reprends-la'); return; }
+  const rendu = (max, q) => {
+    const s = Math.min(1, max / Math.max(w, h));
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(w * s); cv.height = Math.round(h * s);
+    cv.getContext('2d').drawImage(source, 0, 0, cv.width, cv.height);
+    return cv.toDataURL('image/jpeg', q);
+  };
+  const grande = rendu(1500, 0.82);
+  const petite = rendu(1000, 0.68);
+  coursPhotos.push({
+    media_type: 'image/jpeg',
+    data: grande.split(',')[1],
+    archive: petite.split(',')[1],
+    dataUrl: petite,
+  });
+  drawCoursPhotos();
+}
+
+/* ---------- appareil photo intégré ----------
+   Avant, « Prendre une photo » était un <input capture="environment"> : il passait la
+   main à l'application Appareil photo du système. Sur un téléphone un peu juste en
+   mémoire, Android en profite pour détruire l'onglet Chrome ; au retour la page se
+   recharge de zéro, on repart de l'écran des profils et la photo est perdue avec le
+   reste. Constaté à CHAQUE essai sur l'Android de la maison : le bouton était
+   inutilisable, et c'est le geste central de tout le module.
+   Ici l'appareil photo vit DANS la page. On ne quitte jamais l'app, donc rien ne peut
+   être repris par le système, et on enchaîne les pages d'un cours sans aller-retour. */
+let camStream = null;
+
+function cameraDispo() {
+  return !!(typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+}
+/* Repli : l'ancien chemin. Il marche quand le téléphone a de la mémoire, et c'est
+   toujours mieux que pas de photo du tout. */
+function camRepli() {
+  const el = document.getElementById('cours-cam');
+  if (el) el.click(); else toast('Aucun appareil photo disponible sur cet appareil');
+}
+async function ouvrirCamera() {
+  if (coursPhotos.length >= MAX_PHOTOS) { toast(`${MAX_PHOTOS} photos maximum`); return; }
+  if (!cameraDispo()) { camRepli(); return; }
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1440 } },
+      audio: false,
+    });
+  } catch (e) {
+    console.warn('camera', e);
+    camStream = null;
+    toast("Appareil photo refusé — on passe par l'autre chemin");
+    camRepli();
+    return;
+  }
+  drawCamera();
+  const v = $('#cam-video');
+  if (v) {
+    v.srcObject = camStream;
+    const p = v.play && v.play();
+    if (p && p.catch) p.catch(() => {});
+  }
+}
+function camAideTexte() {
+  const n = coursPhotos.length;
+  return n
+    ? `${n} page${n > 1 ? 's' : ''} prise${n > 1 ? 's' : ''} — tourne la page et recommence, ou touche « Terminé ».`
+    : 'Cadre la page à plat, bien éclairée, sans ton ombre dessus.';
+}
+function drawCamera() {
+  $('#modal-root').innerHTML = `<div class="cam-plein">
+    <video id="cam-video" playsinline autoplay muted></video>
+    <div class="cam-aide" id="cam-aide">${camAideTexte()}</div>
+    <div class="cam-barre">
+      <button class="cam-fermer" onclick="fermerCamera()">Terminé</button>
+      <button class="cam-declic" id="cam-declic" onclick="camDeclic()" title="Prendre la photo"></button>
+      <div class="cam-compteur" id="cam-compteur">${coursPhotos.length} / ${MAX_PHOTOS}</div>
+    </div>
+  </div>`;
+}
+/* Après une prise on ne redessine QUE le compteur : refaire tout l'écran détruirait la
+   balise vidéo et redémarrerait la caméra, avec un clignotement à chaque page. */
+function majCamera() {
+  const c = $('#cam-compteur'); if (c) c.textContent = `${coursPhotos.length} / ${MAX_PHOTOS}`;
+  const a = $('#cam-aide'); if (a) a.textContent = camAideTexte();
+}
+function camDeclic() {
+  const v = $('#cam-video');
+  if (!v || !v.videoWidth) { toast('Un instant, la caméra démarre…'); return; }
+  const cv = document.createElement('canvas');
+  cv.width = v.videoWidth; cv.height = v.videoHeight;
+  cv.getContext('2d').drawImage(v, 0, 0, cv.width, cv.height);
+  coursPousseImage(cv, cv.width, cv.height);
+  toast(`Page ${coursPhotos.length} 📸`);
+  if (coursPhotos.length >= MAX_PHOTOS) { fermerCamera(); return; }
+  majCamera();
+}
+function fermerCamera() {
+  if (camStream) {
+    try { camStream.getTracks().forEach(t => t.stop()); } catch (e) { /* flux déjà coupé */ }
+    camStream = null;
+  }
+  closeModal();
+  drawCoursPhotos();   // les vignettes des pages prises réapparaissent sous le formulaire
 }
 function drawCoursPhotos() {
   const el = $('#cours-photos'); if (!el) return;

@@ -17,7 +17,7 @@ api/image.js       fonction serverless Vercel — proxy vers l'API Runware (gén
 api/cours.js       fonction serverless Vercel — module des cours (transcription, exercices, correction, interro)
 manifest.json      installation sur l'écran d'accueil (PWA)
 sw.js              service worker minimal, sans cache — ne sert qu'à rendre l'app installable
-tests/             tests Node sans dépendance, 585 au total (voir tests/README.md)
+tests/             tests Node sans dépendance, 647 au total (voir tests/README.md)
 ```
 
 Pas de build : c'est du HTML/JS statique + des fonctions serverless Node. Vercel déploie ce dossier tel quel.
@@ -97,6 +97,41 @@ parent), qui pouvaient donc afficher trois valeurs ; il n'en reste qu'un,
 Limite connue : les **vacances scolaires** ne sont pas distinguées — un mardi de
 vacances affiche la liste d'école. Il faudrait un calendrier des vacances pour faire
 mieux, et ça n'en vaut probablement pas le prix.
+
+## L'appareil photo, et pourquoi il est dans la page
+
+`openAjoutCours` proposait un `<input type="file" capture="environment">` : le bouton
+passait la main à l'application Appareil photo du système. **Sur l'Android de la maison,
+Android détruisait l'onglet Chrome à chaque fois** — mémoire réclamée pendant que la
+caméra tournait. Au retour la page se rechargeait de zéro : écran des profils, photo
+perdue, et le geste central du module était donc inutilisable.
+
+`ouvrirCamera()` (cours.js) ouvre maintenant la caméra **dans la page** via
+`getUserMedia` : un `<video playsinline>` plein écran, un déclencheur, un compteur. La
+page ne passe jamais en arrière-plan, donc le système ne peut rien reprendre, et on
+enchaîne les pages d'un cours sans aller-retour. Une prise dessine la vidéo dans un
+canvas et passe par `coursPousseImage()`, partagé avec le fichier choisi — mêmes deux
+tailles (1500px q0.82 pour le serveur, 1000px q0.68 pour l'archive et l'aperçu).
+
+Après une prise, **seul le compteur est redessiné** : refaire tout l'écran détruirait la
+balise vidéo et redémarrerait la caméra, avec un clignotement à chaque page.
+
+Replis, dans l'ordre : pas de `getUserMedia` (vieux navigateur, pas de caméra) ou
+autorisation refusée → on clique l'ancien `<input capture>`, qui reste dans le DOM
+exprès. Il marche quand le téléphone a de la mémoire, et c'est mieux que rien.
+
+## Retrouver sa place après un rechargement subi
+
+Au démarrage l'app montre toujours « Qui es-tu ? », exprès : le même appareil sert aux
+deux enfants. Mais une page peut se recharger sans qu'on l'ait demandé. `SES` (app.js)
+range l'enfant, l'espace et l'onglet dans `sessionStorage`, qui a exactement la bonne
+durée de vie : il survit au rechargement du **même onglet** et disparaît à la fermeture.
+Un vrai démarrage redemande donc bien qui on est.
+
+Trois garde-fous : le **parent** n'est jamais restauré (il est protégé par un code), un
+**visiteur** non plus (il doit donner son nom), et **« changer » efface la session**
+(`logout`) — sinon le rechargement qui suit restaurerait le profil qu'on vient de
+quitter, et le bouton ne changerait rien.
 
 ## Module « Mes cours »
 

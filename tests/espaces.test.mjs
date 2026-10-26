@@ -32,7 +32,21 @@ function chargeApp(profil, options) {
   };
   // matchMedia sert à savoir si l'app tourne déjà installée (display-mode: standalone)
   const defilements = [];
-  const win = { matchMedia: () => ({ matches: !!opt.installee }), scrollTo: (x, y) => defilements.push([x, y]) };
+  const ecouteursWin = {};
+  const win = {
+    matchMedia: () => ({ matches: !!opt.installee }),
+    scrollTo: (x, y) => defilements.push([x, y]),
+    addEventListener: (t, h) => { ecouteursWin[t] = h; },
+  };
+  // sessionStorage : survit au rechargement du même onglet, pas à la fermeture
+  const session = Object.assign({}, opt.session || {});
+  const sessionStorage = {
+    getItem: k => (k in session ? session[k] : null),
+    setItem: (k, v) => { session[k] = String(v); },
+    removeItem: k => { delete session[k]; },
+  };
+  const rechargements = [];
+  const location = { reload: () => rechargements.push(1), protocol: 'https:' };
   const nav = { userAgent: opt.ua || 'Test', standalone: !!opt.iosInstallee };
   // data.js tel quel : les fonctions de rendu lisent window.DATA
   new Function('window', fs.readFileSync(path.join(RACINE, 'data.js'), 'utf8'))(win);
@@ -43,16 +57,19 @@ function chargeApp(profil, options) {
   const bouchon = nom => (...a) => { appels.push({ nom, a }); };
   const f = new Function('window', 'document', 'localStorage', 'console', 'fetch', 'setTimeout',
     'coursBadgeEspace', 'renderCours', 'renderMots', 'fillCoursParentCard', 'fillMotsParentCard', 'Image', 'URL', 'navigator',
+    'sessionStorage', 'location',
     src + '\n;return {TABS, ESPACES, showEspaces, enterEspace, showTab, buildNav, majEnTete, '
     + 'majInstall, htmlInstall, estInstallee, estIPhone, lancerInstall, aideInstallIPhone, '
+    + 'selectProfile, logout, SES, '
     + 'get espace(){return espace}, set espace(v){espace=v}, get child(){return child}, set child(v){child=v}, '
     + 'get tab(){return tab}};');
   const C = f(win, doc, stockage, { log() {}, warn() {}, error() {} }, async () => ({ json: async () => ({}) }),
     fn => { appels.push({ nom: 'setTimeout' }); return 0; },
     bouchon('coursBadgeEspace'), bouchon('renderCours'), bouchon('renderMots'), bouchon('fillCoursParentCard'), bouchon('fillMotsParentCard'),
-    function () { return {}; }, { createObjectURL: () => '', revokeObjectURL() {} }, nav);
+    function () { return {}; }, { createObjectURL: () => '', revokeObjectURL() {} }, nav,
+    sessionStorage, location);
   C.child = profil || 'alix';
-  return { C, el, elements, appels, win, defilements };
+  return { C, el, elements, appels, win, defilements, session, ecouteursWin, rechargements };
 }
 
 /* ---------- cohérence du découpage ---------- */
@@ -143,6 +160,90 @@ console.log('\n— entrer dans un espace —');
   C.showEspaces();
   vrai('le retour à l\'accueil efface l\'espace courant', C.espace === null);
   vrai("et nettoie l'en-tête", el('hdr-who').textContent === '🐉 Adam', el('hdr-who').textContent);
+}
+
+/* ---------- retrouver sa place après un rechargement subi ----------
+   Android détruit l'onglet quand la mémoire manque — systématiquement pendant une photo
+   sur le téléphone de la maison. Au retour, la page se recharge : elle doit remettre
+   l'enfant là où il était, sans jamais court-circuiter l'écran des profils d'un vrai
+   démarrage ni le code du parent. */
+console.log('\n— reprendre où on en était après un rechargement —');
+{
+  const { C, session } = chargeApp('alix');
+  C.selectProfile('alix');
+  C.enterEspace('tuteur');
+  C.showTab('mots');
+  eq("l'enfant est noté dans la session", session.adalix_s_child, 'alix');
+  eq("l'espace aussi", session.adalix_s_espace, 'tuteur');
+  eq("et l'onglet", session.adalix_s_tab, 'mots');
+
+  // revenir au choix des espaces oublie l'espace, pas l'enfant
+  C.showEspaces();
+  eq("le retour à l'accueil oublie l'espace", session.adalix_s_espace, '');
+  eq("mais se souvient de l'enfant", session.adalix_s_child, 'alix');
+}
+
+{
+  // « changer » doit vraiment changer : sinon le rechargement restaurerait le profil
+  const { C, session, rechargements } = chargeApp('adam');
+  C.selectProfile('adam');
+  C.logout();
+  vrai('« changer » efface la session', !session.adalix_s_child, JSON.stringify(session));
+  eq('et recharge la page', rechargements.length, 1);
+}
+
+{
+  // rechargement subi : on remet l'enfant exactement où il était
+  const { C, el, ecouteursWin } = chargeApp('alix', {
+    session: { adalix_s_child: 'alix', adalix_s_espace: 'tuteur', adalix_s_tab: 'checklist' },
+  });
+  C.child = null;
+  vrai("le gestionnaire de démarrage est bien posé", typeof ecouteursWin.load === 'function');
+  ecouteursWin.load();
+  eq("l'enfant est retrouvé", C.child, 'alix');
+  eq("l'espace est retrouvé", C.espace, 'tuteur');
+  eq("l'onglet est retrouvé", C.tab, 'checklist');
+  vrai("l'écran des profils est passé", el('screen-profile').classList.contains('hidden'));
+}
+
+{
+  // vrai démarrage : rien en session, on demande qui c'est
+  const { C, el, ecouteursWin } = chargeApp('alix');
+  C.child = null;
+  ecouteursWin.load();
+  vrai('sans session, aucun profil restauré', C.child === null, String(C.child));
+  vrai("l'écran des profils reste affiché", !el('screen-profile').classList.contains('hidden'));
+}
+
+{
+  // le parent est protégé par un code : jamais restauré automatiquement
+  const { C, el, ecouteursWin } = chargeApp('alix', { session: { adalix_s_child: 'parent' } });
+  C.child = null;
+  ecouteursWin.load();
+  vrai("le parent n'est jamais restauré sans son code", C.child === null, String(C.child));
+  vrai("l'écran des profils reste affiché", !el('screen-profile').classList.contains('hidden'));
+}
+
+{
+  // un onglet qui n'existe pas dans l'espace enregistré ne doit pas tout casser
+  const { C, ecouteursWin } = chargeApp('alix', {
+    session: { adalix_s_child: 'alix', adalix_s_espace: 'tuteur', adalix_s_tab: 'quiz' },
+  });
+  C.child = null;
+  ecouteursWin.load();
+  eq("on entre quand même dans l'espace", C.espace, 'tuteur');
+  eq("et on ouvre son premier onglet", C.tab, 'cours');
+}
+
+{
+  // un espace supprimé entre deux versions ne doit pas tout casser non plus
+  const { C, ecouteursWin } = chargeApp('alix', {
+    session: { adalix_s_child: 'alix', adalix_s_espace: 'nexistepas' },
+  });
+  C.child = null;
+  ecouteursWin.load();
+  eq("l'enfant est quand même retrouvé", C.child, 'alix');
+  vrai("et on le laisse sur l'écran des espaces", C.espace === null, String(C.espace));
 }
 
 console.log('\n— changer de page ramène en haut —');

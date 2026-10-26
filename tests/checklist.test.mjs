@@ -38,7 +38,7 @@ function chargeApp(profil) {
     addEventListener() {},
     body: { className: '', appendChild() {} },
   };
-  const win = { matchMedia: () => ({ matches: false }) };
+  const win = { matchMedia: () => ({ matches: false }), addEventListener() {}, scrollTo() {} };
   new Function('window', fs.readFileSync(path.join(RACINE, 'data.js'), 'utf8'))(win);
 
   const src = fs.readFileSync(path.join(RACINE, 'app.js'), 'utf8');

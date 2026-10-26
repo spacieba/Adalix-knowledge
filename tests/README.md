@@ -4,7 +4,7 @@ Aucune dépendance, aucun installeur : du Node pur. Depuis la racine du dépôt 
 
 ```bash
 node tests/cours-api.test.mjs .      # api/cours.js : liens, JSON, repli de modèle, dictées, normalisation
-node tests/cours-rendu.test.mjs .    # cours.js : chaque écran rendu avec un DOM et une base simulés
+node tests/cours-rendu.test.mjs .    # cours.js : chaque écran rendu avec un DOM et une base simulés, appareil photo intégré
 node tests/espaces.test.mjs .        # app.js : découpage Grand Été / Tuteur, navigation, en-tête, installation
 node tests/lecture.test.mjs .        # lecture.js : syllabes, lecture guidée, carnet de mots, dictées
 node tests/checklist.test.mjs .      # app.js : gestes de la journée, série 🔥 qui saute le week-end, les deux guides
@@ -26,5 +26,8 @@ Ce qu'ils protègent en priorité :
 - la série 🔥 ne se remet pas à zéro un samedi, et un seul calcul la produit partout ;
 - un raccourci de la checklist navigue sans cocher la case à la place de l’enfant ;
 - changer d’onglet ramène en haut de la nouvelle page ;
+- l’appareil photo rend toujours le flux au système, et ne prend jamais d’image vide ;
+- un rechargement subi remet l’enfant où il était, sans jamais court-circuiter l’écran
+  des profils d’un vrai démarrage ni le code du parent ;
 - aucun bouton proposé ne mène nulle part : la proposition d’installer l’app ne s’affiche
   pas si l’app est déjà installée, ni dans un navigateur qui ne sait pas l’installer.

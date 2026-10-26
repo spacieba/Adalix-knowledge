@@ -31,12 +31,15 @@ function fausseDb(fixtures) {
 /* ---------- faux DOM : on garde seulement ce que le module touche ---------- */
 function fauxDom() {
   const elements = {};
+  const clics = [];
   const el = id => elements[id] || (elements[id] = {
     id, innerHTML: '', value: '', textContent: '', disabled: false, dataset: {},
+    // une balise <video> : zéro tant que la caméra n'a pas démarré
+    videoWidth: 0, videoHeight: 0, srcObject: null, play: () => Promise.resolve(),
     classList: { toggle: () => {}, add: () => {}, remove: () => {}, contains: () => false },
-    click: () => {}, focus: () => {},
+    click: () => clics.push(id), focus: () => {},
   });
-  return { elements, el };
+  return { elements, el, clics };
 }
 
 const FIXTURES_COURS = [
@@ -70,17 +73,35 @@ async function scenario(nom, fixtures, fn, opts) {
     addEventListener: (type, h) => { ecouteurs[type] = h; },
   };
   const win = { matchMedia: () => ({ matches: !!o.tactile }) };
+  /* Appareil photo simulé. o.camera : 'ok' il marche, 'refus' l'utilisateur dit non,
+     absent il n'y en a pas du tout (ordinateur sans webcam, navigateur trop vieux). */
+  const cam = { contraintes: null, arrets: 0 };
+  const flux = { getTracks: () => [{ stop: () => { cam.arrets++; } }] };
+  const nav = { userAgent: 'Test' };
+  if (o.camera) {
+    nav.mediaDevices = {
+      getUserMedia: c => {
+        cam.contraintes = c;
+        return o.camera === 'refus'
+          ? Promise.reject(new Error('NotAllowedError'))
+          : Promise.resolve(flux);
+      },
+    };
+  }
   const f = new Function('esc', 'child', 'db', 'toast', 'modal', 'closeModal', 'familyCode', 'badFamilyCode',
-    'todayStr', '$', 'document', 'fetch', 'renderDashboard', 'Image', 'URL', 'window',
+    'todayStr', '$', 'document', 'fetch', 'renderDashboard', 'Image', 'URL', 'window', 'navigator', 'console',
     src + '\n;return {renderCours, drawCoursList, openAjoutCours, drawDraft, drawCours, openCours, drawExos, drawRevision, drawInterroScreen, fillCoursParentCard, coursCardsHtml, setCoursFiltre, openExosMenu, exoHtml, drawRevisionFin, coursFiles, ' +
     'get exoState(){return exoState}, set exoState(v){exoState=v}, get revState(){return revState}, set revState(v){revState=v}, ' +
     'get coursCur(){return coursCur}, set coursCur(v){coursCur=v}, get coursNotions(){return coursNotions}, set coursNotions(v){coursNotions=v}, ' +
     'get coursPhotos(){return coursPhotos}, set coursPhotos(v){coursPhotos=v}, ' +
-    'get coursDraft(){return coursDraft}, set coursDraft(v){coursDraft=v}, get coursList(){return coursList}, set coursList(v){coursList=v}};');
-  const C = f(esc, 'alix', db, m => toasts.push(m), h => { dom.el('modal-root').innerHTML = h; }, () => {}, 'CODE', () => {},
+    'get coursDraft(){return coursDraft}, set coursDraft(v){coursDraft=v}, get coursList(){return coursList}, set coursList(v){coursList=v}, ' +
+    'ouvrirCamera, camDeclic, fermerCamera, drawCamera, majCamera, cameraDispo, camRepli, coursPousseImage, ' +
+    'get camStream(){return camStream}};');
+  const C = f(esc, 'alix', db, m => toasts.push(m), h => { dom.el('modal-root').innerHTML = h; }, () => { dom.el('modal-root').innerHTML = ''; }, 'CODE', () => {},
     () => '2026-10-24', sel => dom.el(String(sel).replace('#', '')), doc, async () => ({ json: async () => ({}) }),
     () => {}, function () { return { onload: null, onerror: null, set src(v) {} }; },
-    { createObjectURL: () => 'blob:', revokeObjectURL: () => {} }, win);
+    { createObjectURL: () => 'blob:', revokeObjectURL: () => {} }, win, nav, { log() {}, warn() {}, error() {} });
+  dom.cam = cam;
   try {
     await fn(C, dom, db, toasts, ecouteurs);
   } catch (e) {
@@ -134,7 +155,8 @@ console.log('\n— écran d\'ajout, sur téléphone ou tablette —');
     const h = html(dom);
     sain('ajout tactile', h);
     vrai("l'appareil photo arrière est déclenché par l'app", /capture="environment"/.test(h));
-    vrai('le bouton photo est l\'action principale', /class="btn" onclick="document.getElementById\('cours-cam'\)/.test(h));
+    vrai('le bouton photo ouvre l\'appareil photo intégré', /class="btn" onclick="ouvrirCamera\(\)"/.test(h));
+    vrai("l'ancien <input capture> reste comme repli", /id="cours-cam"/.test(h));
     vrai('la consigne parle de photographier', /photo/i.test(h) && !/Ctrl \+ V/.test(h));
     vrai('toutes les matières sont proposées', (h.match(/imgchip/g) || []).length >= 15);
   }
@@ -153,6 +175,127 @@ console.log('\n— écran d\'ajout, sur ordinateur —');
     vrai('on oriente vers le téléphone pour un cahier', /téléphone/.test(h));
     vrai('choisir une image reste l\'action principale', /class="btn" onclick="document.getElementById\('cours-gal'\)/.test(h));
   }
+}
+
+/* ---------- appareil photo intégré ----------
+   Le <input capture> passait la main à l'app Appareil photo du système ; sur l'Android
+   de la maison, Android détruisait l'onglet à CHAQUE fois et la page se rechargeait —
+   photo perdue, retour à l'écran des profils. Ici la caméra vit dans la page. */
+console.log('\n— appareil photo intégré —');
+{
+  const dom = await scenario('caméra absente', {}, async C => {
+    vrai("sans mediaDevices, l'app le sait", C.cameraDispo() === false);
+    C.openAjoutCours();
+    await C.ouvrirCamera();
+  }, { tactile: true });
+  if (dom) {
+    vrai("on retombe sur l'ancien bouton", dom.clics.includes('cours-cam'));
+    vrai("aucun écran de caméra n'est ouvert", !/cam-plein/.test(dom.el('modal-root').innerHTML));
+  }
+}
+
+{
+  const dom = await scenario('caméra refusée', {}, async (C, d, db, toasts) => {
+    C.openAjoutCours();
+    await C.ouvrirCamera();
+    vrai('un refus est expliqué', toasts.some(t => /refus/i.test(t)), JSON.stringify(toasts));
+  }, { tactile: true, camera: 'refus' });
+  if (dom) {
+    vrai("un refus bascule sur l'ancien bouton", dom.clics.includes('cours-cam'));
+    vrai('aucun flux ne reste ouvert', !/cam-plein/.test(dom.el('modal-root').innerHTML));
+  }
+}
+
+{
+  const dom = await scenario('caméra ouverte', {}, async C => {
+    C.openAjoutCours();
+    await C.ouvrirCamera();
+  }, { tactile: true, camera: 'ok' });
+  if (dom) {
+    const h = dom.el('modal-root').innerHTML;
+    sain('écran caméra', h);
+    vrai("l'écran plein écran est là", /cam-plein/.test(h));
+    vrai('la vidéo est en ligne, pas en plein écran système', /playsinline/.test(h));
+    vrai('le déclencheur est là', /onclick="camDeclic\(\)"/.test(h));
+    vrai('on peut sortir', /onclick="fermerCamera\(\)"/.test(h));
+    vrai('le compteur part de zéro', /0 \/ 5/.test(h));
+    vrai('la consigne de cadrage est donnée', /Cadre la page/.test(h));
+    vrai("c'est la caméra arrière qui est demandée", dom.cam.contraintes.video.facingMode.ideal === 'environment',
+      JSON.stringify(dom.cam.contraintes));
+    vrai('le micro n\'est pas demandé', dom.cam.contraintes.audio === false);
+    vrai('le flux est branché sur la vidéo', !!dom.el('cam-video').srcObject);
+  }
+}
+
+{
+  // déclencher avant que la caméra ait démarré ne doit pas produire une image vide
+  await scenario('déclic trop tôt', {}, async (C, d, db, toasts) => {
+    C.openAjoutCours();
+    await C.ouvrirCamera();
+    C.camDeclic();
+    vrai('aucune photo prise avant le démarrage', C.coursPhotos.length === 0);
+    vrai('et on le dit', toasts.some(t => /démarre/.test(t)), JSON.stringify(toasts));
+  }, { tactile: true, camera: 'ok' });
+}
+
+{
+  // le cas normal : on enchaîne les pages sans jamais quitter l'app
+  const dom = await scenario('enchaîner les pages', {}, async (C, d) => {
+    C.openAjoutCours();
+    await C.ouvrirCamera();
+    d.el('cam-video').videoWidth = 1600; d.el('cam-video').videoHeight = 1200;
+    const avant = d.el('modal-root').innerHTML;
+    C.camDeclic();
+    vrai('la première page est prise', C.coursPhotos.length === 1);
+    vrai('la page porte bien une image et son archive',
+      !!C.coursPhotos[0].data && !!C.coursPhotos[0].archive && !!C.coursPhotos[0].dataUrl);
+    vrai('le compteur a suivi', d.el('cam-compteur').textContent === '1 / 5', d.el('cam-compteur').textContent);
+    vrai("l'écran n'est pas redessiné (la vidéo ne redémarre pas)", d.el('modal-root').innerHTML === avant);
+    vrai('la caméra reste ouverte', !!C.camStream);
+
+    C.camDeclic();
+    vrai('la deuxième page aussi', C.coursPhotos.length === 2);
+    vrai('le compteur suit encore', d.el('cam-compteur').textContent === '2 / 5');
+  }, { tactile: true, camera: 'ok' });
+  if (dom) vrai('rien ne traîne à la fin', dom.cam.arrets === 0);
+}
+
+{
+  // au maximum, on ferme tout seul et on rend la caméra
+  const dom = await scenario('cinq pages puis stop', {}, async (C, d) => {
+    C.openAjoutCours();
+    await C.ouvrirCamera();
+    d.el('cam-video').videoWidth = 1600; d.el('cam-video').videoHeight = 1200;
+    for (let i = 0; i < 5; i++) C.camDeclic();
+    vrai('cinq pages prises', C.coursPhotos.length === 5);
+    vrai('pas une de plus', C.coursPhotos.length <= 5);
+    vrai("l'écran de caméra s'est fermé", !/cam-plein/.test(d.el('modal-root').innerHTML));
+    vrai('le flux est rendu au système', !C.camStream);
+  }, { tactile: true, camera: 'ok' });
+  if (dom) vrai('la caméra a bien été coupée', dom.cam.arrets > 0);
+}
+
+{
+  // rouvrir alors que c'est déjà plein : on prévient au lieu d'ouvrir pour rien
+  await scenario('déjà cinq pages', {}, async (C, d, db, toasts) => {
+    C.openAjoutCours();
+    C.coursPhotos = [1, 2, 3, 4, 5].map(() => ({ data: 'A', archive: 'A', dataUrl: 'd' }));
+    await C.ouvrirCamera();
+    vrai('on prévient que c\'est complet', toasts.some(t => /maximum/.test(t)), JSON.stringify(toasts));
+    vrai('et on n\'ouvre pas la caméra', !/cam-plein/.test(d.el('modal-root').innerHTML));
+  }, { tactile: true, camera: 'ok' });
+}
+
+{
+  // fermer rend toujours la caméra, même sans avoir pris de photo
+  const dom = await scenario('fermer sans photo', {}, async (C, d) => {
+    C.openAjoutCours();
+    await C.ouvrirCamera();
+    C.fermerCamera();
+    vrai('le flux est rendu', !C.camStream);
+    vrai("l'écran est refermé", !/cam-plein/.test(d.el('modal-root').innerHTML));
+  }, { tactile: true, camera: 'ok' });
+  if (dom) vrai('la caméra a été coupée', dom.cam.arrets > 0);
 }
 
 console.log('\n— coller une capture d\'écran (Ctrl + V) —');

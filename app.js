@@ -268,6 +268,7 @@ function selectProfile(c){
   if(c === 'visiteur'){ child = null; document.body.className = ''; askVisitorName(); return; }
   $('#hdr-who').textContent = c === 'adam' ? '🐉 Adam' : '🦊 Alix';
   localStorage.setItem('adalix_child', c);
+  SES.set('child', c);
   if(dbOffline) setTimeout(()=>toast("⚠️ Connexion à la base impossible — rien ne sera enregistré aujourd'hui."), 900);
   $('#hdr-home').classList.remove('hidden');
   assistantName = null;
@@ -302,7 +303,21 @@ function checkPin(){
     showTab('dashboard');
   } else { toast('Code incorrect'); }
 }
-function logout(){ location.reload(); }
+function logout(){ SES.clear(); location.reload(); }   // « changer » doit vraiment changer
+
+/* ---------- retrouver sa place après un rechargement subi ----------
+   Au démarrage on montre toujours « Qui es-tu ? », exprès : le même appareil sert aux
+   deux enfants. Mais une page peut se recharger sans qu'on l'ait demandé — Android
+   détruit l'onglet quand la mémoire manque. Repartir de l'écran des profils est alors
+   une punition pour un geste qu'on n'a pas fait.
+   sessionStorage a exactement la bonne durée de vie : il survit au rechargement du MÊME
+   onglet et disparaît quand on ferme l'app. Un vrai démarrage redemande donc bien qui on
+   est. Jamais le parent (protégé par un code) ni un visiteur (il doit donner son nom). */
+const SES = {
+  set(k, v){ try { sessionStorage.setItem('adalix_s_' + k, v); } catch(e){ /* mode privé */ } },
+  get(k){ try { return sessionStorage.getItem('adalix_s_' + k); } catch(e){ return null; } },
+  clear(){ try { ['child','espace','tab'].forEach(k => sessionStorage.removeItem('adalix_s_' + k)); } catch(e){} },
+};
 
 /* ---------- nav ---------- */
 const TABS = {
@@ -353,6 +368,7 @@ function majEnTete(){
 }
 function showEspaces(){
   espace = null;
+  SES.set('espace', ''); SES.set('tab', '');
   hautDePage();
   majEnTete();
   const nav = document.querySelector('nav');
@@ -435,6 +451,7 @@ function enterEspace(k){
   const e = ESPACES[k];
   if(!e) return;
   espace = k;
+  SES.set('espace', k);
   majEnTete();
   const tabs = e.tabs(child);
   buildNav(tabs);
@@ -446,6 +463,7 @@ function enterEspace(k){
 function hautDePage(){ try { if(window.scrollTo) window.scrollTo(0, 0); } catch(e){} }
 function showTab(t){
   tab = t;
+  SES.set('tab', t);
   hautDePage();
   document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
   const nb = $('#nav-'+t); if(nb) nb.classList.add('active');
@@ -2862,8 +2880,15 @@ async function doReset(key){
   renderDashboard();
 }
 
-/* ---------- boot ---------- */
-(function(){
-  const saved = localStorage.getItem('adalix_child');
-  // always show profile screen on load (le même appareil peut servir aux deux)
-})();
+/* ---------- boot ----------
+   Sur « load » et pas tout de suite : showEspaces() appelle coursBadgeEspace(), défini
+   dans cours.js, qui n'est pas encore chargé quand app.js s'exécute. */
+window.addEventListener('load', function(){
+  const c = SES.get('child'), e = SES.get('espace'), t = SES.get('tab');
+  if(c !== 'adam' && c !== 'alix') return;   // sinon : « Qui es-tu ? », comme toujours
+  selectProfile(c);
+  if(e && ESPACES[e]){
+    enterEspace(e);
+    if(t && ESPACES[e].tabs(c).indexOf(t) >= 0) showTab(t);
+  }
+});
