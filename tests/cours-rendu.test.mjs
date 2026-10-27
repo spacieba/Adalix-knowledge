@@ -89,9 +89,14 @@ async function scenario(nom, fixtures, fn, opts) {
     };
   }
   const refusCode = [];
+  /* Le micro vient d'app.js. o.micro : le navigateur sait écouter, donc le bouton doit
+     apparaître ; absent : aucun bouton, c'est la règle « jamais un bouton qui ne
+     marche pas ». */
+  const micArrets = [];
   const f = new Function('esc', 'child', 'db', 'toast', 'modal', 'closeModal', 'familyCode', 'badFamilyCode',
     'todayStr', '$', 'document', 'fetch', 'renderDashboard', 'Image', 'URL', 'window', 'navigator', 'console',
-    src + '\n;return {renderCours, drawCoursList, openAjoutCours, drawDraft, drawCours, openCours, drawExos, drawRevision, drawInterroScreen, fillCoursParentCard, coursCardsHtml, setCoursFiltre, openExosMenu, exoHtml, drawRevisionFin, coursFiles, ' +
+    'micBtn', 'micDispo', 'micStop',
+    src + '\n;return {renderCours, drawCoursList, openAjoutCours, drawDraft, drawCours, openCours, drawExos, drawRevision, drawInterroScreen, finirInterro, matieresInterro, interroAnnee, fillCoursParentCard, coursCardsHtml, setCoursFiltre, openExosMenu, exoHtml, drawRevisionFin, coursFiles, ' +
     'get exoState(){return exoState}, set exoState(v){exoState=v}, get revState(){return revState}, set revState(v){revState=v}, ' +
     'get coursCur(){return coursCur}, set coursCur(v){coursCur=v}, get coursNotions(){return coursNotions}, set coursNotions(v){coursNotions=v}, ' +
     'get coursPhotos(){return coursPhotos}, set coursPhotos(v){coursPhotos=v}, ' +
@@ -104,8 +109,11 @@ async function scenario(nom, fixtures, fn, opts) {
     () => '2026-10-24', sel => dom.el(String(sel).replace('#', '')), doc,
     async () => (o.reponse || { status: 200, json: async () => ({}) }),
     () => {}, function () { return { onload: null, onerror: null, set src(v) {} }; },
-    { createObjectURL: () => 'blob:', revokeObjectURL: () => {} }, win, nav, { log() {}, warn() {}, error() {} });
+    { createObjectURL: () => 'blob:', revokeObjectURL: () => {} }, win, nav, { log() {}, warn() {}, error() {} },
+    id => (o.micro ? `<button class="btn ghost mic-btn" id="mic-${id}" onclick="micToggle('${id}')">🎤</button>` : ''),
+    () => !!o.micro, () => micArrets.push(1));
   dom.cam = cam;
+  dom.micArrets = micArrets;
   dom.refusCode = refusCode;
   try {
     await fn(C, dom, db, toasts, ecouteurs);
@@ -508,7 +516,90 @@ console.log('\n— interro orale —');
     sain('interro', h);
     vrai('le champ de réponse est là', /id="interro-in"/.test(h));
     vrai('on peut passer une question', /Je ne sais pas/.test(h));
+    vrai("sans reconnaissance vocale, aucun bouton micro", !/mic-interro-in/.test(h));
+    vrai("et aucune consigne qui parlerait d'un micro absent", !/Touche le micro/.test(h));
   }
+}
+
+/* Répondre à l'oral : une interro où il faut taper n'est plus une interro orale, et
+   écrire est justement l'obstacle. Le bouton ne doit exister que si le navigateur sait
+   écouter, et le micro ne doit pas rester ouvert derrière l'écran qu'on quitte. */
+{
+  const dom = await scenario('interro avec micro', { adalix_cours_revisions: [] }, async C => {
+    C.coursCur = FIXTURES_COURS[0]; C.coursNotions = FIXTURES_NOTIONS;
+    C.drawInterroScreen();
+  }, { micro: true });
+  if (dom) {
+    const h = html(dom);
+    sain('interro micro', h);
+    vrai('le bouton micro visse le champ de réponse', /id="mic-interro-in"/.test(h));
+    vrai('il est cliquable', /micToggle\('interro-in'\)/.test(h));
+    vrai("et l'enfant sait quoi en faire", /micro/i.test(h) && /voix haute/.test(h));
+  }
+}
+{
+  const dom = await scenario('finirInterro coupe le micro', { adalix_cours: FIXTURES_COURS, adalix_cours_notions: FIXTURES_NOTIONS }, async C => {
+    C.coursCur = FIXTURES_COURS[0]; C.coursNotions = FIXTURES_NOTIONS;
+    C.drawInterroScreen();
+    await C.finirInterro();
+  }, { micro: true });
+  if (dom) vrai("terminer l'interro coupe le micro", dom.micArrets.length === 1, String(dom.micArrets.length));
+}
+
+/* ---------- ce que l'assistant demande au module ----------
+   « Interroge-moi » laisse l'enfant choisir une matière de son année. Deux pièges :
+   proposer une matière sur laquelle on n'aurait rien à demander, et envoyer au modèle
+   une réponse qu'il n'a pas à connaître avant de l'avoir posée. */
+console.log('\n— les matières proposées à l\'assistant —');
+{
+  const dom = await scenario('matieresInterro', { adalix_cours: FIXTURES_COURS }, async (C, d) => {
+    const mats = await C.matieresInterro();
+    vrai('toutes les matières sont proposées', mats.length > 10, String(mats.length));
+    vrai('celles où il a des cours viennent en tête', mats[0].cours > 0 && mats[1].cours > 0,
+      JSON.stringify(mats.slice(0, 3)));
+    vrai('avec le nombre de cours', mats.find(m => m.id === 'histoire').cours === 1
+      && mats.find(m => m.id === 'maths').cours === 1);
+    vrai('les autres annoncent zéro cours, pas undefined', mats.filter(m => m.cours === undefined).length === 0);
+    vrai('chacune a un emoji et un intitulé', mats.every(m => m.emoji && m.label));
+    vrai("« Autre » n'est pas proposé à vide", !mats.some(m => m.id === 'autre'));
+  });
+  if (!dom) vrai('matieresInterro ne plante pas', false);
+
+  await scenario('matieresInterro sans aucun cours', { adalix_cours: [] }, async C => {
+    const mats = await C.matieresInterro();
+    vrai('un cahier vide propose quand même les matières', mats.length > 10, String(mats.length));
+    vrai('et aucune ne prétend avoir des cours', mats.every(m => m.cours === 0));
+  });
+}
+
+console.log('\n— le contexte d\'une interro de l\'année —');
+{
+  await scenario('interroAnnee avec cours', { adalix_cours: FIXTURES_COURS, adalix_cours_notions: FIXTURES_NOTIONS }, async C => {
+    const a = await C.interroAnnee('histoire');
+    vrai('la matière est nommée', /Histoire/.test(a.label) && !!a.emoji);
+    vrai('le titre du cours y est', /Révolution française/.test(a.ctx));
+    vrai('le résumé y est', /Le résumé/.test(a.ctx));
+    vrai('les points clés y sont', /Point A/.test(a.ctx));
+    vrai('le vocabulaire y est', /Tiers État = le peuple/.test(a.ctx));
+    vrai('les questions déjà travaillées y sont', /Quand commence la Révolution \?/.test(a.ctx));
+    vrai('ce qui résiste est signalé au tuteur', /RÉSISTE/.test(a.ctx) && /Date clé/.test(a.ctx));
+    vrai("le tuteur est tenu de rester sur le cahier", /SUR CES COURS/.test(a.ctx));
+    vrai('aucun gabarit non interprété', !/\$\{/.test(a.ctx));
+  });
+
+  await scenario('interroAnnee sans cours dans la matière', { adalix_cours: [] }, async C => {
+    const a = await C.interroAnnee('svt');
+    vrai('la matière est quand même nommée', /SVT/.test(a.label));
+    vrai('on le dit clairement : pas de cahier ici', /aucun cours/.test(a.ctx));
+    vrai('on bascule sur le programme de sa classe', /programme de SVT/.test(a.ctx));
+    vrai("et on l'oriente vers Mes cours", /Mes cours/.test(a.ctx));
+    vrai('aucun gabarit non interprété', !/\$\{/.test(a.ctx));
+  });
+
+  await scenario('interroAnnee : une matière inconnue ne casse rien', { adalix_cours: [] }, async C => {
+    const a = await C.interroAnnee('nimportequoi');
+    vrai('on retombe sur « Autre »', !!a.label && !!a.ctx);
+  });
 }
 
 console.log('\n— carte du tableau de bord parent —');

@@ -17,7 +17,7 @@ api/image.js       fonction serverless Vercel — proxy vers l'API Runware (gén
 api/cours.js       fonction serverless Vercel — module des cours (transcription, exercices, correction, interro)
 manifest.json      installation sur l'écran d'accueil (PWA)
 sw.js              service worker minimal, sans cache — ne sert qu'à rendre l'app installable
-tests/             tests Node sans dépendance, 674 au total (voir tests/README.md)
+tests/             tests Node sans dépendance, 814 au total (voir tests/README.md)
 ```
 
 Pas de build : c'est du HTML/JS statique + des fonctions serverless Node. Vercel déploie ce dossier tel quel.
@@ -179,7 +179,7 @@ fichiers — et l'écran propose à la place le glisser-déposer, le collage (Ct
 document de l'ENT) et le choix de fichier.
 
 **Les trois façons de réviser**
-- *Interroge-moi* : le tuteur pose une question à la fois, laisse une seconde chance avant de donner la réponse.
+- *Interroge-moi* : le tuteur pose une question à la fois sur CE cours, laisse une seconde chance avant de donner la réponse.
 - *Exercices* : une fiche sur mesure (QCM + rédaction), corrigée sur le fond ; l'orthographe ne pénalise pas.
 - *Révisions espacées* : chaque notion suit les boîtes de Leitner (1, 3, 7, 16 puis 35 jours). Réussie, elle
   revient plus tard ; ratée, elle repart au début. Ce mode ne consomme aucun appel API.
@@ -196,6 +196,61 @@ sur la clé, le serveur bascule tout seul sur `claude-sonnet-4-5` et l'écrit da
 
 **Les photos d'origine sont conservées** dans `adalix_cours_photos` (copie compressée, ~100 Ko) : elles
 permettent de vérifier une transcription douteuse et de retrouver un schéma que le texte ne rend pas.
+
+## « Interroge-moi » : d'abord sur quoi ?
+
+Le bouton **🎓 Interroge-moi** de l'assistant envoyait tout le programme d'été en vrac dans
+le contexte, et le tuteur sautait de la géographie à l'économie dans la même interro.
+L'année scolaire, elle, n'était pas révisable depuis l'assistant : seule l'interro d'un
+cours ouvert le permettait.
+
+Il demande maintenant deux choses, dans cet ordre :
+
+1. **L'espace** — 🌞 Le Grand Été ou 🎓 l'année scolaire.
+2. **Le sujet.** Pour l'été, un des grands thèmes (`GE_SUJETS` dans app.js) : géographie,
+   « Qui écrit l'histoire ? », l'économie et l'argent, la géopolitique, l'esprit critique,
+   religions et laïcité, les maths curieuses, arts et pop culture, logique et rhétorique,
+   les 100 personnalités, l'IA, et « un peu de tout ». Pour l'année, une **matière**.
+
+Un thème n'apparaît que s'il a de quoi interroger : `lignes()` reconnaît ses journées parmi
+celles déjà passées, et un thème vide n'est pas proposé. C'est ce qui fait qu'Adam ne voit
+pas « Arts, danse et pop culture » (la semaine 5 d'Alix) et qu'Alix ne voit pas les journées
+« Argent » d'Adam — la même règle que partout : **jamais un bouton qui ne mène nulle part**.
+
+Côté année scolaire, **toutes** les matières sont proposées, celles où il a photographié des
+cours d'abord : là, l'interro porte sur **son cahier** (titres, résumés, points clés,
+vocabulaire, questions déjà travaillées, et ce qui lui résiste) ; ailleurs, sur le
+**programme de sa classe**, et le tuteur le dit. Le niveau vient du `niveau` lu sur ses
+cours, sinon de son âge (`NIVEAU_DEFAUT`). app.js ne connaît ni `MATIERES` ni les tables des
+cours : il passe par `matieresInterro()` et `interroAnnee()` (cours.js).
+
+Le contexte est **figé au lancement**, pas recalculé à chaque message : l'année scolaire
+demande la base, et `sendChat` part à chaque réponse de l'enfant. Le serveur reçoit en plus
+le nom du sujet (`quizSujet`) et a pour consigne de ne pas en bouger.
+
+## Répondre à l'oral
+
+Une interro où il faut taper n'est pas une interro orale, et pour Alix écrire est
+l'obstacle, pas la question posée. `micBtn()` / `micToggle()` (app.js) ajoutent un **🎤** au
+champ de l'assistant et à celui de l'interro d'un cours, via `SpeechRecognition` du
+navigateur (`fr-FR`, gratuit, aucune clé).
+
+Deux choix tenus :
+
+- **Le texte reconnu atterrit dans le champ, et s'arrête là.** C'est l'enfant qui envoie. Le
+  micro se trompe sur un nom propre ou un mot de cours, et une bonne réponse comptée fausse
+  par une erreur de transcription serait pire que de taper. La dictée **complète** ce qui
+  était déjà écrit au lieu de l'écraser.
+- **`continuous = false`** : la reconnaissance s'arrête d'elle-même au silence, et
+  `interimResults` montre les mots arriver — un enfant ne devine pas qu'un micro est resté
+  ouvert. Le bouton change de couleur et respire pendant l'écoute, et `finirInterro()` le
+  coupe en quittant l'écran.
+
+Le bouton n'existe pas si le navigateur ne sait pas écouter, et chaque échec se dit en
+clair (micro bloqué, rien entendu, pas de micro, réseau coupé). Tout se passe **dans la
+page** : contrairement à l'appareil photo du système, rien ne peut faire reprendre l'onglet
+par Android. Le micro n'est volontairement proposé **ni dans les dictées ni dans les
+exercices écrits** : là, écrire EST l'exercice.
 
 ## Lire et écrire (lecture.js)
 
@@ -254,9 +309,28 @@ qui peut survenir après le premier rendu.
 
 Règle tenue : **jamais un bouton qui ne marche pas.** Rien ne s'affiche si l'app tourne déjà
 installée (`display-mode: standalone`, ou `navigator.standalone` sur iOS), ni dans un
-navigateur qui ne sait pas installer. Safari n'émet jamais l'événement : sur iPhone, le bouton
-ouvre les deux gestes à faire à la main. Un `vercel dev`/local n'y change rien, l'installation
-marche sur n'importe quelle origine `http(s)`.
+navigateur qui ne sait vraiment pas installer. Un `vercel dev`/local n'y change rien,
+l'installation marche sur n'importe quelle origine `http(s)`.
+
+**Mais `beforeinstallprompt` n'arrive pas toujours**, et le 27/10/2026 Adam a ouvert l'app sur
+son téléphone sans voir aucune proposition. Seuls les navigateurs Chromium émettent cet
+événement : Firefox, Samsung Internet et les navigateurs intégrés (celui qui ouvre un lien
+reçu par message) ne l'émettent jamais, alors qu'ils savent presque tous ajouter la page à
+l'écran d'accueil — par leur menu. On ne montrait donc **rien du tout** là où il y avait
+quelque chose à faire.
+
+Deux corrections :
+
+- **La proposition apparaît aussi sur l'écran « Qui es-tu ? »** (`#install-slot-accueil`,
+  rempli par `majInstall()` au `load`). C'est le premier écran de l'app, donc le premier
+  endroit où on la cherche ; elle n'était que sur l'écran des deux espaces, après le choix
+  d'un profil.
+- **Sans événement, on montre le geste** (`aideInstallManuelle()`) : sur mobile toujours, sur
+  bureau si le navigateur est Chromium. `NAVS_INSTALL` donne les trois lignes exactes de
+  Samsung Internet, Firefox, Opera, Edge et Chrome — le menu et son intitulé changent partout,
+  et personne ne les devine. On reste honnête quand on ne reconnaît pas le navigateur, et la
+  dernière ligne donne toujours le repli : ouvrir la page dans Chrome, qui propose
+  l'installation tout seul. Safari garde ses instructions à lui (`aideInstallIPhone`).
 
 Ce qui resterait à faire pour un **vrai exécutable** (.exe/.msi via Tauri, .apk) : rien n'est
 commencé, et ça ne rendrait pas l'app autonome — `api/` doit rester côté serveur, la clé

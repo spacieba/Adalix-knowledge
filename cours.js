@@ -112,6 +112,14 @@ async function loadCours() {
     .select('id,child,matiere,titre,niveau,chapitre,resume,texte,points_cles,vocabulaire,ressources,created_at,updated_at')
     .eq('child', child).order('created_at', { ascending: false });
   coursList = data || [];
+  noteNiveau(coursList);
+}
+/* Le niveau de classe est écrit sur ses cahiers, et le modèle le relève à la
+   transcription. On le partage avec app.js (`niveauVu`), qui en a besoin pour cadrer
+   une interro sur une matière encore sans cours — sinon il faudrait le redemander. */
+function noteNiveau(cs) {
+  const niv = (cs || []).map(c => c.niveau).find(n => /^[3456]e$/.test(String(n || '')));
+  if (niv && typeof niveauVu !== 'undefined') niveauVu = niv;
 }
 async function loadDue() {
   const { data } = await db.from('adalix_cours_notions')
@@ -576,9 +584,11 @@ function drawInterroScreen() {
       <div style="font-size:12.5px;opacity:.7;">Réponds avec tes mots, comme à l'oral. Si tu ne sais pas, dis-le : on passe à la suite.</div>
       <div id="chat-box"></div>
       <div class="chat-input">
+        ${micBtn('interro-in')}
         <input type="text" id="interro-in" placeholder="Ta réponse…" onkeydown="if(event.key==='Enter')envoyerInterro()">
         <button class="btn" onclick="envoyerInterro()">➤</button>
       </div>
+      ${micDispo() ? `<div style="font-size:12px;opacity:.65;margin-top:5px;">🎤 Touche le micro et réponds à voix haute : tes mots s'écrivent tout seuls, tu relis, puis tu envoies.</div>` : ''}
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn ghost" onclick="passerQuestion()">⏭️ Je ne sais pas, passe</button>
         <button class="btn${tutorFini ? '' : ' ghost'}" onclick="finirInterro()">🏁 Terminer${tutorFini ? ' et enregistrer' : ''}</button>
@@ -641,6 +651,7 @@ async function majNotion(nom, ok) {
 }
 
 async function finirInterro() {
+  micStop();   // le micro ne doit pas rester ouvert derrière l'écran qu'on quitte
   // on n'enregistre que ce que le tuteur a réellement tranché pendant CETTE session
   const notions = Object.keys(tutorBilan);
   if (notions.length) {
@@ -895,4 +906,65 @@ async function fillCoursParentCard() {
     }).join('')}
     <div style="font-size:12px;color:#999;margin-top:6px;">Les notions « bien installées » ont été réussies plusieurs fois à quelques jours d'intervalle — c'est le seul signe fiable que quelque chose est vraiment retenu.</div>
   </div>`;
+}
+
+/* ---------- ce que l'assistant demande à ce module ----------
+   « Interroge-moi » (app.js) laisse l'enfant choisir une matière de son année scolaire.
+   Les deux fonctions ci-dessous sont les seules portes d'entrée : app.js ne connaît ni
+   MATIERES ni les tables des cours. */
+
+/* Toutes les matières, celles où il a photographié des cours d'abord. On les propose
+   toutes : là où il a un cours, l'interro porte sur SON cahier ; ailleurs, sur le
+   programme de sa classe. Aucune ne mène donc à une interro vide. */
+async function matieresInterro() {
+  const { data } = await db.from('adalix_cours').select('matiere,niveau').eq('child', child);
+  const cs = data || [];
+  noteNiveau(cs);
+  const n = {};
+  cs.forEach(c => { n[c.matiere] = (n[c.matiere] || 0) + 1; });
+  const avec = MATIERES.filter(m => n[m.id]).map(m => ({ id: m.id, emoji: m.emoji, label: m.label, cours: n[m.id] }));
+  // « Autre » n'a de sens que s'il y a déjà des cours dedans : sinon on n'interroge sur rien
+  const sans = MATIERES.filter(m => !n[m.id] && m.id !== 'autre').map(m => ({ id: m.id, emoji: m.emoji, label: m.label, cours: 0 }));
+  return avec.concat(sans);
+}
+
+/* Le contexte d'une interro de l'année : ses cours de cette matière et les notions
+   déjà suivies, avec leur question et leur réponse. On envoie les résumés et les
+   points clés plutôt que le cours entier — l'assistant doit poser des questions, pas
+   réciter le cahier, et le corps du texte ferait exploser la requête. */
+async function interroAnnee(mat) {
+  const m = matOf(mat);
+  const { data: cd } = await db.from('adalix_cours')
+    .select('id,titre,niveau,chapitre,resume,points_cles,vocabulaire')
+    .eq('child', child).eq('matiere', mat).order('created_at', { ascending: false }).limit(12);
+  const cours = cd || [];
+  if (!cours.length) {
+    const niv = typeof niveauScolaire === 'function' ? niveauScolaire() : '5e';
+    return { emoji: m.emoji, label: m.label, cours: 0,
+      ctx: `ANNÉE SCOLAIRE — ${m.label}. Il n'a encore photographié aucun cours de cette matière : `
+        + `interroge-le sur le programme de ${m.label} de ${niv}, tel qu'il est enseigné au collège en France. `
+        + `Commence par le début du programme de l'année et préviens-le que tu l'interroges sur le programme, `
+        + `pas sur son cahier — s'il veut réviser SON cours, il le photographie dans « Mes cours ».` };
+  }
+  const ids = cours.map(c => c.id);
+  const { data: nd } = await db.from('adalix_cours_notions')
+    .select('cours_id,notion,question,reponse,box,echecs').eq('child', child);
+  const notions = (nd || []).filter(n => ids.indexOf(n.cours_id) >= 0);
+  const lignes = cours.map(c => {
+    const ns = notions.filter(n => n.cours_id === c.id);
+    return [
+      `COURS : ${c.titre}${c.chapitre ? ` — ${c.chapitre}` : ''}${c.niveau ? ` (${c.niveau})` : ''}`,
+      c.resume ? `  Résumé : ${String(c.resume).slice(0, 600)}` : '',
+      (c.points_cles || []).length ? `  À retenir : ${(c.points_cles || []).join(' · ').slice(0, 700)}` : '',
+      (c.vocabulaire || []).length ? `  Vocabulaire : ${(c.vocabulaire || []).map(v => `${v.mot} = ${v.def}`).join(' · ').slice(0, 700)}` : '',
+      ns.length ? `  Questions déjà travaillées : ${ns.map(n => `${n.question} → ${n.reponse}`).join(' | ').slice(0, 900)}` : '',
+      // ce qui résiste : échoué au moins deux fois et toujours dans la première boîte
+      ns.filter(n => n.box <= 1 && n.echecs >= 2).length
+        ? `  CE QUI LUI RÉSISTE (insiste dessus) : ${ns.filter(n => n.box <= 1 && n.echecs >= 2).map(n => n.notion).join(', ')}` : '',
+    ].filter(Boolean).join('\n');
+  });
+  return { emoji: m.emoji, label: m.label, cours: cours.length,
+    ctx: `ANNÉE SCOLAIRE — ${m.label}. Ses cours photographiés et mis au propre, du plus récent au plus ancien. `
+      + `Interroge-le SUR CES COURS, avec ses mots à lui, et pas sur le programme en général :\n`
+      + lignes.join('\n\n') };
 }

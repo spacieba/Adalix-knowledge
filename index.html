@@ -411,6 +411,11 @@ body.theme-adam .espace-card .ec-titre { color:#c9962c; }
 .install-card .ic-emoji { font-size:28px; flex-shrink:0; }
 .install-card .ic-titre { font-weight:800; font-size:15px; }
 .install-card .ic-sous { font-size:12.5px; opacity:.72; margin-top:2px; line-height:1.45; }
+/* la même proposition sur l'écran « Qui es-tu ? », qui est sombre : c'est le premier
+   écran que voit celui qui ouvre l'app, donc l'endroit le plus utile pour l'offrir */
+.install-card.sur-sombre { background:rgba(255,255,255,.10); color:#fff; border-color:rgba(255,255,255,.45);
+  max-width:380px; width:100%; margin:0 auto; }
+.install-card.sur-sombre:hover { background:rgba(255,255,255,.18); }
 .espace-card .ec-pastille { display:inline-block; margin-top:7px; font-size:12.5px; font-weight:700;
   background:var(--accent); color:#fff; border-radius:var(--radius-chip); padding:4px 11px; }
 @media (max-width:640px){
@@ -418,6 +423,29 @@ body.theme-adam .espace-card .ec-titre { color:#c9962c; }
   .espace-card .ec-emoji { font-size:38px; }
   .espace-card .ec-titre { font-size:19px; }
   .espace-card .ec-fleche { font-size:24px; }
+}
+
+/* ---- choisir dans une liste : « Interroge-moi » (l'espace, puis le sujet) ----
+   Des lignes pleine largeur plutôt que des pastilles : sur un téléphone, un enfant
+   touche une ligne sans viser, et chaque ligne peut dire ce qu'elle contient. */
+.choix-row { display:flex; align-items:center; gap:12px; width:100%; text-align:left; box-sizing:border-box;
+  background:rgba(0,0,0,.03); border:1.5px solid rgba(0,0,0,.1); border-radius:14px;
+  padding:11px 13px; margin-bottom:7px; cursor:pointer; font-family:var(--font-body);
+  color:var(--card-text); transition:.12s; }
+.choix-row:hover { background:rgba(0,0,0,.07); transform:translateY(-1px); }
+.choix-row .cr-emoji { font-size:23px; flex-shrink:0; }
+.choix-row .cr-titre { font-weight:700; font-size:14.5px; }
+.choix-row .cr-sous { font-size:12px; opacity:.65; margin-top:1px; line-height:1.4; }
+.choix-row .cr-fleche { margin-left:auto; font-size:19px; opacity:.3; flex-shrink:0; }
+@media (max-width:640px){ .choix-row { min-height:54px; padding:12px 13px; } }
+
+/* ---- répondre à l'oral : le micro du téléphone ----
+   Quand il écoute, le bouton doit être reconnaissable sans savoir lire : il change de
+   couleur et respire. Un enfant ne devine pas qu'un micro est resté ouvert. */
+.mic-btn.on { background:#c9636a; color:#fff; border-color:transparent; animation:micpulse 1.1s infinite; }
+@keyframes micpulse {
+  0%, 100% { box-shadow:0 0 0 0 rgba(201,99,106,.55); }
+  50% { box-shadow:0 0 0 9px rgba(201,99,106,0); }
 }
 
 /* ---- Lecture guidée : espacement, suivi du mot lu, syllabes ----
@@ -493,6 +521,7 @@ body.theme-adam .cours-md b { color:#8a6a1e; }
     <div class="profile-card pc-alix" onclick="selectProfile('alix')"><div class="avatar">🦊</div><div class="name">Alix</div><div class="tag">11 ans · créatrice d'histoires</div></div>
     <div class="profile-card pc-visiteur" onclick="selectProfile('visiteur')"><div class="avatar">🧳</div><div class="name">Visiteur</div><div class="tag">jeux géo & quiz · sans compte</div></div>
   </div>
+  <div id="install-slot-accueil"></div>
   <div id="parent-link" onclick="askParentPin()">Espace parent</div>
 </div>
 

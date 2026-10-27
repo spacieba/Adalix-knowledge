@@ -13,7 +13,10 @@ TU RÉPONDS AVEC PLAISIR, ENTRE MILLE AUTRES CHOSES, À :
 - Les jeux avec toi : devinettes, histoires à continuer, jeux de rôle, quiz, débats, "et si…".
 - Et bien sûr le programme d'été, qu'ils peuvent aborder quand ILS le décident.
 
-CE QUE TU CONNAIS DE LEUR PROGRAMME (utile, mais ne le ramène pas de force)
+LEUR ANNÉE SCOLAIRE AUSSI
+L'app ne sert plus seulement l'été : ils y photographient leurs cours de collège, qui reviennent mis au propre (onglet « Mes cours »), avec leurs notions suivies en révisions espacées. Quand ils lancent « Interroge-moi », ils choisissent eux-mêmes le terrain — le programme de l'été ou une matière de l'année — et ce choix t'est donné plus bas. Hors de ce mode, tu peux parler de leurs cours comme de n'importe quel sujet.
+
+CE QUE TU CONNAIS DE LEUR PROGRAMME D'ÉTÉ (utile, mais ne le ramène pas de force)
 Géographie ; "Qui écrit l'histoire ?" (César/Gaulois, conquête de l'Amérique, Howard Zinn — Noirs américains et Amérindiens) ; économie (Smith, Marx, Keynes, Ricardo, bourse, obligations, dette, Bretton Woods et le dollar) ; géopolitique (ONU, Moyen-Orient) ; esprit critique (complot lunaire, terre plate, chemtrails, 11-Septembre, sophismes, fact-checking) ; logique et rhétorique ; maths curieuses (nombre d'or, Fibonacci, fractales) ; personnalités inspirantes à collectionner.
 
 STYLE
@@ -58,7 +61,7 @@ module.exports = async (req, res) => {
     return;
   }
   try {
-    const { child, messages, assistantName, profile, memory, mode, quizContext } = req.body || {};
+    const { child, messages, assistantName, profile, memory, mode, quizContext, quizSujet } = req.body || {};
     const name = (assistantName || 'ton assistant').toString().slice(0, 30) || 'ton assistant';
     const prof = (profile || '').toString().slice(0, 2500);
     const memo = (memory || '').toString().slice(0, 1800);
@@ -120,7 +123,9 @@ module.exports = async (req, res) => {
         system: buildSystem(name) + `\n\nL'enfant connecté est : ${child === 'alix' ? 'Alix, 11 ans' : 'Adam, 13 ans'}.`
           + (prof ? `\n\nCe que tu sais de cet enfant (contexte fourni par son parent — utilise-le naturellement pour personnaliser tes réponses, tes exemples et tes encouragements, mais ne le récite jamais mot à mot et ne dis jamais "d'après ton profil" ou "ton parent m'a dit") :\n${prof}` : '')
           + (memo ? `\n\nTa mémoire des conversations passées avec cet enfant (utilise-la naturellement pour assurer la continuité — "la dernière fois tu me demandais…" — sans la réciter) :\n${memo}` : '')
-          + (quizContext ? `\n\nMODE INTERROGE-MOI ACTIVÉ : l'enfant veut réviser en jouant. Pose UNE question de révision à la fois sur ce qu'il a vu (thèmes ci-dessous), attends sa réponse, corrige avec bienveillance et enthousiasme (donne la bonne réponse s'il se trompe, félicite s'il réussit), puis enchaîne sur la question suivante. Varie les thèmes et la difficulté, compte ses points (score sur le nombre de questions posées). Thèmes vus :\n${String(quizContext).slice(0, 1500)}` : ''),
+          + (quizContext ? `\n\nMODE INTERROGE-MOI ACTIVÉ : l'enfant veut réviser en jouant.`
+            + (quizSujet ? ` IL A CHOISI SON SUJET : « ${String(quizSujet).slice(0, 80)} ». Reste dessus, question après question : ne glisse pas vers un autre sujet, même si une réponse t'en donne l'occasion. S'il veut en changer, il relancera le mode lui-même — dis-le lui une fois, à la fin de ta première question.` : '')
+            + ` Pose UNE question à la fois, attends sa réponse, corrige avec bienveillance et enthousiasme (donne la bonne réponse s'il se trompe, félicite s'il réussit), puis enchaîne. Varie la difficulté, compte ses points (score sur le nombre de questions posées). Tes questions ne portent QUE sur ce qui suit :\n${String(quizContext).slice(0, 7000)}` : ''),
         messages: clean,
       }),
     });

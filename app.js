@@ -420,21 +420,43 @@ function estIPhone(){
   const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
   return /iPad|iPhone|iPod/.test(ua);
 }
-/* Remplit l'emplacement réservé. Appelée au rendu, et de nouveau depuis index.html si le
-   navigateur se décide après coup — beforeinstallprompt arrive quand il veut. */
+function estMobile(){
+  const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
+  return /Android|iPad|iPhone|iPod|Mobile|Tablet/i.test(ua);
+}
+/* Chromium de bureau (Chrome, Edge, Brave, Opera) : l'installation existe, mais elle se
+   cache dans la barre d'adresse ou dans le menu. Les autres navigateurs de bureau ne
+   savent pas installer du tout — on ne leur montre donc rien. */
+function estChromium(){
+  const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
+  return /Chrome|Chromium|CriOS|Edg|OPR/i.test(ua) && !/Firefox|FxiOS/i.test(ua);
+}
+/* Remplit les deux emplacements réservés : l'écran « Qui es-tu ? » et celui des deux
+   espaces. Appelée au rendu, au chargement de la page, et de nouveau depuis index.html
+   si le navigateur se décide après coup — beforeinstallprompt arrive quand il veut. */
 function majInstall(){
   const el = $('#install-slot');
   if(el) el.innerHTML = htmlInstall();
+  const acc = $('#install-slot-accueil');
+  if(acc) acc.innerHTML = htmlInstall(true);
 }
-function htmlInstall(){
-  const carte = (sous, action) => `<div class="install-card" onclick="${action}">
+function htmlInstall(surSombre){
+  const carte = (sous, action) => `<div class="install-card${surSombre ? ' sur-sombre' : ''}" onclick="${action}">
     <div class="ic-emoji">📲</div>
     <div><div class="ic-titre">Installer l'app</div><div class="ic-sous">${sous}</div></div>
   </div>`;
   if(estInstallee()) return '';   // c'est déjà un logiciel : rien à proposer
   if(window.__pwaPrompt) return carte("Elle s'ouvrira comme un vrai programme, avec son icône, sans barre d'adresse.", 'lancerInstall()');
   if(estIPhone()) return carte('Sur iPhone il y a deux gestes à faire — je te montre.', 'aideInstallIPhone()');
-  return '';   // navigateur qui ne sait pas installer : pas de bouton qui ne marcherait pas
+  /* Le navigateur n'a rien annoncé, et ça ne veut pas dire qu'on ne peut pas installer.
+     Seuls les navigateurs Chromium émettent « beforeinstallprompt » : Firefox, Samsung
+     Internet et les navigateurs intégrés (celui qui ouvre un lien reçu par message) ne
+     l'émettent jamais, mais savent presque tous ajouter la page à l'écran d'accueil par
+     leur menu. Résultat : Adam n'a vu AUCUNE proposition en ouvrant l'app sur son
+     téléphone (27/10/2026). On montre donc le geste à la main plutôt que rien. */
+  if(estMobile()) return carte("Elle s'ouvrira comme un vrai programme — je te montre le geste à faire.", 'aideInstallManuelle()');
+  if(estChromium()) return carte("Elle s'ouvrira dans sa propre fenêtre — je te montre où cliquer.", 'aideInstallManuelle()');
+  return '';   // navigateur qui ne sait vraiment pas installer : pas de bouton qui ne marcherait pas
 }
 async function lancerInstall(){
   const p = window.__pwaPrompt;
@@ -453,6 +475,57 @@ function aideInstallIPhone(){
     <p style="font-size:14px;line-height:1.75;">1. Touche le bouton <b>Partager</b> en bas de l'écran (le carré avec une flèche vers le haut).<br>
     2. Fais défiler, choisis <b>« Sur l'écran d'accueil »</b>, puis <b>Ajouter</b>.</p>
     <p style="font-size:13.5px;color:#666;">L'app apparaîtra avec son icône et s'ouvrira en plein écran.</p>
+    <div class="actions"><button class="btn" onclick="closeModal()">Compris</button></div>`);
+}
+/* Quand le navigateur ne propose rien lui-même, il faut nommer LE geste exact : le menu
+   et l'intitulé changent à chaque navigateur, et personne ne les devine. On reconnaît
+   donc le navigateur pour écrire ses trois lignes à lui, et on reste honnête quand on
+   ne le reconnaît pas. Rien ici ne promet que ça marchera du premier coup : la dernière
+   ligne donne toujours la solution de repli. */
+const NAVS_INSTALL = [
+  { test: /SamsungBrowser/i, nom: 'Samsung Internet', etapes: [
+    'Touche <b>☰</b> (les trois barres, en bas à droite).',
+    'Choisis <b>« Ajouter la page à »</b>.',
+    'Puis <b>« Écran d\'accueil »</b>, et valide.' ] },
+  { test: /FxiOS|Firefox/i, nom: 'Firefox', etapes: [
+    'Touche <b>⋮</b> (ou <b>☰</b>) pour ouvrir le menu.',
+    'Cherche <b>« Installer »</b> ou <b>« Ajouter à l\'écran d\'accueil »</b>.',
+    'Valide le nom proposé.' ] },
+  { test: /OPR|Opera/i, nom: 'Opera', etapes: [
+    'Touche <b>⋮</b> (ou le logo Opera) pour ouvrir le menu.',
+    'Choisis <b>« Ajouter à… »</b>.',
+    'Puis <b>« Écran d\'accueil »</b>.' ] },
+  { test: /Edg/i, nom: 'Edge', etapes: [
+    'Touche <b>⋯</b> en bas de l\'écran.',
+    'Choisis <b>« Ajouter au téléphone »</b> (ou <b>« Applications »</b> → <b>« Installer »</b>).',
+    'Valide.' ] },
+  { test: /Chrome|CriOS/i, nom: 'Chrome', etapes: [
+    'Touche <b>⋮</b> en haut à droite.',
+    'Choisis <b>« Ajouter à l\'écran d\'accueil »</b> ou <b>« Installer l\'application »</b>.',
+    'Valide le nom proposé.' ] },
+];
+function navInstall(){
+  const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
+  return NAVS_INSTALL.find(n => n.test.test(ua)) || null;
+}
+function aideInstallManuelle(){
+  const n = navInstall();
+  const bureau = !estMobile();
+  const etapes = bureau
+    ? ['Regarde au bout de la <b>barre d\'adresse</b>, en haut : il y a une petite icône d\'installation (un écran avec une flèche, ou un <b>+</b>).',
+       'Si tu ne la vois pas, ouvre le menu <b>⋮</b> en haut à droite.',
+       'Choisis <b>« Installer Adalix… »</b> (ou <b>Applications</b> → <b>Installer cette page</b>).']
+    : (n ? n.etapes
+         : ['Ouvre le menu de ton navigateur (<b>⋮</b> ou <b>☰</b>).',
+            'Cherche <b>« Ajouter à l\'écran d\'accueil »</b> — selon le navigateur ça peut s\'appeler <b>« Installer »</b>.',
+            'Valide le nom proposé.']);
+  modal(`<h3>📲 Installer l'app${n ? ' avec ' + esc(n.nom) : ''}</h3>
+    <p style="font-size:14px;line-height:1.6;">${bureau
+      ? 'Ton navigateur sait le faire, mais il ne le propose pas tout seul :'
+      : 'Ton navigateur ne me laisse pas le faire à ta place, mais c\'est trois gestes :'}</p>
+    <p style="font-size:14px;line-height:1.8;">${etapes.map((e, i) => `${i + 1}. ${e}`).join('<br>')}</p>
+    <p style="font-size:13.5px;color:#666;">L'app apparaîtra avec son icône et s'ouvrira en plein écran, sans barre d'adresse.</p>
+    <p style="font-size:13.5px;background:rgba(232,150,63,.14);border-radius:10px;padding:9px 12px;line-height:1.55;">Tu ne trouves pas ? Ouvre <b>adalix-knowledge.vercel.app</b> dans <b>Chrome</b> : il propose l'installation tout seul, et le bouton ci-dessus marchera d'un seul geste.</p>
     <div class="actions"><button class="btn" onclick="closeModal()">Compris</button></div>`);
 }
 /* `tabVoulu` sert à la reprise après un rechargement : il faut ouvrir l'onglet mémorisé
@@ -476,6 +549,7 @@ function hautDePage(){ try { if(window.scrollTo) window.scrollTo(0, 0); } catch(
 function showTab(t){
   tab = t;
   SES.set('tab', t);
+  micStop();      // un micro resté ouvert ne doit pas suivre l'enfant d'un onglet à l'autre
   hautDePage();
   document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
   const nb = $('#nav-'+t); if(nb) nb.classList.add('active');
@@ -519,7 +593,7 @@ function renderGuide(){
     ${gcard('🏭', "L'onglet Fabrique — ton atelier de création",
       `Le grand atelier : tu y fabriques une <b>vraie page web</b> avec le Bâtisseur, une IA spécialisée dans la construction. Cinq étapes de pro : imagine, fabrique (par petites améliorations successives), teste, <b>publie ton code sur GitHub</b> — le coffre-fort mondial du code — et ta page est mise <b>en ligne sur le vrai internet</b>, avec un lien à partager. C'est l'endroit idéal pour construire ton projet du mois s'il est numérique. Tu peux même regarder et modifier le code toi-même (bouton « Voir le code »).`)}
     ${gcard('💬', "L'onglet Mon assistant",
-      `Ton assistant IA personnel — c'est toi qui l'as baptisé, et il a de la <b>mémoire</b> : il se souvient de vos conversations passées au fil du mois. Pose-lui <b>vraiment tout</b> — le programme, bien sûr, mais aussi tes idées de dessins, de mode, de jeux, d'histoires, tes prompts pour l'atelier d'images, tes questions bizarres, ou juste pour discuter. Colle-lui une <b>image ou une capture d'écran</b>, garde tes meilleures réponses en <b>pépites</b> ⭐, et lance le mode <b>🎓 Interroge-moi</b> pour réviser en jouant : il te pose des questions sur ce que tu as vu et compte tes points. L'<b>atelier d'images</b> propose 11 styles (Ghibli, manga, pixel art, fantasy…), 4 formats, la baguette 🪄 qui enrichit ta description, une image de départ à transformer — et tu peux enregistrer tes créations sur le disque. Règle d'or : utilise-le pour <b>comprendre plus</b> et <b>créer plus</b> — pas pour arrêter de réfléchir.`)}
+      `Ton assistant IA personnel — c'est toi qui l'as baptisé, et il a de la <b>mémoire</b> : il se souvient de vos conversations passées au fil du mois. Pose-lui <b>vraiment tout</b> — le programme, bien sûr, mais aussi tes idées de dessins, de mode, de jeux, d'histoires, tes prompts pour l'atelier d'images, tes questions bizarres, ou juste pour discuter. Colle-lui une <b>image ou une capture d'écran</b>, garde tes meilleures réponses en <b>pépites</b> ⭐, et lance le mode <b>🎓 Interroge-moi</b> pour réviser en jouant : il te demande d'abord sur quel <b>thème</b> (géographie, économie, esprit critique, les 100 personnalités…), puis il te pose des questions dessus et compte tes points. Tu peux même lui répondre au <b>🎤 micro</b>. L'<b>atelier d'images</b> propose 11 styles (Ghibli, manga, pixel art, fantasy…), 4 formats, la baguette 🪄 qui enrichit ta description, une image de départ à transformer — et tu peux enregistrer tes créations sur le disque. Règle d'or : utilise-le pour <b>comprendre plus</b> et <b>créer plus</b> — pas pour arrêter de réfléchir.`)}
     ${gcard('🎤', "Les exposés du vendredi",
       `Chaque vendredi, 5 à 10 minutes devant la famille, avec un support créé avec les outils de la semaine. La règle du jeu : le thème est <b>au choix, mais connexe à quelque chose vu dans la semaine</b> — et tu <b>brainstormes d'abord tes idées avec ton assistant</b> avant de choisir. Un outil différent chaque semaine, avec son mode d'emploi sur la page du vendredi : <b>Gamma</b> (S1), <b>Claude</b> (S2), <b>Canva</b> (S3), <b>PowerPoint et son IA</b> (S4). La recette apprise en rhétorique : une <b>accroche</b>, <b>3 idées</b>, une <b>chute</b>. Après ton passage, papa note ton exposé (étoiles + commentaire) — tu verras son avis apparaître sur la page du jour. Le dernier samedi : l'exposé final, le grand quiz… et la fête !`)}
     ${gcard('🎖️', 'Les badges',
@@ -571,8 +645,9 @@ function renderAide(){
       L'<b>écriture du soir</b> (ce que j'ai appris / ce qui m'a étonné) demande trois lignes et construit ton journal, jour après jour.`)}
 
     ${gcard('💬', "Mon assistant",
-      `Ton assistant a de la <b>mémoire</b> : il se souvient de vos conversations. Pose-lui tout — une leçon que tu n'as pas comprise, un exercice sur lequel tu bloques, une idée de dessin, ou juste pour discuter. Colle-lui une <b>photo</b> ou une capture d'écran, garde ses meilleures réponses en <b>pépites</b> ⭐, et lance <b>🎓 Interroge-moi</b> pour réviser en jouant.<br><br>
-      Règle d'or : sers-t'en pour <b>comprendre plus</b>, pas pour arrêter de réfléchir. Un devoir qu'il a fait à ta place ne t'apprend rien — un devoir qu'il t'a aidé à comprendre, si.`)}
+      `Ton assistant a de la <b>mémoire</b> : il se souvient de vos conversations. Pose-lui tout — une leçon que tu n'as pas comprise, un exercice sur lequel tu bloques, une idée de dessin, ou juste pour discuter. Colle-lui une <b>photo</b> ou une capture d'écran, et garde ses meilleures réponses en <b>pépites</b> ⭐.<br><br>
+      <b>🎓 Interroge-moi</b> te demande d'abord <b>sur quoi</b> : <b>Le Grand Été</b> (et là, quel thème : géographie, économie, esprit critique…) ou <b>l'année scolaire</b> (et là, quelle matière). Dans une matière où tu as photographié des cours, il t'interroge sur <b>ton cahier à toi</b> ; ailleurs, sur le programme de ta classe. Il reste sur le sujet choisi jusqu'à ce que tu arrêtes — avant, il sautait d'un thème à l'autre.<br><br>
+      ${micDispo() ? `Et tu peux <b>répondre à l'oral</b> : touche le <b>🎤</b>, parle, tes mots s'écrivent tout seuls. Tu les relis, tu corriges si le micro a mal entendu, et tu envoies. C'est toi qui envoies, toujours — jamais le micro.<br><br>` : ''}Règle d'or : sers-t'en pour <b>comprendre plus</b>, pas pour arrêter de réfléchir. Un devoir qu'il a fait à ta place ne t'apprend rien — un devoir qu'il t'a aidé à comprendre, si.`)}
 
     ${gcard('💛', 'Le mot de la fin',
       `Un cours photographié, trois minutes de révision au bon moment, un mot de plus gagné dans le carnet : ce sont des petits gestes, et c'est exactement comme ça que ça marche. Personne ici ne compte tes erreurs — on compte ce que tu as gagné.`)}
@@ -2215,22 +2290,93 @@ async function publishFab(){
   } catch(e){ if(pub) pub.innerHTML = '😕 Erreur de connexion — réessaie.'; }
 }
 
+/* ---------- répondre à l'oral : le micro du téléphone ----------
+   Une interro où il faut taper sa réponse n'est plus une interro orale, et pour Alix
+   écrire est l'obstacle, pas la question posée. La reconnaissance vocale du navigateur
+   (SpeechRecognition) reste DANS la page : rien ne passe la main à une application du
+   système, donc Android ne peut pas reprendre l'onglet comme il le faisait avec
+   l'appareil photo.
+
+   Le texte reconnu atterrit dans le champ et s'arrête là : c'est l'enfant qui envoie.
+   Le micro se trompe sur un nom propre ou un mot de cours, et une bonne réponse
+   comptée fausse par une erreur de transcription serait pire que de taper. */
+function micDispo(){
+  return !!(typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition));
+}
+let micReco = null;     // la reconnaissance en cours, s'il y en a une
+let micCible = null;    // l'id du champ qu'elle remplit
+/* Le bouton n'existe pas si le navigateur ne sait pas écouter : jamais un bouton qui ne
+   marche pas. `cibleId` est l'id du champ de saisie à remplir. */
+function micBtn(cibleId){
+  if(!micDispo()) return '';
+  return `<button class="btn ghost mic-btn" id="mic-${cibleId}" style="padding:10px 12px;" title="Répondre à l'oral" onclick="micToggle('${cibleId}')">🎤</button>`;
+}
+function micEtat(cibleId, ecoute){
+  const b = $('#mic-' + cibleId);
+  if(!b) return;
+  b.classList.toggle('on', ecoute);
+  b.innerHTML = ecoute ? '⏹️' : '🎤';
+  b.title = ecoute ? 'Arrêter le micro' : "Répondre à l'oral";
+}
+function micStop(){
+  const r = micReco; micReco = null;
+  if(r){ try { r.stop(); } catch(e){ /* déjà arrêtée */ } }
+  if(micCible) micEtat(micCible, false);
+}
+function micToggle(cibleId){
+  if(micReco){ micStop(); return; }          // deuxième appui : on arrête
+  const Reco = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const champ = $('#' + cibleId);
+  if(!Reco || !champ) return;
+  let r;
+  try { r = new Reco(); } catch(e){ toast("Le micro n'est pas disponible ici"); return; }
+  r.lang = 'fr-FR';
+  r.continuous = false;        // s'arrête tout seul au silence : l'enfant n'a rien à refermer
+  r.interimResults = true;     // il voit les mots arriver, donc il sait qu'on l'entend
+  r.maxAlternatives = 1;
+  /* Ce qu'il avait déjà tapé n'est jamais écrasé : on dicte à la suite. */
+  const deja = champ.value ? champ.value.replace(/\s+$/, '') + ' ' : '';
+  r.onresult = e => {
+    let txt = '';
+    for(let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
+    champ.value = deja + txt.replace(/^\s+/, '');
+  };
+  r.onerror = ev => {
+    const code = (ev && ev.error) || '';
+    micReco = null; micEtat(cibleId, false);
+    if(code === 'not-allowed' || code === 'service-not-allowed') toast('Le micro est bloqué — autorise-le dans les réglages du navigateur');
+    else if(code === 'no-speech') toast("Je n'ai rien entendu — réessaie 🎤");
+    else if(code === 'audio-capture') toast("Je ne trouve pas de micro sur cet appareil");
+    else if(code === 'network') toast('Le micro a besoin du réseau — vérifie la connexion');
+    else if(code !== 'aborted') toast('Le micro a eu un souci — réessaie');
+  };
+  r.onend = () => {
+    micReco = null; micEtat(cibleId, false);
+    try { champ.focus(); } catch(e){}
+  };
+  micReco = r; micCible = cibleId;
+  try { r.start(); } catch(e){ micReco = null; toast('Le micro a eu un souci — réessaie'); return; }
+  micEtat(cibleId, true);
+}
+
 /* ---------- chat ---------- */
 function renderChat(){
   if(!assistantName){ askAssistantName(); return; }
   $('#main').innerHTML = `<div class="narrow">
     <div class="card"><h3>💬 Pose toutes tes questions à ${esc(assistantName)}</h3>
-      <div style="font-size:13px;color:#888;">Je suis ${esc(assistantName)}, ton assistant du Grand Été. Histoire, sciences, économie, mots compliqués… demande-moi tout !</div>
+      <div style="font-size:13px;color:#888;">Je suis ${esc(assistantName)}, ton assistant. Tes cours de l'année, le programme de l'été, un mot compliqué, une idée de dessin… demande-moi tout ! Et pour réviser, 🎓 Interroge-moi.</div>
       <div id="chat-box"></div>
       <div id="chat-img-preview"></div>
       <div class="chat-input">
         <button class="btn ghost" style="padding:10px 12px;" title="Envoyer une image ou une capture d'écran" onclick="document.getElementById('chat-file').click()">🖼️</button>
         <input type="file" id="chat-file" accept="image/*" style="display:none;" onchange="if(this.files[0])handleChatFile(this.files[0]);this.value='';">
+        ${micBtn('chat-in')}
         <input type="text" id="chat-in" placeholder="Demande-lui n'importe quoi… (tu peux aussi coller une image !)" onkeydown="if(event.key==='Enter')sendChat()" onpaste="handleChatPaste(event)">
         <button class="btn" onclick="sendChat()">➤</button>
       </div>
+      ${micDispo() ? `<div style="font-size:12px;color:#888;margin-top:5px;">🎤 Tu peux aussi répondre à l'oral : touche le micro, parle, et le texte s'écrit tout seul.</div>` : ''}
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
-        <button class="btn ghost" id="quiz-toggle" onclick="toggleQuizMode()" style="${quizMode?'background:var(--accent);color:#fff;':''}">🎓 Interroge-moi${quizMode?' (actif)':''}</button>
+        <button class="btn ghost" id="quiz-toggle" onclick="openInterroMenu()" style="${quizMode?'background:var(--accent);color:#fff;':''}">${quizMode ? `🎓 ${quizSujet ? esc(quizSujet.emoji + ' ' + quizSujet.label) : 'Révision'} — arrêter` : '🎓 Interroge-moi'}</button>
         <button class="btn ghost" onclick="openGems()">⭐ Mes pépites</button>
         <button class="btn ghost" onclick="openHistory()">🕘 Mon historique</button>
         <button class="btn ghost" onclick="openImagine()">🎨 Atelier d'images</button>
@@ -2405,7 +2551,8 @@ async function sendChat(){
     const hist = chatMsgs.slice(0,-1).slice(-12);
     const payload = hist.map((m,i)=>({ role:m.role, content:m.content, image: (i===hist.length-1 && m.image) ? m.image : undefined }));
     const r = await fetch('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({child, assistantName, profile: childProfile, memory: assistantMemory, quizContext: quizMode ? buildQuizContext() : undefined, code: familyCode, messages: payload})});
+      body: JSON.stringify({child, assistantName, profile: childProfile, memory: assistantMemory, quizContext: quizMode ? quizCtx : undefined, quizSujet: (quizMode && quizSujet) ? quizSujet.label : undefined,
+        code: familyCode, messages: payload})});
     const j = await r.json();
     chatMsgs[chatMsgs.length-1] = {role:'assistant', content: j.reply || j.error || 'Oups, réessaie !'};
     if(j.error === 'code_famille'){ badFamilyCode(); }
@@ -2418,31 +2565,135 @@ async function sendChat(){
   }
   drawChat();
 }
-/* ---- mode Interroge-moi + mémoire de l'assistant ---- */
-function buildQuizContext(){
+/* ---- mode Interroge-moi : d'abord sur QUOI ? ----
+   Le bouton envoyait tout le programme d'été en vrac, et le tuteur sautait de la
+   géographie à l'économie dans la même interro ; l'année scolaire, elle, n'était pas
+   révisable du tout depuis l'assistant. On demande donc deux choses, dans cet ordre :
+   l'espace (Le Grand Été ou l'année scolaire), puis le sujet.
+
+   Le contexte est figé AU LANCEMENT, pas à chaque message : pour l'année scolaire il
+   faut interroger la base (les cours photographiés), et sendChat part à chaque réponse
+   de l'enfant. */
+let quizSujet = null;   // {espace, id, emoji, label}
+let quizCtx = '';       // ce sur quoi le tuteur a le droit d'interroger, en texte
+
+/* Les jours du programme déjà passés, à plat et dans l'ordre. L'index dans cette liste
+   est aussi celui de la notion d'IA du jour (D.ia), comme sur la page du jour. */
+function joursVus(){
   const today = new Date(); today.setHours(0,0,0,0);
-  const seen = [];
-  let idx = 0;
-  D.weeks.forEach(w => daysOf(w).forEach(d => {
-    if(dayDate(d) <= today){
-      seen.push(`${d.title} (${d.theme})` + (d.logique && d.logique.titre ? ` — logique/rhétorique : ${d.logique.titre}` : ''));
-      if(D.ia && D.ia[idx]) seen[seen.length-1] += ` — IA : ${D.ia[idx].titre}`;
-    }
-    idx++;
-  }));
-  return seen.join('\n') || 'Le programme vient de commencer : questions de culture générale adaptées à son âge.';
+  const vus = [];
+  D.weeks.forEach(w => daysOf(w).forEach(d => { if(dayDate(d) <= today) vus.push(d); }));
+  return vus;
 }
-function toggleQuizMode(){
-  quizMode = !quizMode;
-  const btn = $('#quiz-toggle');
-  if(btn){ btn.style.background = quizMode ? 'var(--accent)' : ''; btn.style.color = quizMode ? '#fff' : ''; btn.innerHTML = `🎓 Interroge-moi${quizMode?' (actif)':''}`; }
-  if(quizMode){
-    const inp = $('#chat-in');
-    if(inp){ inp.value = 'Interroge-moi sur ce que j\'ai vu, une question à la fois !'; sendChat(); }
-  } else {
-    toast('Mode révision terminé — bien joué ! 🎓');
+const titreJour = d => `${d.title} (${d.theme})`;
+
+/* Les grands thèmes du Grand Été. `lignes` dit ce qu'on peut réviser dans ce thème :
+   un thème sans aucune ligne n'est pas proposé — jamais un bouton qui ne mène à rien.
+   Un même jour peut nourrir deux thèmes (« Géo + religions »), et c'est voulu. */
+const GE_SUJETS = [
+  { id:'geo', emoji:'🗺️', label:'Géographie', unite:'journée',
+    lignes: js => js.filter(d => /géo/i.test(d.theme) && !/politique/i.test(d.theme)).map(titreJour) },
+  { id:'histoire', emoji:'🏛️', label:"Qui écrit l'histoire ?", unite:'journée',
+    lignes: js => js.filter(d => /histoire/i.test(d.theme) && !/art|danse/i.test(d.theme)).map(titreJour) },
+  { id:'eco', emoji:'💰', label:"L'économie et l'argent", unite:'journée',
+    lignes: js => js.filter(d => /économie|argent/i.test(d.theme)).map(titreJour) },
+  { id:'geopo', emoji:'🌍', label:'La géopolitique', unite:'journée',
+    lignes: js => js.filter(d => /géopolitique/i.test(d.theme)).map(titreJour) },
+  { id:'critique', emoji:'🔎', label:"L'esprit critique", unite:'journée',
+    lignes: js => js.filter(d => /esprit critique/i.test(d.theme)).map(titreJour) },
+  { id:'religions', emoji:'🕊️', label:'Religions et laïcité', unite:'journée',
+    lignes: js => js.filter(d => /religion|laïcité/i.test(d.theme)).map(titreJour) },
+  { id:'maths', emoji:'➗', label:'Les maths curieuses', unite:'journée',
+    lignes: js => js.filter(d => /maths/i.test(d.theme)).map(titreJour) },
+  { id:'arts', emoji:'🎨', label:'Arts, danse et pop culture', unite:'journée',
+    lignes: js => js.filter(d => /art|danse|pop culture/i.test(d.theme)).map(titreJour) },
+  { id:'logique', emoji:'🧠', label:'Logique et rhétorique', unite:'notion',
+    lignes: js => js.filter(d => d.logique && d.logique.titre).map(d => d.logique.titre) },
+  { id:'persos', emoji:'⭐', label:'Les 100 personnalités', unite:'personnalité',
+    lignes: js => { const n = []; js.forEach(d => (d.persos||[]).forEach(p => { if(!n.includes(p)) n.push(p); })); return n; } },
+  { id:'ia', emoji:'🤖', label:"L'intelligence artificielle", unite:'notion',
+    lignes: js => js.map((d, i) => (D.ia && D.ia[i]) ? D.ia[i].titre : null).filter(Boolean) },
+  { id:'tout', emoji:'🎲', label:'Un peu de tout', unite:'journée',
+    lignes: js => js.map(d => titreJour(d)
+      + (d.logique && d.logique.titre ? ` — logique/rhétorique : ${d.logique.titre}` : '')) },
+];
+function contexteEte(id){
+  const s = GE_SUJETS.find(x => x.id === id);
+  if(!s) return [];
+  return s.lignes(joursVus());
+}
+
+const choixRow = (emoji, titre, sous, action) => `<button class="choix-row" onclick="${action}">
+  <span class="cr-emoji">${emoji}</span>
+  <span><span class="cr-titre">${esc(titre)}</span>${sous ? `<span class="cr-sous" style="display:block;">${esc(sous)}</span>` : ''}</span>
+  <span class="cr-fleche">›</span>
+</button>`;
+
+function openInterroMenu(){
+  if(quizMode){ arreterInterro(); return; }   // le bouton actif arrête la révision
+  modal(`<h3>🎓 Interroge-moi</h3>
+    <p style="font-size:13.5px;color:#666;">Sur quoi veux-tu que je t'interroge ?</p>
+    ${choixRow('🌞', 'Le Grand Été', "La géographie, l'économie, l'esprit critique… ce que tu as vu cet été.", "interroSujets('ete')")}
+    ${choixRow('🎓', "L'année scolaire", 'Tes matières du collège — et tes cours photographiés quand tu en as.', "interroSujets('annee')")}
+    <div class="actions"><button class="btn ghost" onclick="closeModal()">Annuler</button></div>`);
+}
+async function interroSujets(espace){
+  if(espace === 'ete'){
+    const jours = joursVus();
+    const dispo = GE_SUJETS.map(s => ({ s, n: s.lignes(jours).length })).filter(x => x.n > 0);
+    modal(`<h3>🌞 Le Grand Été</h3>
+      ${dispo.length
+        ? `<p style="font-size:13.5px;color:#666;">Choisis ton thème — je ne t'interroge que sur ce que tu as déjà vu.</p>
+           <div style="max-height:52vh;overflow:auto;">${dispo.map(x => choixRow(x.s.emoji, x.s.label,
+              `${x.n} ${x.s.unite}${x.n > 1 ? 's' : ''}`, `lancerInterro('ete','${x.s.id}')`)).join('')}</div>`
+        : `<p style="font-size:13.5px;color:#666;">Le programme n'a pas encore commencé — il n'y a rien à réviser ici pour l'instant.</p>`}
+      <div class="actions"><button class="btn ghost" onclick="openInterroMenu()">← Retour</button></div>`);
+    return;
   }
+  modal(`<h3>🎓 L'année scolaire</h3><p style="font-size:13.5px;color:#666;">Je regarde tes cours…</p>`);
+  const mats = await matieresInterro();   // cours.js : les matières, les siennes d'abord
+  const niv = niveauScolaire();
+  modal(`<h3>🎓 L'année scolaire</h3>
+    <p style="font-size:13.5px;color:#666;">Quelle matière ? Là où tu as photographié des cours, je t'interroge sur TON cahier ; ailleurs, sur le programme de ${esc(niv)}.</p>
+    <div style="max-height:52vh;overflow:auto;">
+      ${mats.map(m => choixRow(m.emoji, m.label,
+        m.cours ? `${m.cours} cours photographié${m.cours > 1 ? 's' : ''}` : `le programme de ${niv}`,
+        `lancerInterro('annee','${m.id}')`)).join('')}
+    </div>
+    <div class="actions"><button class="btn ghost" onclick="openInterroMenu()">← Retour</button></div>`);
 }
+/* Le niveau de classe : celui que le modèle a lu sur ses cahiers, sinon celui de son
+   âge. Il sert à cadrer une interro sur une matière qu'il n'a pas encore photographiée. */
+const NIVEAU_DEFAUT = { adam:'4e', alix:'6e' };
+let niveauVu = '';   // renseigné par cours.js, qui lit le niveau sur ses cours
+function niveauScolaire(){ return niveauVu || NIVEAU_DEFAUT[child] || '5e'; }
+
+async function lancerInterro(espace, id){
+  closeModal();
+  let sujet;
+  if(espace === 'ete'){
+    const s = GE_SUJETS.find(x => x.id === id);
+    if(!s) return;
+    sujet = { espace, id, emoji:s.emoji, label:s.label };
+    quizCtx = `LE GRAND ÉTÉ — ${s.label}. Ce qu'il a déjà vu sur ce thème :\n` + contexteEte(id).join('\n');
+  } else {
+    const a = await interroAnnee(id);   // cours.js : {emoji, label, ctx}
+    if(!a) return;
+    sujet = { espace, id, emoji:a.emoji, label:a.label };
+    quizCtx = a.ctx;
+  }
+  quizMode = true; quizSujet = sujet;
+  renderChat();   // le bouton passe en « arrêter » et annonce le sujet choisi
+  const inp = $('#chat-in');
+  if(inp){ inp.value = `Interroge-moi sur ${sujet.label}, une question à la fois !`; sendChat(); }
+}
+function arreterInterro(){
+  quizMode = false; quizSujet = null; quizCtx = '';
+  renderChat();
+  toast('Mode révision terminé — bien joué ! 🎓');
+}
+
+/* ---- mémoire de l'assistant ---- */
 async function updateMemory(){
   try {
     const transcript = chatMsgs.slice(-16).map(m=>({role:m.role, content:m.content}));
@@ -2896,6 +3147,7 @@ async function doReset(key){
    Sur « load » et pas tout de suite : showEspaces() appelle coursBadgeEspace(), défini
    dans cours.js, qui n'est pas encore chargé quand app.js s'exécute. */
 window.addEventListener('load', function(){
+  majInstall();   // l'écran « Qui es-tu ? » propose aussi l'installation
   const c = SES.get('child'), e = SES.get('espace'), t = SES.get('tab');
   if(c !== 'adam' && c !== 'alix') return;   // sinon : « Qui es-tu ? », comme toujours
   selectProfile(c);

@@ -9,6 +9,12 @@ let ko = 0, ok = 0;
 const vrai = (nom, c, info) => { if (c) { ok++; } else { ko++; console.log('  ✗ ' + nom + (info ? '\n     ' + info : '')); } };
 const eq = (nom, a, b) => vrai(nom, JSON.stringify(a) === JSON.stringify(b), 'attendu ' + JSON.stringify(b) + ', obtenu ' + JSON.stringify(a));
 
+const UA_CHROME_ANDROID = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36';
+const UA_SAMSUNG = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 SamsungBrowser/23.0 Chrome/115.0 Mobile Safari/537.36';
+const UA_FIREFOX_ANDROID = 'Mozilla/5.0 (Android 14; Mobile; rv:130.0) Gecko/130.0 Firefox/130.0';
+const UA_CHROME_BUREAU = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36';
+const UA_FIREFOX_BUREAU = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/130.0 Firefox/130.0';
+
 function chargeApp(profil, options) {
   const opt = options || {};
   const elements = {};
@@ -28,7 +34,7 @@ function chargeApp(profil, options) {
     getElementById: id => el(id),
     createElement: () => el('tmp-' + Math.random()),
     addEventListener() {},
-    body: { className: '' },
+    body: { className: '', appendChild() {}, removeChild() {} },
   };
   // matchMedia sert à savoir si l'app tourne déjà installée (display-mode: standalone)
   const defilements = [];
@@ -38,6 +44,18 @@ function chargeApp(profil, options) {
     scrollTo: (x, y) => defilements.push([x, y]),
     addEventListener: (t, h) => { ecouteursWin[t] = h; },
   };
+  /* Reconnaissance vocale simulée. opt.micro : le navigateur sait écouter. On garde ce
+     qu'on lui demande, pour vérifier qu'on écoute bien en français et qu'on s'arrête
+     au silence plutôt que de laisser le micro ouvert. */
+  const micros = [];
+  if (opt.micro) {
+    win.webkitSpeechRecognition = function () {
+      const r = { lang: '', continuous: null, interimResults: null, demarre: 0, arrets: 0,
+        start() { this.demarre++; }, stop() { this.arrets++; } };
+      micros.push(r);
+      return r;
+    };
+  }
   // sessionStorage : survit au rechargement du même onglet, pas à la fermeture
   const session = Object.assign({}, opt.session || {});
   const sessionStorage = {
@@ -55,21 +73,33 @@ function chargeApp(profil, options) {
   const stockage = { getItem: () => null, setItem() {}, removeItem() {} };
   const appels = [];
   const bouchon = nom => (...a) => { appels.push({ nom, a }); };
+  /* cours.js répond pour l'année scolaire : app.js ne connaît ni les matières ni les
+     tables des cours, il les demande. opt.mats / opt.annee règlent la réponse. */
   const f = new Function('window', 'document', 'localStorage', 'console', 'fetch', 'setTimeout',
     'coursBadgeEspace', 'renderCours', 'renderMots', 'fillCoursParentCard', 'fillMotsParentCard', 'Image', 'URL', 'navigator',
-    'sessionStorage', 'location',
+    'sessionStorage', 'location', 'matieresInterro', 'interroAnnee',
     src + '\n;return {TABS, ESPACES, showEspaces, enterEspace, showTab, buildNav, majEnTete, '
-    + 'majInstall, htmlInstall, estInstallee, estIPhone, lancerInstall, aideInstallIPhone, '
+    + 'majInstall, htmlInstall, estInstallee, estIPhone, estMobile, estChromium, '
+    + 'lancerInstall, aideInstallIPhone, aideInstallManuelle, navInstall, '
     + 'selectProfile, logout, SES, '
+    + 'GE_SUJETS, joursVus, contexteEte, openInterroMenu, interroSujets, lancerInterro, arreterInterro, '
+    + 'niveauScolaire, renderChat, micDispo, micBtn, micToggle, micStop, '
     + 'get espace(){return espace}, set espace(v){espace=v}, get child(){return child}, set child(v){child=v}, '
+    + 'get assistantName(){return assistantName}, set assistantName(v){assistantName=v}, '
+    + 'get niveauVu(){return niveauVu}, set niveauVu(v){niveauVu=v}, '
+    + 'get quizMode(){return quizMode}, get quizSujet(){return quizSujet}, get quizCtx(){return quizCtx}, '
+    + 'get chatMsgs(){return chatMsgs}, '
     + 'get tab(){return tab}};');
   const C = f(win, doc, stockage, { log() {}, warn() {}, error() {} }, async () => ({ json: async () => ({}) }),
     fn => { appels.push({ nom: 'setTimeout' }); return 0; },
     bouchon('coursBadgeEspace'), bouchon('renderCours'), bouchon('renderMots'), bouchon('fillCoursParentCard'), bouchon('fillMotsParentCard'),
     function () { return {}; }, { createObjectURL: () => '', revokeObjectURL() {} }, nav,
-    sessionStorage, location);
+    sessionStorage, location,
+    async () => opt.mats || [{ id: 'histoire', emoji: '🏛️', label: 'Histoire', cours: 2 },
+                              { id: 'svt', emoji: '🌱', label: 'SVT', cours: 0 }],
+    async mat => opt.annee === null ? null : (opt.annee || { emoji: '🏛️', label: 'Histoire', ctx: 'ANNÉE SCOLAIRE — Histoire. ' + mat }));
   C.child = profil || 'alix';
-  return { C, el, elements, appels, win, defilements, session, ecouteursWin, rechargements };
+  return { C, el, elements, appels, win, defilements, session, ecouteursWin, rechargements, micros };
 }
 
 /* ---------- cohérence du découpage ---------- */
@@ -348,6 +378,258 @@ console.log('\n— proposer d\'installer l\'app —');
   // deuxième clic sans événement : ne doit pas planter
   await C.lancerInstall();
   vrai('un clic sans événement ne casse rien', true);
+}
+
+/* ---------- quand le navigateur ne propose rien de lui-même ----------
+   Adam a ouvert l'app sur son téléphone et n'a vu AUCUNE proposition d'installation
+   (27/10/2026). Seuls les navigateurs Chromium émettent « beforeinstallprompt » :
+   ailleurs on ne montrait rien du tout, alors que tous ces navigateurs savent ajouter
+   la page à l'écran d'accueil par leur menu. On montre donc le geste à faire. */
+console.log('\n— installer quand le navigateur ne dit rien —');
+{
+  const { C, el } = chargeApp('adam', { ua: UA_CHROME_ANDROID });
+  C.showEspaces();
+  const h = el('install-slot').innerHTML;
+  vrai('un téléphone voit quand même la proposition', /install-card/.test(h), h);
+  vrai('elle ouvre les instructions', /aideInstallManuelle\(\)/.test(h));
+  vrai("elle n'essaie pas d'ouvrir une boîte de dialogue absente", !/lancerInstall/.test(h));
+  vrai("pas d'undefined affiché", !/undefined/.test(h), h);
+  vrai('pas de gabarit non interprété', !/\$\{/.test(h));
+
+  C.aideInstallManuelle();
+  const m = el('modal-root').innerHTML;
+  vrai('les instructions nomment le navigateur', /Chrome/.test(m), m.slice(0, 200));
+  vrai("et le geste exact", /écran d'accueil/i.test(m) || /Installer l'application/.test(m));
+  vrai('elles donnent une solution de repli', /adalix-knowledge\.vercel\.app/.test(m));
+  vrai('pas de gabarit non interprété', !/\$\{/.test(m));
+  vrai("pas d'undefined", !/undefined/.test(m));
+}
+{
+  // Samsung Internet : jamais d'événement, et un menu qui ne s'appelle pas comme ailleurs
+  const { C, el } = chargeApp('adam', { ua: UA_SAMSUNG });
+  C.showEspaces();
+  vrai('Samsung Internet voit la proposition', /install-card/.test(el('install-slot').innerHTML));
+  C.aideInstallManuelle();
+  const m = el('modal-root').innerHTML;
+  vrai('on lui donne SON geste', /Samsung Internet/.test(m) && /Ajouter la page à/.test(m), m.slice(0, 300));
+}
+{
+  // Firefox Android : sait installer, ne l'annonce jamais
+  const { C, el } = chargeApp('alix', { ua: UA_FIREFOX_ANDROID });
+  C.showEspaces();
+  vrai('Firefox Android voit la proposition', /install-card/.test(el('install-slot').innerHTML));
+  C.aideInstallManuelle();
+  vrai('avec son propre menu', /Firefox/.test(el('modal-root').innerHTML));
+}
+{
+  // Chromium de bureau : l'icône est dans la barre d'adresse, personne ne la voit
+  const { C, el } = chargeApp('adam', { ua: UA_CHROME_BUREAU });
+  C.showEspaces();
+  vrai('un Chrome de bureau voit la proposition', /install-card/.test(el('install-slot').innerHTML));
+  C.aideInstallManuelle();
+  const m = el('modal-root').innerHTML;
+  vrai("on lui montre la barre d'adresse", /barre d'adresse/.test(m), m.slice(0, 300));
+}
+{
+  // Firefox de bureau ne sait pas installer : on ne promet rien
+  const { C, el } = chargeApp('alix', { ua: UA_FIREFOX_BUREAU });
+  C.showEspaces();
+  vrai('aucune proposition sur un navigateur qui ne sait pas installer',
+    el('install-slot').innerHTML === '', el('install-slot').innerHTML);
+}
+{
+  // app déjà installée : rien, quel que soit le navigateur
+  const { C, el } = chargeApp('adam', { ua: UA_CHROME_ANDROID, installee: true });
+  C.showEspaces();
+  vrai('rien à proposer quand c\'est déjà installé', el('install-slot').innerHTML === '');
+}
+{
+  /* L'écran « Qui es-tu ? » est le PREMIER que voit celui qui ouvre l'app : c'est là
+     qu'Adam a cherché. La proposition doit s'y afficher sans attendre un profil. */
+  const { C, el, ecouteursWin } = chargeApp('adam', { ua: UA_CHROME_ANDROID });
+  C.child = null;
+  ecouteursWin.load();
+  const h = el('install-slot-accueil').innerHTML;
+  vrai("l'écran des profils propose l'installation", /install-card/.test(h), h);
+  vrai('sur fond sombre, la carte change de livrée', /sur-sombre/.test(h));
+  vrai('pas de gabarit non interprété', !/\$\{/.test(h));
+}
+
+/* ---------- Interroge-moi : sur quoi ? ----------
+   Le mode révision envoyait tout le programme d'été en vrac, et l'année scolaire
+   n'était pas révisable du tout. On choisit l'espace, puis le sujet. */
+console.log('\n— Interroge-moi : choisir l\'espace puis le sujet —');
+{
+  const { C, el } = chargeApp('alix');
+  C.openInterroMenu();
+  const m = el('modal-root').innerHTML;
+  vrai('les deux espaces sont proposés', /Le Grand Été/.test(m) && /année scolaire/.test(m));
+  vrai('et seulement eux', (m.match(/choix-row/g) || []).length === 2, m);
+  vrai('chacun mène à ses sujets', /interroSujets\('ete'\)/.test(m) && /interroSujets\('annee'\)/.test(m));
+  vrai("pas d'undefined", !/undefined/.test(m), m);
+  vrai('pas de gabarit non interprété', !/\$\{/.test(m));
+}
+{
+  const { C, el } = chargeApp('alix');
+  C.interroSujets('ete');
+  const m = el('modal-root').innerHTML;
+  vrai('les grands thèmes sont proposés', /Géographie/.test(m) && /esprit critique/i.test(m) && /personnalités/.test(m));
+  vrai('chacun dit combien il contient', /journées/.test(m) && /personnalités<\/span>|personnalités/.test(m));
+  vrai('chacun lance une interro', /lancerInterro\('ete','geo'\)/.test(m));
+  vrai('« un peu de tout » reste possible', /lancerInterro\('ete','tout'\)/.test(m));
+  vrai('on peut revenir en arrière', /openInterroMenu\(\)/.test(m));
+  vrai("pas d'undefined", !/undefined/.test(m), (m.match(/.{0,40}undefined.{0,40}/) || [])[0]);
+  vrai('pas de gabarit non interprété', !/\$\{/.test(m));
+}
+{
+  /* Aucun thème vide ne doit être proposé : un bouton qui mène à une interro sans
+     matière est exactement le genre de bouton qu'on ne met pas. */
+  ['adam', 'alix'].forEach(enfant => {
+    const { C } = chargeApp(enfant);
+    const jours = C.joursVus();
+    vrai(`[${enfant}] les journées déjà passées sont connues`, jours.length > 20, String(jours.length));
+    const pleins = C.GE_SUJETS.filter(s => s.lignes(jours).length > 0);
+    vrai(`[${enfant}] il reste largement de quoi réviser`, pleins.length >= 9, String(pleins.length));
+    pleins.forEach(s => vrai(`[${enfant}] « ${s.label} » ne produit que du texte`,
+      s.lignes(jours).every(x => typeof x === 'string' && x.length > 2)));
+    // la semaine 5 se différencie par enfant : l'histoire de l'art est le programme
+    // d'Alix, l'argent celui d'Adam. Le thème de l'autre ne doit pas être proposé vide.
+    const a = s => (C.GE_SUJETS.find(x => x.id === s).lignes(jours) || []).length;
+    if (enfant === 'alix') vrai('Alix a sa danse, ses arts et sa pop culture', a('arts') === 4, String(a('arts')));
+    else vrai("Adam n'a pas de thème « arts » à réviser, et on ne le lui propose pas", a('arts') === 0);
+  });
+  // un thème reste dans son thème : la géographie ne doit pas ramasser la géopolitique
+  const { C } = chargeApp('alix');
+  const jours = C.joursVus();
+  const geo = C.GE_SUJETS.find(s => s.id === 'geo').lignes(jours).join(' ');
+  vrai('la géographie ne ramasse pas la géopolitique', !/Géopolitique/.test(geo), geo);
+  const arts = C.GE_SUJETS.find(s => s.id === 'arts').lignes(jours).join(' ');
+  vrai("« Qui écrit l'histoire ? » et l'histoire de l'art sont bien séparées",
+    !/Qui écrit l'histoire/.test(arts), arts);
+  const hist = C.GE_SUJETS.find(s => s.id === 'histoire').lignes(jours).join(' ');
+  vrai("et réciproquement", !/Histoire de l'art|Histoire de la danse/.test(hist), hist);
+}
+{
+  const { C, el } = await (async () => {
+    const h = chargeApp('alix');
+    await h.C.interroSujets('annee');
+    return h;
+  })();
+  const m = el('modal-root').innerHTML;
+  vrai('les matières sont proposées', /Histoire/.test(m) && /SVT/.test(m));
+  vrai('celles avec des cours le disent', /2 cours photographiés/.test(m), m);
+  vrai('les autres annoncent le programme de sa classe', /programme de 6e/.test(m), m);
+  vrai('chacune lance une interro', /lancerInterro\('annee','svt'\)/.test(m));
+  vrai("pas d'undefined", !/undefined/.test(m), (m.match(/.{0,40}undefined.{0,40}/) || [])[0]);
+  vrai('pas de gabarit non interprété', !/\$\{/.test(m));
+}
+{
+  // le niveau vient de ses cahiers quand on l'y a lu, de son âge sinon
+  const { C } = chargeApp('adam');
+  vrai("à défaut, le niveau vient de son âge", C.niveauScolaire() === '4e', C.niveauScolaire());
+  C.niveauVu = '3e';
+  vrai('le niveau lu sur ses cours gagne', C.niveauScolaire() === '3e', C.niveauScolaire());
+}
+{
+  // lancer une interro du Grand Été : le contexte est figé, et il tient au sujet
+  const { C, el } = chargeApp('alix');
+  C.assistantName = 'Nova';
+  await C.lancerInterro('ete', 'geo');
+  vrai('le mode révision est actif', C.quizMode === true);
+  vrai('le sujet est retenu', C.quizSujet && C.quizSujet.id === 'geo', JSON.stringify(C.quizSujet));
+  vrai('le contexte nomme le thème', /Géographie/.test(C.quizCtx), C.quizCtx.slice(0, 120));
+  vrai('le contexte ne contient QUE ce thème', !/Géopolitique/.test(C.quizCtx), C.quizCtx);
+  vrai('le contexte est du texte, pas un gabarit', !/\$\{/.test(C.quizCtx));
+  vrai('le bouton annonce le sujet et propose de sortir',
+    /arrêter/.test(el('main').innerHTML) && /Géographie/.test(el('main').innerHTML));
+
+  C.arreterInterro();
+  vrai('arrêter remet le bouton à zéro', C.quizMode === false && C.quizSujet === null && C.quizCtx === '');
+  vrai('et le bouton redevient une invitation', /🎓 Interroge-moi/.test(el('main').innerHTML));
+}
+{
+  // année scolaire : c'est cours.js qui fournit le contexte, app.js ne fait que l'armer
+  const { C } = chargeApp('alix');
+  C.assistantName = 'Nova';
+  await C.lancerInterro('annee', 'histoire');
+  vrai('le mode révision est actif', C.quizMode === true);
+  vrai("le sujet vient de l'année scolaire", C.quizSujet.espace === 'annee' && C.quizSujet.label === 'Histoire');
+  vrai('le contexte est celui des cours', /ANNÉE SCOLAIRE/.test(C.quizCtx), C.quizCtx);
+}
+{
+  // un sujet inconnu ne doit rien armer : sinon on interrogerait sur le vide
+  const { C } = chargeApp('alix');
+  C.assistantName = 'Nova';
+  await C.lancerInterro('ete', 'nexistepas');
+  vrai('un thème inconnu ne lance rien', C.quizMode === false);
+  await C.lancerInterro('annee', 'histoire');
+  C.arreterInterro();
+}
+{
+  // cours.js qui ne répond rien (base coupée) ne doit pas armer une interro muette
+  const { C } = chargeApp('alix', { annee: null });
+  C.assistantName = 'Nova';
+  await C.lancerInterro('annee', 'histoire');
+  vrai('pas de contexte, pas de révision', C.quizMode === false);
+}
+
+/* ---------- répondre à l'oral ---------- */
+console.log('\n— répondre à l\'oral : le micro');
+{
+  const { C, el } = chargeApp('alix');
+  C.assistantName = 'Nova';
+  C.renderChat();
+  const h = el('main').innerHTML;
+  vrai('sans reconnaissance vocale, aucun bouton micro', !/mic-chat-in/.test(h));
+  vrai("et aucune promesse qu'on ne tient pas", !/répondre à l'oral/.test(h), h);
+  vrai('le micro se sait indisponible', C.micDispo() === false);
+  vrai('et micBtn ne rend rien', C.micBtn('chat-in') === '');
+}
+{
+  const { C, el, micros } = chargeApp('alix', { micro: true });
+  C.assistantName = 'Nova';
+  C.renderChat();
+  const h = el('main').innerHTML;
+  vrai('le bouton micro est là', /id="mic-chat-in"/.test(h), h.slice(0, 400));
+  vrai('il est cliquable', /micToggle\('chat-in'\)/.test(h));
+  vrai("l'enfant sait qu'il peut répondre à l'oral", /oral/.test(h));
+
+  C.micToggle('chat-in');
+  vrai("l'écoute a démarré", micros.length === 1 && micros[0].demarre === 1, JSON.stringify(micros));
+  vrai("on écoute en français", micros[0].lang === 'fr-FR', micros[0].lang);
+  vrai("on s'arrête au silence, le micro ne reste pas ouvert", micros[0].continuous === false);
+  vrai('il voit les mots arriver', micros[0].interimResults === true);
+  vrai('le bouton montre qu\'il écoute', el('mic-chat-in').classList.contains('on'));
+
+  // ce qui est reconnu atterrit dans le champ, à la suite de ce qui y était
+  el('chat-in').value = 'Je pense que';
+  C.micToggle('chat-in');                       // deuxième appui : on arrête
+  vrai("un deuxième appui arrête l'écoute", micros[0].arrets === 1);
+  vrai('et le bouton cesse de clignoter', !el('mic-chat-in').classList.contains('on'));
+}
+{
+  // le texte dicté complète la saisie au lieu de l'effacer
+  const { C, el, micros } = chargeApp('alix', { micro: true });
+  C.assistantName = 'Nova';
+  C.renderChat();
+  el('chat-in').value = 'La réponse est';
+  C.micToggle('chat-in');
+  micros[0].onresult({ results: [[{ transcript: 'mille sept cent quatre-vingt-neuf' }]] });
+  vrai('la dictée complète ce qui était déjà tapé',
+    el('chat-in').value === 'La réponse est mille sept cent quatre-vingt-neuf', el('chat-in').value);
+  vrai("rien n'est envoyé tout seul : c'est l'enfant qui valide",
+    C.chatMsgs.length === 0, JSON.stringify(C.chatMsgs));
+
+  // changer d'onglet pendant qu'il parle coupe le micro : sinon il continue d'écouter
+  // derrière un écran que l'enfant a quitté
+  C.showTab('mots');
+  vrai("changer d'onglet arrête le micro", micros[0].arrets === 1, String(micros[0].arrets));
+
+  // le micro refusé le dit, et ne laisse pas le bouton allumé
+  micros[0].onerror({ error: 'not-allowed' });
+  vrai('un micro bloqué éteint le bouton', !el('mic-chat-in').classList.contains('on'));
+  micros[0].onend();
+  vrai('la fin de l\'écoute éteint le bouton', !el('mic-chat-in').classList.contains('on'));
 }
 
 console.log('\n' + (ko ? `❌ ${ko} échec(s), ${ok} test(s) passés` : `✅ ${ok} tests passés`));

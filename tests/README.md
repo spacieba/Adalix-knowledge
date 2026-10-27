@@ -5,7 +5,7 @@ Aucune dépendance, aucun installeur : du Node pur. Depuis la racine du dépôt 
 ```bash
 node tests/cours-api.test.mjs .      # api/cours.js : liens, JSON, repli de modèle, dictées, normalisation
 node tests/cours-rendu.test.mjs .    # cours.js : chaque écran rendu avec un DOM et une base simulés, appareil photo intégré
-node tests/espaces.test.mjs .        # app.js : découpage Grand Été / Tuteur, navigation, en-tête, installation
+node tests/espaces.test.mjs .        # app.js : découpage Grand Été / Tuteur, navigation, en-tête, installation, « Interroge-moi », micro
 node tests/lecture.test.mjs .        # lecture.js : syllabes, lecture guidée, carnet de mots, dictées
 node tests/checklist.test.mjs .      # app.js : gestes de la journée, série 🔥 qui saute le week-end, les deux guides
 ```
@@ -30,4 +30,10 @@ Ce qu'ils protègent en priorité :
 - un rechargement subi remet l’enfant où il était, sans jamais court-circuiter l’écran
   des profils d’un vrai démarrage ni le code du parent ;
 - aucun bouton proposé ne mène nulle part : la proposition d’installer l’app ne s’affiche
-  pas si l’app est déjà installée, ni dans un navigateur qui ne sait pas l’installer.
+  pas si l’app est déjà installée, ni dans un navigateur qui ne sait pas l’installer — mais
+  elle s’affiche partout où il y a un geste à faire, avec le geste de CE navigateur ;
+- « Interroge-moi » ne propose aucun thème vide, ne mélange pas deux thèmes voisins
+  (géographie / géopolitique, « Qui écrit l’histoire ? » / histoire de l’art), et n’arme
+  jamais une révision sans contexte ;
+- le micro n’apparaît que si le navigateur sait écouter, écoute en français, s’arrête au
+  silence, complète la saisie au lieu de l’écraser, et n’envoie jamais tout seul.
