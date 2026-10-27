@@ -509,6 +509,11 @@ function navInstall(){
   return NAVS_INSTALL.find(n => n.test.test(ua)) || null;
 }
 function aideInstallManuelle(){
+  /* Le dernier conseil dépend du navigateur : Chrome et Edge savent proposer
+     l'installation d'eux-mêmes, donc s'ils ne l'ont pas fait, un rechargement peut
+     suffire. Samsung Internet se présente comme « Chrome » dans son identité, mais
+     n'émettra jamais l'événement : lui dire de recharger ne servirait à rien, et lui
+     dire d'aller dans Chrome, si. */
   const n = navInstall();
   const bureau = !estMobile();
   const etapes = bureau
@@ -525,7 +530,9 @@ function aideInstallManuelle(){
       : 'Ton navigateur ne me laisse pas le faire à ta place, mais c\'est trois gestes :'}</p>
     <p style="font-size:14px;line-height:1.8;">${etapes.map((e, i) => `${i + 1}. ${e}`).join('<br>')}</p>
     <p style="font-size:13.5px;color:#666;">L'app apparaîtra avec son icône et s'ouvrira en plein écran, sans barre d'adresse.</p>
-    <p style="font-size:13.5px;background:rgba(232,150,63,.14);border-radius:10px;padding:9px 12px;line-height:1.55;">Tu ne trouves pas ? Ouvre <b>adalix-knowledge.vercel.app</b> dans <b>Chrome</b> : il propose l'installation tout seul, et le bouton ci-dessus marchera d'un seul geste.</p>
+    <p style="font-size:13.5px;background:rgba(232,150,63,.14);border-radius:10px;padding:9px 12px;line-height:1.55;">${(n && (n.nom === 'Chrome' || n.nom === 'Edge'))
+      ? "Tu ne trouves pas ? Recharge la page : ce navigateur sait normalement proposer l'installation tout seul, et le bouton d'ici marchera alors d'un seul geste."
+      : "Tu ne trouves pas ? Ouvre <b>adalix-knowledge.vercel.app</b> dans <b>Chrome</b> : il propose l'installation tout seul, et le bouton d'ici marchera d'un seul geste."}</p>
     <div class="actions"><button class="btn" onclick="closeModal()">Compris</button></div>`);
 }
 /* `tabVoulu` sert à la reprise après un rechargement : il faut ouvrir l'onglet mémorisé

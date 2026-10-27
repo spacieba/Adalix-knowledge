@@ -400,7 +400,10 @@ console.log('\n— installer quand le navigateur ne dit rien —');
   const m = el('modal-root').innerHTML;
   vrai('les instructions nomment le navigateur', /Chrome/.test(m), m.slice(0, 200));
   vrai("et le geste exact", /écran d'accueil/i.test(m) || /Installer l'application/.test(m));
-  vrai('elles donnent une solution de repli', /adalix-knowledge\.vercel\.app/.test(m));
+  // Chrome sait normalement proposer l'installation : lui conseiller « ouvre dans
+  // Chrome » serait absurde, on lui dit de recharger
+  vrai('un Chromium se voit conseiller de recharger', /Recharge la page/.test(m), m.slice(-400));
+  vrai("et pas d'aller chercher Chrome, où il est déjà", !/dans <b>Chrome<\/b>/.test(m));
   vrai('pas de gabarit non interprété', !/\$\{/.test(m));
   vrai("pas d'undefined", !/undefined/.test(m));
 }
@@ -412,6 +415,7 @@ console.log('\n— installer quand le navigateur ne dit rien —');
   C.aideInstallManuelle();
   const m = el('modal-root').innerHTML;
   vrai('on lui donne SON geste', /Samsung Internet/.test(m) && /Ajouter la page à/.test(m), m.slice(0, 300));
+  vrai("et le repli reste d'ouvrir la page dans Chrome", /adalix-knowledge\.vercel\.app/.test(m));
 }
 {
   // Firefox Android : sait installer, ne l'annonce jamais
