@@ -287,5 +287,93 @@ console.log('\n— coursMd : rendu du cours, et sécurité —');
     [1, 2, 3, 4, 5].every((b, i, a) => i === 0 || C.BOX_JOURS[b] > C.BOX_JOURS[a[i - 1]]));
 }
 
+/* ---------- un cours long, lu par paquets de pages ----------
+   Un cours de huit pages partait en une seule requête de plusieurs mégaoctets, et sur
+   une connexion de téléphone ça échouait. L'app envoie maintenant quatre pages à la
+   fois, et donne au paquet suivant ce qui a déjà été mis au propre. */
+console.log('\n— la suite d\'un cours déjà commencé —');
+{
+  const reponseIA = { titre: 'T', matiere: 'svt', texte: 'suite', points_cles: [], vocabulaire: [], a_retenir: [], ressources: [], incertitudes: [] };
+  let envoye = null;
+  const A = chargeApi(async (url, opts) => {
+    envoye = JSON.parse(opts.body);
+    return { ok: true, status: 200, json: async () => ({ content: [{ type: 'text', text: JSON.stringify(reponseIA) }], stop_reason: 'end_turn' }) };
+  });
+  const rep = () => { const o = { code: 0, body: null }; return { o, status(c) { o.code = c; return this; }, json(b) { o.body = b; return this; } }; };
+  const photo = { media_type: 'image/jpeg', data: 'AAAA' };
+
+  let R = rep();
+  await A.handler({ method: 'POST', body: { mode: 'transcrire', child: 'alix', matiere: 'svt', photos: [photo, photo] } }, R);
+  vrai('sans suite, on ne parle pas de suite', !/SUITE D'UN COURS/.test(envoye.system), envoye.system.slice(0, 200));
+  vrai("et la demande parle simplement de « mon cours »", /photos de mon cours/.test(JSON.stringify(envoye.messages)));
+
+  R = rep();
+  await A.handler({ method: 'POST', body: { mode: 'transcrire', child: 'alix', matiere: 'svt', photos: [photo, photo], suite: '## Les volcans\nLe magma monte.' } }, R);
+  vrai('le début du cours est donné au modèle', /Le magma monte/.test(envoye.system), envoye.system.slice(0, 300));
+  vrai('on lui interdit de se répéter', /ne répètes RIEN/.test(envoye.system));
+  vrai('le résumé doit couvrir tout le cours', /L'ENSEMBLE du cours/.test(envoye.system));
+  vrai('la demande dit que ce sont les pages suivantes', /SUITE de mon cours/.test(JSON.stringify(envoye.messages)));
+  eq('le cours revient normalisé', R.o.body.cours.texte, 'suite');
+
+  // une suite démesurée ne doit pas gonfler la requête sans fin
+  R = rep();
+  await A.handler({ method: 'POST', body: { mode: 'transcrire', child: 'alix', photos: [photo], suite: 'x'.repeat(99000) } }, R);
+  vrai('la suite est tronquée', envoye.system.length < 20000, String(envoye.system.length));
+
+  // huit pages dans un même paquet restent acceptées (l'app en envoie quatre)
+  R = rep();
+  await A.handler({ method: 'POST', body: { mode: 'transcrire', child: 'alix', photos: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(() => photo) } }, R);
+  const images = envoye.messages[0].content.filter(b => b.type === 'image');
+  vrai('jusqu\'à huit pages par requête', images.length === 8, String(images.length));
+}
+
+/* ---------- la liste de mots photographiée ----------
+   Alix photographie ses listes d'orthographe : le cours était joli, et son carnet de
+   mots restait vide. La matière « Orthographe » change ce que le modèle doit produire. */
+console.log('\n— une liste de mots à apprendre —');
+{
+  const reponseIA = {
+    titre: 'Mots de la semaine', matiere: 'orthographe', texte: '## Liste 1', points_cles: [],
+    vocabulaire: [], a_retenir: [], ressources: [], incertitudes: [],
+    liste_mots: [
+      { mot: 'coquillage', syllabes: 'co-quil-lage' },
+      { mot: 'trésor', syllabes: 'tré-sor' },
+      { mot: '', syllabes: 'rien' },     // vide : écarté
+      { mot: '42', syllabes: '4-2' },    // un numéro de ligne, pas un mot
+    ],
+  };
+  let envoye = null;
+  const A = chargeApi(async (url, opts) => {
+    envoye = JSON.parse(opts.body);
+    return { ok: true, status: 200, json: async () => ({ content: [{ type: 'text', text: JSON.stringify(reponseIA) }], stop_reason: 'end_turn' }) };
+  });
+  const o = { code: 0, body: null };
+  const R = { status(c) { o.code = c; return this; }, json(b) { o.body = b; return this; } };
+  await A.handler({ method: 'POST', body: { mode: 'transcrire', child: 'alix', matiere: 'orthographe', photos: [{ media_type: 'image/jpeg', data: 'A' }] } }, R);
+
+  vrai('le modèle sait que ce sont des mots à apprendre', /LISTE DE MOTS À APPRENDRE/.test(envoye.system));
+  vrai('on lui interdit d\'inventer des fautes', /"mots_a_revoir" reste VIDE/.test(envoye.system));
+  vrai('et de fabriquer des cartes question-réponse', /"a_retenir" reste vide/.test(envoye.system));
+  const l = o.body.cours.liste_mots;
+  eq('les deux vrais mots sont gardés', l.length, 2);
+  eq('avec leur orthographe juste', l[0].mot, 'coquillage');
+  eq('et leur découpage', l[0].syllabes, 'co-quil-lage');
+  vrai('un numéro n\'est pas un mot', !l.some(m => m.mot === '42'), JSON.stringify(l));
+}
+{
+  // hors orthographe, rien ne change : pas de consigne de liste imposée au modèle
+  let envoye = null;
+  const A = chargeApi(async (url, opts) => {
+    envoye = JSON.parse(opts.body);
+    return { ok: true, status: 200, json: async () => ({ content: [{ type: 'text', text: '{"titre":"T","texte":"x"}' }], stop_reason: 'end_turn' }) };
+  });
+  const o = { code: 0, body: null };
+  const R = { status(c) { o.code = c; return this; }, json(b) { o.body = b; return this; } };
+  await A.handler({ method: 'POST', body: { mode: 'transcrire', child: 'adam', matiere: 'histoire', photos: [{ media_type: 'image/jpeg', data: 'A' }] } }, R);
+  vrai('un cours d\'histoire reste un cours', !/LISTE DE MOTS À APPRENDRE/.test(envoye.system));
+  vrai('la liste de mots reste une option', /SEULEMENT si le document photographié EST une liste/.test(envoye.system));
+  eq('et elle revient vide', o.body.cours.liste_mots, []);
+}
+
 console.log('\n' + (ko ? `❌ ${ko} échec(s), ${ok} test(s) passés` : `✅ ${ok} tests passés`));
 process.exit(ko ? 1 : 0);

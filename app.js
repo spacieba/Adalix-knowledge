@@ -557,6 +557,7 @@ function showTab(t){
   tab = t;
   SES.set('tab', t);
   micStop();      // un micro resté ouvert ne doit pas suivre l'enfant d'un onglet à l'autre
+  vxStop();       // ni une voix qui continuerait de parler derrière l'écran qu'on quitte
   hautDePage();
   document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
   const nb = $('#nav-'+t); if(nb) nb.classList.add('active');
@@ -600,7 +601,7 @@ function renderGuide(){
     ${gcard('🏭', "L'onglet Fabrique — ton atelier de création",
       `Le grand atelier : tu y fabriques une <b>vraie page web</b> avec le Bâtisseur, une IA spécialisée dans la construction. Cinq étapes de pro : imagine, fabrique (par petites améliorations successives), teste, <b>publie ton code sur GitHub</b> — le coffre-fort mondial du code — et ta page est mise <b>en ligne sur le vrai internet</b>, avec un lien à partager. C'est l'endroit idéal pour construire ton projet du mois s'il est numérique. Tu peux même regarder et modifier le code toi-même (bouton « Voir le code »).`)}
     ${gcard('💬', "L'onglet Mon assistant",
-      `Ton assistant IA personnel — c'est toi qui l'as baptisé, et il a de la <b>mémoire</b> : il se souvient de vos conversations passées au fil du mois. Pose-lui <b>vraiment tout</b> — le programme, bien sûr, mais aussi tes idées de dessins, de mode, de jeux, d'histoires, tes prompts pour l'atelier d'images, tes questions bizarres, ou juste pour discuter. Colle-lui une <b>image ou une capture d'écran</b>, garde tes meilleures réponses en <b>pépites</b> ⭐, et lance le mode <b>🎓 Interroge-moi</b> pour réviser en jouant : il te demande d'abord sur quel <b>thème</b> (géographie, économie, esprit critique, les 100 personnalités…), puis il te pose des questions dessus et compte tes points. Tu peux même lui répondre au <b>🎤 micro</b>. L'<b>atelier d'images</b> propose 11 styles (Ghibli, manga, pixel art, fantasy…), 4 formats, la baguette 🪄 qui enrichit ta description, une image de départ à transformer — et tu peux enregistrer tes créations sur le disque. Règle d'or : utilise-le pour <b>comprendre plus</b> et <b>créer plus</b> — pas pour arrêter de réfléchir.`)}
+      `Ton assistant IA personnel — c'est toi qui l'as baptisé, et il a de la <b>mémoire</b> : il se souvient de vos conversations passées au fil du mois. Pose-lui <b>vraiment tout</b> — le programme, bien sûr, mais aussi tes idées de dessins, de mode, de jeux, d'histoires, tes prompts pour l'atelier d'images, tes questions bizarres, ou juste pour discuter. Colle-lui une <b>image ou une capture d'écran</b>, garde tes meilleures réponses en <b>pépites</b> ⭐, et lance le mode <b>🎓 Interroge-moi</b> pour réviser en jouant : il te demande d'abord sur quel <b>thème</b> (géographie, économie, esprit critique, les 100 personnalités…), puis il te pose des questions dessus et compte tes points. Tu peux même lui répondre au <b>🎤 micro</b>, et lui donner la <b>voix</b> (🔊) pour qu'il te lise ses réponses. L'<b>atelier d'images</b> propose 11 styles (Ghibli, manga, pixel art, fantasy…), 4 formats, la baguette 🪄 qui enrichit ta description, une image de départ à transformer — et tu peux enregistrer tes créations sur le disque. Règle d'or : utilise-le pour <b>comprendre plus</b> et <b>créer plus</b> — pas pour arrêter de réfléchir.`)}
     ${gcard('🎤', "Les exposés du vendredi",
       `Chaque vendredi, 5 à 10 minutes devant la famille, avec un support créé avec les outils de la semaine. La règle du jeu : le thème est <b>au choix, mais connexe à quelque chose vu dans la semaine</b> — et tu <b>brainstormes d'abord tes idées avec ton assistant</b> avant de choisir. Un outil différent chaque semaine, avec son mode d'emploi sur la page du vendredi : <b>Gamma</b> (S1), <b>Claude</b> (S2), <b>Canva</b> (S3), <b>PowerPoint et son IA</b> (S4). La recette apprise en rhétorique : une <b>accroche</b>, <b>3 idées</b>, une <b>chute</b>. Après ton passage, papa note ton exposé (étoiles + commentaire) — tu verras son avis apparaître sur la page du jour. Le dernier samedi : l'exposé final, le grand quiz… et la fête !`)}
     ${gcard('🎖️', 'Les badges',
@@ -624,20 +625,21 @@ function renderAide(){
       Le plus important à retenir : <b>rien ici n'est noté, rien n'est comparé avec ${autre}</b>. C'est ton atelier à toi.`)}
 
     ${gcard('📸', "Mes cours — du cahier au cours au propre",
-      `Tu prends ton cours en <b>photo</b> (plusieurs pages à la suite, c'est permis), tu dis la matière, et quelques secondes plus tard il est là : <b>remis au propre</b>, avec des titres, des listes, le vocabulaire en gras — lisible, et imprimable (🖨️).<br><br>
+      `Tu prends ton cours en <b>photo</b> — <b>autant de pages que tu veux</b>, les unes après les autres, et si une photo est floue tu la reprends tout de suite (<b>↩️</b>) sans fermer l'appareil photo. Tu dis la matière, et quelques secondes plus tard il est là : <b>remis au propre</b>, avec des titres, des listes, le vocabulaire en gras — lisible, et imprimable (🖨️).<br><br>
       Une fois le cours enregistré, tu peux :<br>
       • <b>👓 Lire ce cours</b> — en grand, à ton rythme, et l'app peut te le lire à voix haute ;<br>
       • <b>🎤 Interroge-moi</b> — le tuteur te pose des questions sur CE cours et t'explique quand tu te trompes ;<br>
       • <b>✍️ Des exercices</b> — il en fabrique à partir du cours, de quoi s'entraîner pour de vrai ;<br>
       • <b>✏️ Corriger le texte</b> — si une photo était floue et qu'un mot est passé de travers, tu le répares toi-même.<br><br>
-      La machine lit une écriture manuscrite, elle n'est pas infaillible : <b>relis toujours ton cours au propre</b> avant de réviser dessus. Si une phrase te paraît bizarre, c'est probablement elle qui a mal lu — corrige-la.`)}
+      La machine lit une écriture manuscrite, elle n'est pas infaillible : <b>relis toujours ton cours au propre</b> avant de réviser dessus. Si une phrase te paraît bizarre, c'est probablement elle qui a mal lu — corrige-la.<br><br>
+      Et <b>tes pages sont gardées</b> dès que tu les prends : si le téléphone referme l'app, si la connexion lâche au mauvais moment, tu les retrouves en revenant dans <b>📸 Mes cours</b> — tu n'as jamais à tout rephotographier.`)}
 
     ${gcard('🔁', "Pourquoi l'app te redemande les mêmes choses",
       `Quand un cours arrive, l'app en extrait les <b>notions</b> importantes et les suit une par une. Elle te les represente <b>le lendemain, puis trois jours après, puis une semaine, puis deux</b> — un peu plus espacé chaque fois que tu les sais.<br><br>
       Ce n'est pas pour t'embêter : c'est la façon dont la mémoire fonctionne vraiment. Revoir une notion <b>trois minutes au bon moment</b> la fixe mieux qu'une heure de relecture la veille du contrôle. Le bouton <b>🔁 notions à revoir</b> apparaît dans Mes cours (et sur la carte Tuteur de l'accueil) quand c'est le moment. Quand une notion est bien installée, elle arrête de revenir.`)}
 
     ${gcard('✏️', "Mes mots — ton carnet d'orthographe",
-      `Les mots qui te résistent sont rassemblés ici, et ils y arrivent de deux façons : <b>tout seuls</b>, quand l'app repère dans ton cahier un mot écrit autrement que l'orthographe habituelle, ou parce que <b>tu l'ajoutes toi-même</b> (➕).<br><br>
+      `Les mots qui te résistent sont rassemblés ici, et ils y arrivent de trois façons : <b>tout seuls</b>, quand l'app repère dans ton cahier un mot écrit autrement que l'orthographe habituelle ; parce que <b>tu photographies ta liste de mots</b> dans 📸 Mes cours, en choisissant la matière <b>🔤 Orthographe</b> — toute la liste arrive ici d'un coup, et <b>✓ Tout garder</b> la met dans ton carnet ; ou parce que <b>tu l'ajoutes toi-même</b> (➕).<br><br>
       Les mots repérés dans le cahier te sont d'abord <b>proposés</b> : tu gardes ✓ ceux que tu veux travailler et tu écartes ✕ les autres. Normal — il arrive que l'app déchiffre mal une écriture, et c'est toi qui décides de ton carnet.<br><br>
       Ensuite, <b>💪 M'entraîner</b> : le mot s'affiche découpé en syllabes de couleur, tu l'écoutes 🔊, tu le regardes, puis tu l'écris de mémoire. Chaque mot a <b>cinq points</b> : à chaque fois que tu le réussis, il en gagne un, et au cinquième il est <b>gagné 🎉</b>. Il y a aussi des <b>📣 dictées</b> faites de tes propres mots.<br><br>
       Ce qu'on compte ici, ce sont les <b>mots gagnés</b> — jamais les fautes. Quand tu te trompes, c'est l'<b>orthographe juste</b> qui s'affiche en couleur, pour que ce soit elle que tes yeux retiennent.`)}
@@ -654,7 +656,7 @@ function renderAide(){
     ${gcard('💬', "Mon assistant",
       `Ton assistant a de la <b>mémoire</b> : il se souvient de vos conversations. Pose-lui tout — une leçon que tu n'as pas comprise, un exercice sur lequel tu bloques, une idée de dessin, ou juste pour discuter. Colle-lui une <b>photo</b> ou une capture d'écran, et garde ses meilleures réponses en <b>pépites</b> ⭐.<br><br>
       <b>🎓 Interroge-moi</b> te demande d'abord <b>sur quoi</b> : <b>Le Grand Été</b> (et là, quel thème : géographie, économie, esprit critique…) ou <b>l'année scolaire</b> (et là, quelle matière). Dans une matière où tu as photographié des cours, il t'interroge sur <b>ton cahier à toi</b> ; ailleurs, sur le programme de ta classe. Il reste sur le sujet choisi jusqu'à ce que tu arrêtes — avant, il sautait d'un thème à l'autre.<br><br>
-      ${micDispo() ? `Et tu peux <b>répondre à l'oral</b> : touche le <b>🎤</b>, parle, tes mots s'écrivent tout seuls. Tu les relis, tu corriges si le micro a mal entendu, et tu envoies. C'est toi qui envoies, toujours — jamais le micro.<br><br>` : ''}Règle d'or : sers-t'en pour <b>comprendre plus</b>, pas pour arrêter de réfléchir. Un devoir qu'il a fait à ta place ne t'apprend rien — un devoir qu'il t'a aidé à comprendre, si.`)}
+      ${micDispo() ? `Et tu peux <b>répondre à l'oral</b> : touche le <b>🎤</b>, parle, tes mots s'écrivent tout seuls. Tu les relis, tu corriges si le micro a mal entendu, et tu envoies. C'est toi qui envoies, toujours — jamais le micro.<br><br>` : ''}${vxDispo() ? `Il a aussi une <b>voix</b> : touche <b>🔇 Sa voix : non</b> pour l'allumer, et il lira chaque réponse à voix haute. Le bouton se souvient de ton choix. Un <b>🔊</b> apparaît aussi à côté de chaque réponse, pour la réentendre quand tu veux. La vitesse de sa voix se règle dans la lecture guidée (👓).<br><br>` : ''}Règle d'or : sers-t'en pour <b>comprendre plus</b>, pas pour arrêter de réfléchir. Un devoir qu'il a fait à ta place ne t'apprend rien — un devoir qu'il t'a aidé à comprendre, si.`)}
 
     ${gcard('💛', 'Le mot de la fin',
       `Un cours photographié, trois minutes de révision au bon moment, un mot de plus gagné dans le carnet : ce sont des petits gestes, et c'est exactement comme ça que ça marche. Personne ici ne compte tes erreurs — on compte ce que tu as gagné.`)}
@@ -2332,6 +2334,7 @@ function micStop(){
 }
 function micToggle(cibleId){
   if(micReco){ micStop(); return; }          // deuxième appui : on arrête
+  vxStop();   // l'assistant se taît : sa voix dans le micro, c'est lui qu'on écouterait
   const Reco = window.SpeechRecognition || window.webkitSpeechRecognition;
   const champ = $('#' + cibleId);
   if(!Reco || !champ) return;
@@ -2369,6 +2372,7 @@ function micToggle(cibleId){
 /* ---------- chat ---------- */
 function renderChat(){
   if(!assistantName){ askAssistantName(); return; }
+  vxCharge();   // sa voix est-elle allumée ? le choix est retenu par enfant
   $('#main').innerHTML = `<div class="narrow">
     <div class="card"><h3>💬 Pose toutes tes questions à ${esc(assistantName)}</h3>
       <div style="font-size:13px;color:#888;">Je suis ${esc(assistantName)}, ton assistant. Tes cours de l'année, le programme de l'été, un mot compliqué, une idée de dessin… demande-moi tout ! Et pour réviser, 🎓 Interroge-moi.</div>
@@ -2381,9 +2385,10 @@ function renderChat(){
         <input type="text" id="chat-in" placeholder="Demande-lui n'importe quoi… (tu peux aussi coller une image !)" onkeydown="if(event.key==='Enter')sendChat()" onpaste="handleChatPaste(event)">
         <button class="btn" onclick="sendChat()">➤</button>
       </div>
-      ${micDispo() ? `<div style="font-size:12px;color:#888;margin-top:5px;">🎤 Tu peux aussi répondre à l'oral : touche le micro, parle, et le texte s'écrit tout seul.</div>` : ''}
+      ${micDispo() || vxDispo() ? `<div style="font-size:12px;color:#888;margin-top:5px;">${micDispo() ? '🎤 Tu peux répondre à l\'oral : touche le micro, parle, et le texte s\'écrit tout seul.' : ''}${micDispo() && vxDispo() ? ' ' : ''}${vxDispo() ? '🔊 Et il peut te lire ses réponses à voix haute.' : ''}</div>` : ''}
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn ghost" id="quiz-toggle" onclick="openInterroMenu()" style="${quizMode?'background:var(--accent);color:#fff;':''}">${quizMode ? `🎓 ${quizSujet ? esc(quizSujet.emoji + ' ' + quizSujet.label) : 'Révision'} — arrêter` : '🎓 Interroge-moi'}</button>
+        ${vxBtn()}
         <button class="btn ghost" onclick="openGems()">⭐ Mes pépites</button>
         <button class="btn ghost" onclick="openHistory()">🕘 Mon historique</button>
         <button class="btn ghost" onclick="openImagine()">🎨 Atelier d'images</button>
@@ -2412,9 +2417,16 @@ async function saveAssistantName(){
 }
 function drawChat(){
   const box = $('#chat-box'); if(!box) return;
-  box.innerHTML = chatMsgs.map((m,i)=>`<div class="msg ${m.role==='user'?'user':'bot'}">${m.dataUrl?`<img src="${m.dataUrl}" style="max-width:100%;border-radius:10px;display:block;margin-bottom:${m.content?'6px':'0'};">`:''}${esc(m.content)}${m.role==='assistant' && m.content && m.content!=='…' ? `<div style="text-align:right;margin-top:4px;"><button onclick="saveGem(${i})" title="Garder cette réponse dans mes pépites" style="background:none;border:none;cursor:pointer;font-size:15px;opacity:${m.saved?'1':'.45'};">${m.saved?'⭐ gardé':'⭐'}</button></div>`:''}</div>`).join('') || '<div style="color:#999;font-size:13px;text-align:center;margin-top:30px;">Aucun message — pose ta première question ! Tu peux aussi m\'envoyer une image ou une capture d\'écran. 🖼️</div>';
+  box.innerHTML = chatMsgs.map((m,i)=>`<div class="msg ${m.role==='user'?'user':'bot'}">${m.dataUrl?`<img src="${m.dataUrl}" style="max-width:100%;border-radius:10px;display:block;margin-bottom:${m.content?'6px':'0'};">`:''}${esc(m.content)}${m.role==='assistant' && m.content && m.content!=='…' ? `<div style="text-align:right;margin-top:4px;">${vxDispo()?`<button onclick="vxDireMsg(${i})" title="Me lire cette réponse à voix haute" style="background:none;border:none;cursor:pointer;font-size:15px;opacity:.45;">🔊</button>`:''}<button onclick="saveGem(${i})" title="Garder cette réponse dans mes pépites" style="background:none;border:none;cursor:pointer;font-size:15px;opacity:${m.saved?'1':'.45'};">${m.saved?'⭐ gardé':'⭐'}</button></div>`:''}</div>`).join('') || '<div style="color:#999;font-size:13px;text-align:center;margin-top:30px;">Aucun message — pose ta première question ! Tu peux aussi m\'envoyer une image ou une capture d\'écran. 🖼️</div>';
   box.scrollTop = box.scrollHeight;
 }
+/* Le 🔊 à côté d'une réponse : la réentendre, même si la voix automatique est éteinte.
+   Pour Alix, relire un paragraphe est un effort ; le réécouter n'en est pas un. */
+function vxDireMsg(i){
+  const m = chatMsgs[i];
+  if(m && m.content) vxDire(m.content);
+}
+
 /* ---- pépites : garder ses meilleures questions/réponses ---- */
 async function saveGem(i){
   const m = chatMsgs[i];
@@ -2565,6 +2577,7 @@ async function sendChat(){
     if(j.error === 'code_famille'){ badFamilyCode(); }
     else {
       db.from('adalix_chat').insert({child, role:'assistant', content: chatMsgs[chatMsgs.length-1].content}).then(()=>{});
+      vxAuto(chatMsgs[chatMsgs.length-1].content);   // il le dit à voix haute, si sa voix est allumée
       if(++msgsSinceMemo >= 8){ msgsSinceMemo = 0; updateMemory(); }
     }
   } catch(e){

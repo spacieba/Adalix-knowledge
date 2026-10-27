@@ -57,6 +57,37 @@ const FIXTURES_NOTIONS = [
   { id: 11, cours_id: 1, child: 'alix', notion: 'Tiers État', question: 'Qui est le Tiers État ?', reponse: 'Le peuple', box: 4, due: '2026-12-01', reussites: 3, echecs: 0, updated_at: '2026-10-20T10:00:00Z' },
 ];
 
+/* ---------- faux IndexedDB ----------
+   On ne garde que ce que cours.js utilise : ouvrir, put, get, delete. Les requêtes
+   répondent au prochain microtâche, comme les vraies : le code branche ses handlers
+   juste après l'appel, et il faut qu'ils soient en place quand ça répond. */
+function fauxIdb(magasin) {
+  const repond = dem => { Promise.resolve().then(() => { if (dem.onsuccess) dem.onsuccess(); }); return dem; };
+  const store = {
+    put(v, k) { magasin[k] = v; return repond({ result: undefined }); },
+    get(k) { return repond({ result: magasin[k] }); },
+    delete(k) { delete magasin[k]; return repond({ result: undefined }); },
+  };
+  const base = { transaction: () => ({ objectStore: () => store, oncomplete: null, onerror: null, onabort: null }) };
+  return { open: () => repond({ result: base }) };
+}
+/* Un FileReader : il rend un dataURL dont le corps dit QUELLE version de la page a été
+   lue (G la grande, P l'archive) et combien elle pèse. C'est ce qui permet de vérifier
+   ce qui part réellement au serveur. */
+function FauxFileReader() { this.onload = null; this.onerror = null; this.result = ''; }
+FauxFileReader.prototype.readAsDataURL = function (b) {
+  const marque = (b && b.marque) || 'Z';
+  const taille = (b && b.size) || 4;
+  this.result = 'data:image/jpeg;base64,' + marque.repeat(taille);
+  Promise.resolve().then(() => { if (this.onload) this.onload(); });
+};
+/* Une page déjà prise, pour les tests qui partent d'un cours photographié. */
+const pageFaite = (marque, taille) => ({
+  grande: { marque: marque || 'G', size: taille || 1200 },
+  petite: { marque: 'P', size: 100 },
+  url: 'blob:apercu',
+});
+
 async function scenario(nom, fixtures, fn, opts) {
   const o = opts || {};
   const dom = fauxDom();
@@ -67,7 +98,15 @@ async function scenario(nom, fixtures, fn, opts) {
   const ecouteurs = {};
   const doc = {
     querySelectorAll: () => [],
-    createElement: () => ({ width: 0, height: 0, getContext: () => ({ drawImage: () => {} }), toDataURL: () => 'data:image/jpeg;base64,AAA' }),
+    createElement: () => {
+      const cv = {
+        width: 0, height: 0, getContext: () => ({ drawImage: () => {} }),
+        toDataURL: () => 'data:image/jpeg;base64,AAAA',
+      };
+      // o.sansToBlob : un navigateur sans canvas.toBlob, où il faut repasser par le dataURL
+      if (!o.sansToBlob) cv.toBlob = (cb, type, q) => cb({ size: o.poids || 1200, marque: q > 0.75 ? 'G' : 'P' });
+      return cv;
+    },
     // l'écran d'ajout n'existe que si #cours-photos a été rendu : le test le simule
     getElementById: id => (id === 'cours-photos' && !o.ecranAjout ? null : dom.el(id)),
     addEventListener: (type, h) => { ecouteurs[type] = h; },
@@ -93,27 +132,54 @@ async function scenario(nom, fixtures, fn, opts) {
      apparaître ; absent : aucun bouton, c'est la règle « jamais un bouton qui ne
      marche pas ». */
   const micArrets = [];
+  /* La voix de l'assistant (lecture.js) et le carnet de mots (lecture.js) sont simulés :
+     ici on vérifie ce que cours.js leur demande, pas comment ils le font.
+     o.voix : l'appareil sait parler. o.idb : le navigateur garde les pages. */
+  const dits = [], vxArrets = [], motsEcrits = [], envois = [];
+  const magasin = o.idb || {};
   const f = new Function('esc', 'child', 'db', 'toast', 'modal', 'closeModal', 'familyCode', 'badFamilyCode',
     'todayStr', '$', 'document', 'fetch', 'renderDashboard', 'Image', 'URL', 'window', 'navigator', 'console',
     'micBtn', 'micDispo', 'micStop',
+    'vxBtn', 'vxDispo', 'vxCharge', 'vxStop', 'vxAuto', 'vxDire', 'motsAjoute', 'FileReader', 'indexedDB',
     src + '\n;return {renderCours, drawCoursList, openAjoutCours, drawDraft, drawCours, openCours, drawExos, drawRevision, drawInterroScreen, finirInterro, matieresInterro, interroAnnee, fillCoursParentCard, coursCardsHtml, setCoursFiltre, openExosMenu, exoHtml, drawRevisionFin, coursFiles, ' +
     'get exoState(){return exoState}, set exoState(v){exoState=v}, get revState(){return revState}, set revState(v){revState=v}, ' +
     'get coursCur(){return coursCur}, set coursCur(v){coursCur=v}, get coursNotions(){return coursNotions}, set coursNotions(v){coursNotions=v}, ' +
     'get coursPhotos(){return coursPhotos}, set coursPhotos(v){coursPhotos=v}, ' +
     'get coursDraft(){return coursDraft}, set coursDraft(v){coursDraft=v}, get coursList(){return coursList}, set coursList(v){coursList=v}, ' +
     'ouvrirCamera, camDeclic, fermerCamera, drawCamera, majCamera, cameraDispo, camRepli, coursPousseImage, ' +
-    'callCours, photosAEnvoyer, lancerTranscription, SEUIL_ENVOI, ' +
+    'camAnnuleDerniere, camDernierHtml, coursRetirePhoto, enregistrerCours, envoyerInterro, drawInterro, ' +
+    'callCours, photosPaquet, lancerTranscription, SEUIL_ENVOI, PHOTOS_PAR_ENVOI, MATIERES, fusionneCours, ' +
+    'photosGarde, photosOublie, photosEnAttente, photosReprends, reprendrePages, jeterPages, confirmJeterPages, ' +
+    'get coursErr(){return coursErr}, get coursAttente(){return coursAttente}, set coursAttente(v){coursAttente=v}, ' +
+    'get coursNotes(){return coursNotes}, set coursNotes(v){coursNotes=v}, ' +
+    'get matChoisie(){return matChoisie}, set matChoisie(v){matChoisie=v}, ' +
     'get camStream(){return camStream}};');
   const C = f(esc, 'alix', db, m => toasts.push(m), h => { dom.el('modal-root').innerHTML = h; }, () => { dom.el('modal-root').innerHTML = ''; }, 'CODE',
     relance => refusCode.push(relance),
     () => '2026-10-24', sel => dom.el(String(sel).replace('#', '')), doc,
-    async () => (o.reponse || { status: 200, json: async () => ({}) }),
+    /* o.reponse : la réponse du serveur, ou une fonction qui en donne une différente
+       à chaque appel — c'est ainsi qu'on teste la relance automatique. */
+    async (url, init) => {
+      try { envois.push(JSON.parse((init && init.body) || '{}')); } catch (e) { envois.push(null); }
+      const r = typeof o.reponse === 'function' ? o.reponse(envois.length) : o.reponse;
+      return r || { status: 200, json: async () => ({}) };
+    },
     () => {}, function () { return { onload: null, onerror: null, set src(v) {} }; },
     { createObjectURL: () => 'blob:', revokeObjectURL: () => {} }, win, nav, { log() {}, warn() {}, error() {} },
     id => (o.micro ? `<button class="btn ghost mic-btn" id="mic-${id}" onclick="micToggle('${id}')">🎤</button>` : ''),
-    () => !!o.micro, () => micArrets.push(1));
+    () => !!o.micro, () => micArrets.push(1),
+    () => (o.voix ? '<button class="btn ghost" id="vx-btn" onclick="vxBascule()">🔇 Sa voix : non</button>' : ''),
+    () => !!o.voix, () => {}, () => vxArrets.push(1),
+    t => dits.push({ auto: true, t }), t => dits.push({ auto: false, t }),
+    async (mots, source) => { motsEcrits.push({ mots, source }); return (mots || []).length; },
+    FauxFileReader, o.idb ? fauxIdb(magasin) : undefined);
   dom.cam = cam;
   dom.micArrets = micArrets;
+  dom.dits = dits;
+  dom.vxArrets = vxArrets;
+  dom.motsEcrits = motsEcrits;
+  dom.magasin = magasin;
+  dom.envois = envois;
   dom.refusCode = refusCode;
   try {
     await fn(C, dom, db, toasts, ecouteurs);
@@ -231,7 +297,7 @@ console.log('\n— appareil photo intégré —');
     vrai('la vidéo est en ligne, pas en plein écran système', /playsinline/.test(h));
     vrai('le déclencheur est là', /onclick="camDeclic\(\)"/.test(h));
     vrai('on peut sortir', /onclick="fermerCamera\(\)"/.test(h));
-    vrai('le compteur part de zéro', /0 \/ 5/.test(h));
+    vrai('le compteur part de zéro, sans plafond', /0 page/.test(h) && !/\/ 5/.test(h));
     vrai('la consigne de cadrage est donnée', /Cadre la page/.test(h));
     vrai("c'est la caméra arrière qui est demandée", dom.cam.contraintes.video.facingMode.ideal === 'environment',
       JSON.stringify(dom.cam.contraintes));
@@ -258,45 +324,71 @@ console.log('\n— appareil photo intégré —');
     await C.ouvrirCamera();
     d.el('cam-video').videoWidth = 1600; d.el('cam-video').videoHeight = 1200;
     const avant = d.el('modal-root').innerHTML;
-    C.camDeclic();
+    await C.camDeclic();
     vrai('la première page est prise', C.coursPhotos.length === 1);
-    vrai('la page porte bien une image et son archive',
-      !!C.coursPhotos[0].data && !!C.coursPhotos[0].archive && !!C.coursPhotos[0].dataUrl);
-    vrai('le compteur a suivi', d.el('cam-compteur').textContent === '1 / 5', d.el('cam-compteur').textContent);
+    vrai('la page est gardée en deux tailles, hors de la mémoire texte',
+      !!C.coursPhotos[0].grande && !!C.coursPhotos[0].petite && !C.coursPhotos[0].data);
+    vrai("elle a un aperçu sans recopier l'image", /^blob:/.test(C.coursPhotos[0].url));
+    vrai('le bas de l\'écran a suivi', /1 page/.test(d.el('cam-dernier').innerHTML), d.el('cam-dernier').innerHTML);
     vrai("l'écran n'est pas redessiné (la vidéo ne redémarre pas)", d.el('modal-root').innerHTML === avant);
     vrai('la caméra reste ouverte', !!C.camStream);
 
-    C.camDeclic();
+    await C.camDeclic();
     vrai('la deuxième page aussi', C.coursPhotos.length === 2);
-    vrai('le compteur suit encore', d.el('cam-compteur').textContent === '2 / 5');
+    vrai('le compteur suit encore', /2 pages/.test(d.el('cam-dernier').innerHTML));
   }, { tactile: true, camera: 'ok' });
   if (dom) vrai('rien ne traîne à la fin', dom.cam.arrets === 0);
 }
 
 {
-  // au maximum, on ferme tout seul et on rend la caméra
-  const dom = await scenario('cinq pages puis stop', {}, async (C, d) => {
+  // plus de plafond : un cours de huit pages ne doit pas être refusé à la cinquième
+  const dom = await scenario('huit pages de suite', {}, async (C, d) => {
     C.openAjoutCours();
     await C.ouvrirCamera();
     d.el('cam-video').videoWidth = 1600; d.el('cam-video').videoHeight = 1200;
-    for (let i = 0; i < 5; i++) C.camDeclic();
-    vrai('cinq pages prises', C.coursPhotos.length === 5);
-    vrai('pas une de plus', C.coursPhotos.length <= 5);
-    vrai("l'écran de caméra s'est fermé", !/cam-plein/.test(d.el('modal-root').innerHTML));
-    vrai('le flux est rendu au système', !C.camStream);
+    for (let i = 0; i < 8; i++) await C.camDeclic();
+    vrai('huit pages prises', C.coursPhotos.length === 8);
+    vrai("la caméra ne s'est pas fermée toute seule", /cam-plein/.test(d.el('modal-root').innerHTML));
+    vrai('le flux est toujours là', !!C.camStream);
+    C.fermerCamera();
   }, { tactile: true, camera: 'ok' });
-  if (dom) vrai('la caméra a bien été coupée', dom.cam.arrets > 0);
+  if (dom) {
+    vrai('la caméra est coupée quand on a fini', dom.cam.arrets > 0);
+    vrai('aucun plafond annoncé', !dom.el('main').innerHTML.match(/maximum/));
+  }
 }
 
 {
-  // rouvrir alors que c'est déjà plein : on prévient au lieu d'ouvrir pour rien
-  await scenario('déjà cinq pages', {}, async (C, d, db, toasts) => {
+  // une photo mal cadrée se reprend sur place, sans fermer l'appareil photo
+  await scenario('reprendre la dernière page', {}, async (C, d, db, toasts) => {
     C.openAjoutCours();
-    C.coursPhotos = [1, 2, 3, 4, 5].map(() => ({ data: 'A', archive: 'A', dataUrl: 'd' }));
     await C.ouvrirCamera();
-    vrai('on prévient que c\'est complet', toasts.some(t => /maximum/.test(t)), JSON.stringify(toasts));
-    vrai('et on n\'ouvre pas la caméra', !/cam-plein/.test(d.el('modal-root').innerHTML));
+    d.el('cam-video').videoWidth = 1600; d.el('cam-video').videoHeight = 1200;
+    await C.camDeclic(); await C.camDeclic();
+    const h = d.el('cam-dernier').innerHTML;
+    vrai("la dernière page prise est montrée", /<img src="blob:/.test(h), h);
+    vrai('et on peut la reprendre', /camAnnuleDerniere\(\)/.test(h));
+    await C.camAnnuleDerniere();
+    vrai('la page est retirée', C.coursPhotos.length === 1);
+    vrai('on le dit clairement', toasts.some(t => /refais-la/.test(t)), JSON.stringify(toasts));
+    vrai('la caméra reste ouverte pour refaire la photo', !!C.camStream);
+    vrai('le bas de l\'écran est à jour', /1 page/.test(d.el('cam-dernier').innerHTML));
+    await C.camAnnuleDerniere();
+    vrai('la dernière aussi peut partir', C.coursPhotos.length === 0);
+    vrai('et il ne reste rien à reprendre', !/camAnnuleDerniere/.test(d.el('cam-dernier').innerHTML));
   }, { tactile: true, camera: 'ok' });
+}
+
+{
+  // un navigateur sans canvas.toBlob doit quand même produire une page
+  await scenario('sans toBlob', {}, async (C, d) => {
+    C.openAjoutCours();
+    await C.ouvrirCamera();
+    d.el('cam-video').videoWidth = 1600; d.el('cam-video').videoHeight = 1200;
+    await C.camDeclic();
+    vrai('la page est quand même prise', C.coursPhotos.length === 1);
+    vrai('et elle a bien ses deux tailles', !!C.coursPhotos[0].grande && !!C.coursPhotos[0].petite);
+  }, { tactile: true, camera: 'ok', sansToBlob: true });
 }
 
 {
@@ -351,19 +443,25 @@ console.log('\n— réponses du serveur —');
 console.log('\n— poids de l\'envoi —');
 {
   await scenario('envoi léger', {}, async C => {
-    C.coursPhotos = [{ media_type: 'image/jpeg', data: 'G'.repeat(1000), archive: 'p'.repeat(100), dataUrl: 'd' }];
-    const env = C.photosAEnvoyer();
+    C.coursPhotos = [pageFaite('G', 1000)];
+    const env = await C.photosPaquet(0, 1);
     vrai('sous le seuil, on envoie la bonne qualité', env[0].data[0] === 'G');
     vrai('le type est conservé', env[0].media_type === 'image/jpeg');
   }, { ecranAjout: true });
 
   await scenario('envoi trop lourd', {}, async C => {
-    const gros = 'G'.repeat(Math.ceil(C.SEUIL_ENVOI / 2) + 10);
-    C.coursPhotos = [1, 2, 3].map(() => ({ media_type: 'image/jpeg', data: gros, archive: 'p'.repeat(50), dataUrl: 'd' }));
-    const env = C.photosAEnvoyer();
-    vrai('au-dessus du seuil, on bascule sur les archives', env.every(p => p.data[0] === 'p'),
+    const gros = Math.ceil(C.SEUIL_ENVOI / 2) + 10;
+    C.coursPhotos = [1, 2, 3].map(() => pageFaite('G', gros));
+    const env = await C.photosPaquet(0, 3);
+    vrai('au-dessus du seuil, on bascule sur les archives', env.every(p => p.data[0] === 'P'),
       env.map(p => p.data[0]).join(''));
-    vrai('toutes les pages sont quand même envoyées', env.length === 3);
+    vrai('toutes les pages du paquet sont quand même envoyées', env.length === 3);
+  }, { ecranAjout: true });
+
+  await scenario('un paquet, pas tout', {}, async C => {
+    C.coursPhotos = [1, 2, 3, 4, 5, 6].map(() => pageFaite('G', 10));
+    const env = await C.photosPaquet(4, 6);
+    vrai('on n\'encode que les pages demandées', env.length === 2);
   }, { ecranAjout: true });
 }
 
@@ -401,10 +499,10 @@ console.log('\n— dépôt de fichiers : on ignore ce qui n\'est pas une image �
     vrai('un PDF déposé est ignoré sans planter', C.coursPhotos.length === 0);
   }, { ecranAjout: true });
 
-  await scenario('coursFiles plafond', {}, async (C, dom, db, toasts) => {
-    C.coursPhotos = [1, 2, 3, 4, 5];
-    C.coursFiles([{ type: 'image/jpeg' }]);
-    vrai('au-delà de 5 photos, l\'enfant est prévenu', toasts.some(t => /5 photos maximum/.test(t)), toasts.join(' | '));
+  await scenario('coursFiles sans plafond', {}, async (C, dom, db, toasts) => {
+    C.coursPhotos = [1, 2, 3, 4, 5].map(() => pageFaite());
+    C.coursFiles([{ type: 'image/jpeg', name: 'a.jpg' }]);
+    vrai('une sixième image n\'est jamais refusée', !toasts.some(t => /maximum/.test(t)), toasts.join(' | '));
   }, { ecranAjout: true });
 }
 
@@ -617,6 +715,345 @@ console.log('\n— carte du tableau de bord parent —');
   }
   const vide = await scenario('fillCoursParentCard vide', { adalix_cours: [], adalix_cours_notions: [], adalix_cours_revisions: [] }, async C => { await C.fillCoursParentCard(); });
   if (vide) vrai('sans cours : message, pas de plantage', /Aucun cours/.test(vide.el('cours-parent-card').innerHTML));
+}
+
+/* ---------- plus rien ne vit seulement en mémoire ----------
+   Alix perdait ses photos : elle appuyait sur « Mettre au propre » et l'app revenait à
+   l'écran de départ comme si elle n'avait rien fait. Chaque page doit donc être écrite
+   dès la prise, et retrouvable au retour. */
+console.log('\n— les pages sont gardées dès qu\'on les prend —');
+{
+  const dom = await scenario('garder chaque page', {}, async (C, d) => {
+    C.openAjoutCours();
+    C.matChoisie = 'svt';
+    C.coursNotes = 'le schéma de la page 2 tombera au contrôle';
+    await C.ouvrirCamera();
+    d.el('cam-video').videoWidth = 1600; d.el('cam-video').videoHeight = 1200;
+    await C.camDeclic();
+    vrai('la première page est déjà à l\'abri', !!(d.magasin.alix && d.magasin.alix.pages.length === 1));
+    await C.camDeclic();
+    vrai('la deuxième aussi', d.magasin.alix.pages.length === 2);
+    vrai('la matière est gardée avec les pages', d.magasin.alix.matiere === 'svt');
+    vrai('et ce qu\'il a précisé', /schéma/.test(d.magasin.alix.notes));
+    vrai('les deux tailles sont gardées, pas du texte', !!d.magasin.alix.pages[0].grande && !!d.magasin.alix.pages[0].petite);
+    await C.coursRetirePhoto(0);
+    vrai('retirer une page la retire aussi du stockage', d.magasin.alix.pages.length === 1);
+  }, { tactile: true, camera: 'ok', idb: {} });
+  if (dom) vrai('rien d\'autre n\'a été écrit', Object.keys(dom.magasin).length === 1, Object.keys(dom.magasin).join(','));
+}
+{
+  // un navigateur sans IndexedDB (mode privé, quota plein) ne doit rien casser
+  await scenario('sans IndexedDB', {}, async (C, d) => {
+    C.openAjoutCours();
+    await C.ouvrirCamera();
+    d.el('cam-video').videoWidth = 1600; d.el('cam-video').videoHeight = 1200;
+    await C.camDeclic();
+    vrai('la page est quand même prise', C.coursPhotos.length === 1);
+    vrai('et garder ne lève rien', (await C.photosGarde()) === null);
+  }, { tactile: true, camera: 'ok' });
+}
+
+console.log('\n— retrouver ses pages au retour —');
+{
+  const attente = { alix: { matiere: 'svt', notes: 'la prof a insisté', ts: Date.now(), pages: [1, 2, 3].map(() => ({ grande: { marque: 'G', size: 10 }, petite: { marque: 'P', size: 5 } })) } };
+  const dom = await scenario('la carte de reprise', { adalix_cours: FIXTURES_COURS, adalix_cours_notions: [] },
+    async C => { await C.renderCours(); }, { idb: attente });
+  if (dom) {
+    const h = html(dom);
+    sain('reprise', h);
+    vrai('on lui dit que ses pages sont là', /3 pages/.test(h) && /gardées|rien n'est perdu/.test(h));
+    vrai('la matière est rappelée', /svt|sciences/i.test(h) || /SVT/.test(h));
+    vrai('il peut reprendre', /reprendrePages\(\)/.test(h));
+    vrai('il peut aussi les jeter', /jeterPages\(\)/.test(h));
+  }
+}
+{
+  const attente = { alix: { matiere: 'svt', notes: 'la prof a insisté', ts: Date.now(), pages: [1, 2].map(() => ({ grande: { marque: 'G', size: 10 }, petite: { marque: 'P', size: 5 } })) } };
+  const dom = await scenario('reprendre', { adalix_cours: [], adalix_cours_notions: [] }, async C => {
+    await C.renderCours();
+    C.reprendrePages();
+    vrai('les deux pages sont revenues', C.coursPhotos.length === 2);
+    vrai('chacune a un nouvel aperçu', C.coursPhotos.every(p => /^blob:/.test(p.url)));
+    vrai('la matière est retrouvée', C.matChoisie === 'svt');
+    vrai('et ses précisions aussi', /insisté/.test(C.coursNotes));
+  }, { idb: attente, tactile: true });
+  if (dom) {
+    const h = html(dom);
+    vrai("on repart de l'écran des photos", /Mettre au propre/.test(h));
+    vrai('ses précisions sont réaffichées', /insisté/.test(h));
+    vrai('la carte de reprise a disparu', !/reprendrePages/.test(h));
+  }
+}
+{
+  const attente = { alix: { matiere: 'histoire', notes: '', ts: Date.now(), pages: [{ grande: { marque: 'G', size: 10 }, petite: { marque: 'P', size: 5 } }] } };
+  const dom = await scenario('jeter', { adalix_cours: [], adalix_cours_notions: [] }, async (C, d) => {
+    await C.renderCours();
+    C.jeterPages();
+    vrai('on demande confirmation avant de jeter', /jeter/i.test(d.el('modal-root').innerHTML));
+    await C.confirmJeterPages();
+    vrai('les pages sont effacées du stockage', !d.magasin.alix);
+    vrai('et la carte disparaît', !/reprendrePages/.test(html(d)));
+  }, { idb: attente });
+  if (dom) vrai('rien ne traîne en mémoire', dom.magasin.alix === undefined);
+}
+{
+  // il est déjà en train de photographier : on ne lui propose pas de « reprendre »
+  await scenario('pas de carte si des pages sont en cours', { adalix_cours: [], adalix_cours_notions: [] }, async C => {
+    C.coursPhotos = [pageFaite()];
+    await C.renderCours();
+    vrai('aucune proposition de reprise', C.coursAttente === null);
+  }, { idb: { alix: { matiere: 'maths', notes: '', ts: 1, pages: [{ grande: {}, petite: {} }] } } });
+}
+
+/* ---------- un échec doit se voir ----------
+   C'est le cœur du problème d'Alix : la lecture échouait, un toast de trois secondes
+   passait, et l'écran redevenait exactement comme avant d'appuyer. */
+console.log('\n— quand la lecture échoue —');
+{
+  const dom = await scenario('échec visible', {}, async C => {
+    C.coursPhotos = [pageFaite()];
+    await C.lancerTranscription();
+  }, { ecranAjout: true, reponse: { status: 500, json: async () => { throw new Error('pas du JSON'); } } });
+  if (dom) {
+    const h = dom.el('cours-erreur').innerHTML;
+    vrai("l'échec reste affiché dans la page", h.length > 20, h);
+    vrai('on propose de réessayer', /lancerTranscription\(\)/.test(h));
+    vrai('et on rassure sur les photos', /gardées/.test(h));
+    vrai('le bouton est rendu à son état normal', dom.el('cours-go').textContent === '✨ Mettre au propre');
+    vrai('deux tentatives ont été faites avant de déranger', dom.envois.length === 2, String(dom.envois.length));
+  }
+}
+{
+  // la connexion lâche une fois, repasse à la seconde : l'enfant ne doit rien voir
+  const dom = await scenario('relance silencieuse', {}, async C => {
+    C.coursPhotos = [pageFaite()];
+    await C.lancerTranscription();
+    vrai('aucune erreur affichée', C.coursErr === '');
+    vrai('le cours est bien arrivé', !!C.coursDraft && /néolithique/i.test(C.coursDraft.titre));
+  }, {
+    ecranAjout: true,
+    reponse: n => (n === 1
+      ? { status: 500, json: async () => { throw new Error('coupure'); } }
+      : { status: 200, json: async () => ({ cours: { titre: 'Le néolithique', texte: 'A', matiere: 'histoire' } }) }),
+  });
+  if (dom) vrai('il a fallu deux envois', dom.envois.length === 2);
+}
+{
+  // un code famille refusé n'est pas un échec de lecture : pas de relance, pas d'erreur
+  const dom = await scenario('code refusé : pas de relance', {}, async C => {
+    C.coursPhotos = [pageFaite()];
+    await C.lancerTranscription();
+    vrai('aucune erreur de lecture affichée', C.coursErr === '');
+  }, { ecranAjout: true, reponse: { status: 200, json: async () => ({ error: 'code_famille' }) } });
+  if (dom) {
+    vrai('le code est demandé une seule fois', dom.refusCode.length === 1, String(dom.refusCode.length));
+    vrai('et on n\'a pas renvoyé les photos pour rien', dom.envois.length === 1, String(dom.envois.length));
+  }
+}
+
+/* ---------- un cours long part par paquets ---------- */
+console.log('\n— un cours de plusieurs pages —');
+{
+  const dom = await scenario('six pages, deux paquets', {}, async C => {
+    C.coursPhotos = [1, 2, 3, 4, 5, 6].map(() => pageFaite('G', 10));
+    await C.lancerTranscription();
+    vrai('un seul cours à la fin', !!C.coursDraft);
+    vrai('les deux textes sont là, dans l\'ordre', /^Début[\s\S]*Fin$/.test(C.coursDraft.texte), C.coursDraft.texte);
+    vrai('le titre vient des premières pages', C.coursDraft.titre === 'Les volcans');
+    vrai('le résumé vient du dernier paquet, qui a tout vu', /tout le chapitre/.test(C.coursDraft.resume));
+  }, {
+    ecranAjout: true,
+    reponse: n => ({
+      status: 200,
+      json: async () => ({ cours: n === 1
+        ? { titre: 'Les volcans', matiere: 'svt', texte: 'Début', resume: 'la première moitié', points_cles: ['a'] }
+        : { titre: '', matiere: 'svt', texte: 'Fin', resume: 'tout le chapitre', points_cles: ['a', 'b'] } }),
+    }),
+  });
+  if (dom) {
+    vrai('deux envois, pas six', dom.envois.length === 2, String(dom.envois.length));
+    vrai('le premier paquet fait quatre pages', dom.envois[0].photos.length === 4);
+    vrai('le second emporte le reste', dom.envois[1].photos.length === 2);
+    vrai('le premier paquet ne parle pas de suite', !dom.envois[0].suite);
+    vrai('le second donne ce qui a déjà été lu', dom.envois[1].suite === 'Début', String(dom.envois[1].suite));
+    vrai('la matière choisie accompagne chaque paquet', dom.envois.every(e => !!e.matiere));
+  }
+}
+{
+  await scenario('fusionneCours', {}, async C => {
+    const a = { titre: 'T', matiere: 'svt', niveau: '6e', chapitre: 'C', resume: 'r1', texte: 'A',
+      points_cles: ['p1'], vocabulaire: [{ mot: 'magma', def: 'd' }], a_retenir: [{ q: 'Q1', r: 'R' }],
+      liste_mots: [{ mot: 'arbre' }], mots_a_revoir: [], ressources: [{ url: 'u1' }], incertitudes: ['i1'] };
+    const b = { titre: 'Autre', matiere: 'histoire', niveau: '4e', chapitre: 'D', resume: 'r2', texte: 'B',
+      points_cles: ['p1', 'p2'], vocabulaire: [{ mot: 'magma', def: 'd' }, { mot: 'lave', def: 'd' }],
+      a_retenir: [{ q: 'Q2', r: 'R' }], liste_mots: [{ mot: 'arbre' }, { mot: 'moment' }],
+      mots_a_revoir: [], ressources: [{ url: 'u1' }], incertitudes: ['i2'] };
+    const f = C.fusionneCours(a, b);
+    vrai('le premier paquet donne le titre et la matière', f.titre === 'T' && f.matiere === 'svt' && f.niveau === '6e');
+    vrai('les textes se suivent', f.texte === 'A\n\nB');
+    vrai('le dernier résumé gagne', f.resume === 'r2');
+    vrai('les points clés les plus complets gagnent', f.points_cles.length === 2);
+    vrai('le vocabulaire ne double pas', f.vocabulaire.length === 2, JSON.stringify(f.vocabulaire));
+    vrai('les mots de liste ne doublent pas', f.liste_mots.length === 2);
+    vrai('les cartes s\'additionnent', f.a_retenir.length === 2);
+    vrai('une ressource en double est écartée', f.ressources.length === 1);
+    vrai('toutes les incertitudes sont dites', f.incertitudes.length === 2);
+    vrai('un premier paquet seul passe tel quel', C.fusionneCours(null, b) === b);
+  }, { ecranAjout: true });
+}
+
+/* ---------- la liste de mots photographiée ----------
+   Elle a photographié quatre listes de vocabulaire : le cours était parfait, et son
+   carnet de mots est resté vide. C'est ce que la matière « Orthographe » répare. */
+console.log('\n— une liste de mots devient son carnet —');
+{
+  await scenario('la matière existe', {}, async C => {
+    vrai('« Orthographe » est proposée', C.MATIERES.some(m => m.id === 'orthographe'));
+    vrai('elle est juste après le français',
+      C.MATIERES.findIndex(m => m.id === 'orthographe') === C.MATIERES.findIndex(m => m.id === 'francais') + 1);
+  }, {});
+}
+{
+  const dom = await scenario('les mots rejoignent le carnet',
+    { 'adalix_cours:inserted': [{ id: 42 }], adalix_cours: FIXTURES_COURS, adalix_cours_notions: [] },
+    async (C, d, db) => {
+      C.coursPhotos = [1, 2, 3, 4].map(() => pageFaite());
+      C.coursDraft = { titre: 'Liste 1', matiere: 'orthographe', niveau: '6e', chapitre: '', resume: 'r',
+        texte: '## Liste 1', points_cles: [], vocabulaire: [], ressources: [], a_retenir: [],
+        liste_mots: [{ mot: 'coquillage', syllabes: 'co-quil-lage' }, { mot: 'trésor', syllabes: 'tré-sor' }],
+        mots_a_revoir: [] };
+      await C.enregistrerCours();
+      const photos = db.ecrits.filter(e => e.table === 'adalix_cours_photos' && e.op === 'insert');
+      vrai('les photos partent par petits lots', photos.length === 2, String(photos.length));
+      vrai('toutes les pages sont enregistrées', photos.reduce((n, e) => n + e.p.length, 0) === 4);
+      vrai('les rangs se suivent', photos[1].p[0].rang === 3);
+    }, { idb: { alix: { matiere: 'orthographe', notes: '', ts: 1, pages: [{ grande: {}, petite: {} }] } } });
+  if (dom) {
+    const liste = dom.motsEcrits.find(e => e.source === 'liste');
+    vrai('la liste est envoyée au carnet', !!liste);
+    if (liste) {
+      vrai('chaque mot y est', liste.mots.length === 2);
+      vrai("l'orthographe juste est le mot à apprendre", liste.mots[0].correct === 'coquillage');
+      vrai('aucune faute inventée', liste.mots.every(m => m.ecrit === ''));
+      vrai('le découpage en syllabes est transmis', liste.mots[0].syllabes === 'co-quil-lage');
+    }
+    vrai('les pages en attente sont oubliées', !dom.magasin.alix);
+  }
+}
+{
+  // la liste de verbes irréguliers anglais d'Adam n'a rien à faire dans un carnet
+  // d'orthographe française
+  const dom = await scenario('pas de carnet pour les autres matières',
+    { 'adalix_cours:inserted': [{ id: 43 }], adalix_cours: FIXTURES_COURS, adalix_cours_notions: [] },
+    async C => {
+      C.coursPhotos = [];
+      C.coursDraft = { titre: 'Irregular verbs', matiere: 'anglais', texte: 'be was been', points_cles: [],
+        vocabulaire: [], ressources: [], a_retenir: [], mots_a_revoir: [],
+        liste_mots: [{ mot: 'become', syllabes: 'be-come' }] };
+      await C.enregistrerCours();
+    }, {});
+  if (dom) vrai('aucun mot anglais dans le carnet', !dom.motsEcrits.some(e => e.source === 'liste'),
+    JSON.stringify(dom.motsEcrits));
+}
+
+/* ---------- la voix du tuteur ---------- */
+console.log('\n— le tuteur a une voix —');
+{
+  const dom = await scenario('interro avec voix', { adalix_cours: FIXTURES_COURS, adalix_cours_notions: FIXTURES_NOTIONS }, async C => {
+    C.coursCur = FIXTURES_COURS[0]; C.coursNotions = FIXTURES_NOTIONS;
+    C.drawInterroScreen();
+  }, { voix: true });
+  if (dom) {
+    const h = html(dom);
+    sain('interro voix', h);
+    vrai('le bouton de voix est là', /id="vx-btn"/.test(h));
+  }
+}
+{
+  const dom = await scenario('la question est dite', { adalix_cours: FIXTURES_COURS, adalix_cours_notions: FIXTURES_NOTIONS }, async C => {
+    C.coursCur = FIXTURES_COURS[0]; C.coursNotions = FIXTURES_NOTIONS;
+    C.drawInterroScreen();
+    await C.envoyerInterro('');
+  }, { voix: true, reponse: { status: 200, json: async () => ({ reply: 'Quelle est la capitale ?' }) } });
+  if (dom) {
+    vrai('elle est dite à voix haute', dom.dits.some(d => d.auto && /capitale/.test(d.t)), JSON.stringify(dom.dits));
+    vrai('et un 🔊 permet de la réentendre', /vxDireQuestion\(/.test(dom.el('chat-box').innerHTML));
+  }
+}
+{
+  const dom = await scenario('terminer coupe la voix', { adalix_cours: FIXTURES_COURS, adalix_cours_notions: FIXTURES_NOTIONS, adalix_cours_revisions: [] }, async C => {
+    C.coursCur = FIXTURES_COURS[0]; C.coursNotions = FIXTURES_NOTIONS;
+    C.drawInterroScreen();
+    await C.finirInterro();
+  }, { voix: true });
+  if (dom) vrai("terminer l'interro fait taire le tuteur", dom.vxArrets.length === 1, String(dom.vxArrets.length));
+}
+{
+  const dom = await scenario('sans voix, aucun bouton', { adalix_cours: FIXTURES_COURS, adalix_cours_notions: FIXTURES_NOTIONS }, async C => {
+    C.coursCur = FIXTURES_COURS[0]; C.coursNotions = FIXTURES_NOTIONS;
+    C.drawInterroScreen();
+    await C.envoyerInterro('');
+  }, { reponse: { status: 200, json: async () => ({ reply: 'Une question ?' }) } });
+  if (dom) {
+    vrai('aucun bouton de voix', !/vx-btn/.test(html(dom)));
+    vrai('aucun 🔊 sur la question', !/vxDireQuestion/.test(dom.el('chat-box').innerHTML));
+    /* cours.js propose toujours la réponse à la voix ; c'est lecture.js qui décide de
+       parler ou non (testé dans lecture.test.mjs). Ici, l'essentiel : sans voix sur
+       l'appareil, l'interro marche exactement pareil. */
+    vrai("la question s'affiche quand même", /Une question/.test(dom.el('chat-box').innerHTML));
+  }
+}
+
+/* ---------- ce qui est gardé ne s'efface que sur sa demande ----------
+   Un stockage qui se vide tout seul serait pire que pas de stockage : il promettrait
+   quelque chose qu'il ne tient pas. */
+console.log('\n— des pages gardées ne disparaissent pas toutes seules —');
+{
+  const attente = { alix: { matiere: 'histoire', notes: 'une note', ts: Date.now(), pages: [{ grande: { size: 9 }, petite: { size: 4 } }] } };
+  const dom = await scenario('ouvrir un nouveau cours ne jette rien', { adalix_cours: [], adalix_cours_notions: [] }, async C => {
+    await C.renderCours();
+    C.openAjoutCours();                       // « 📸 Ajouter un cours » : il repart de zéro…
+    vrai("l'écran d'ajout est bien vide", C.coursPhotos.length === 0);
+    await C.photosGarde();                    // …et il tape une note avant toute photo
+    vrai('mais ses pages d\'avant sont toujours là', !!attente.alix, JSON.stringify(Object.keys(attente)));
+  }, { idb: attente, tactile: true });
+  if (dom) vrai('rien n\'a été effacé', dom.magasin.alix.pages.length === 1);
+}
+{
+  const attente = { alix: { matiere: 'histoire', notes: '', ts: Date.now(), pages: [{ grande: { size: 9 }, petite: { size: 4 } }] } };
+  await scenario('retirer sa dernière page, c\'est voulu', { adalix_cours: [], adalix_cours_notions: [] }, async (C, d) => {
+    await C.renderCours();
+    C.reprendrePages();
+    await C.coursRetirePhoto(0);
+    vrai('plus aucune page en mémoire', C.coursPhotos.length === 0);
+    vrai('et plus rien de gardé', !d.magasin.alix);
+  }, { idb: attente, tactile: true });
+}
+{
+  // la matière reprise doit se voir sur l'écran, pas seulement en mémoire
+  const attente = { alix: { matiere: 'svt', notes: '', ts: Date.now(), pages: [{ grande: { size: 9 }, petite: { size: 4 } }] } };
+  const dom = await scenario('la matière reprise est surlignée', { adalix_cours: [], adalix_cours_notions: [] }, async C => {
+    await C.renderCours();
+    C.reprendrePages();
+  }, { idb: attente, tactile: true });
+  if (dom) {
+    const h = html(dom);
+    vrai('la SVT est la matière surlignée', /imgchip sel" data-mat="svt"/.test(h), (h.match(/imgchip sel[^>]*/) || [])[0]);
+    vrai('une seule matière est surlignée', (h.match(/imgchip sel/g) || []).length === 1);
+  }
+}
+{
+  // il a choisi « Orthographe » : le modèle n'a pas à le contredire
+  const dom = await scenario('le choix de l\'enfant fait foi', {}, async C => {
+    C.coursPhotos = [pageFaite()];
+    C.matChoisie = 'orthographe';
+    await C.lancerTranscription();
+    vrai('le cours reste en orthographe', C.coursDraft.matiere === 'orthographe', C.coursDraft.matiere);
+  }, {
+    ecranAjout: true,
+    reponse: { status: 200, json: async () => ({ cours: { titre: 'Liste 1', matiere: 'francais', texte: 'des mots' } }) },
+  });
+  if (dom) vrai('la matière choisie est bien partie au serveur', dom.envois[0].matiere === 'orthographe');
 }
 
 console.log('\n' + (ko ? `❌ ${ko} échec(s), ${ok} test(s) passés` : `✅ ${ok} tests passés`));

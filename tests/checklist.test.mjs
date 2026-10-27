@@ -45,8 +45,11 @@ function chargeApp(profil) {
   const stockage = { getItem: () => null, setItem() {}, removeItem() {} };
   const appels = [];
   const bouchon = nom => (...a) => { appels.push({ nom, a }); };
+  /* la voix de l'assistant vient de lecture.js : ici de simples bouchons, les tests de
+     la voix elle-même sont dans espaces.test.mjs et lecture.test.mjs */
   const f = new Function('window', 'document', 'localStorage', 'console', 'fetch', 'setTimeout',
     'coursBadgeEspace', 'renderCours', 'renderMots', 'fillCoursParentCard', 'fillMotsParentCard', 'Image', 'URL',
+    'vxDispo', 'vxBtn', 'vxCharge', 'vxStop', 'vxAuto', 'vxDire',
     src + '\n;return {D, TABS, CHK_SEUIL, estJourEcole, calculeSerie, todayStr, renderChecklist, '
     + 'drawChecklist, drawChecklistRepos, toggleItem, openJournal, showTab, renderAide, '
     + 'get todayItems(){return todayItems}, set todayItems(v){todayItems=v}, '
@@ -54,7 +57,8 @@ function chargeApp(profil) {
   const C = f(win, doc, stockage, { log() {}, warn() {}, error() {} }, async () => ({ json: async () => ({}) }),
     fn => { appels.push({ nom: 'setTimeout' }); return 0; },
     bouchon('coursBadgeEspace'), bouchon('renderCours'), bouchon('renderMots'), bouchon('fillCoursParentCard'), bouchon('fillMotsParentCard'),
-    function () { return {}; }, { createObjectURL: () => '', revokeObjectURL() {} });
+    function () { return {}; }, { createObjectURL: () => '', revokeObjectURL() {} },
+    () => true, () => '<button id="vx-btn">🔇 Sa voix : non</button>', () => false, () => {}, () => {}, () => {});
   C.child = profil || 'alix';
   return { C, el, appels };
 }

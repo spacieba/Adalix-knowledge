@@ -317,6 +317,21 @@ table.ptable td { padding:7px 8px; border-bottom:1px solid rgba(0,0,0,.05); }
 .cam-declic:active { transform:scale(.93); }
 .cam-fermer { background:transparent; border:1px solid rgba(255,255,255,.55); color:#fff; border-radius:10px; padding:10px 16px; font-size:14px; cursor:pointer; font-family:var(--font-body); }
 .cam-compteur { color:#fff; font-size:14px; min-width:58px; text-align:right; }
+/* la dernière page prise, à droite du déclencheur : on voit ce qu'on vient de
+   photographier, et on la refait d'un geste sans fermer l'appareil photo */
+.cam-dernier { display:flex; align-items:center; gap:8px; justify-content:flex-end; min-width:92px; }
+.cam-annule { background:transparent; border:none; padding:0; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; font-family:var(--font-body); }
+.cam-annule img { width:42px; height:42px; object-fit:cover; border-radius:8px; border:2px solid rgba(255,255,255,.6); display:block; }
+.cam-annule span { color:#fff; font-size:10.5px; opacity:.9; white-space:nowrap; }
+.cam-annule:active { transform:scale(.94); }
+/* sur un téléphone étroit, les trois éléments de la barre se disputent 360 pixels :
+   on resserre plutôt que de laisser le déclencheur se faire écraser */
+@media (max-width:420px) {
+  .cam-barre { padding:12px 12px 24px; gap:8px; }
+  .cam-fermer { padding:10px 11px; font-size:13px; }
+  .cam-dernier { min-width:76px; gap:6px; }
+  .cam-annule span { font-size:10px; }
+}
 .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#26282e; color:white; padding:10px 20px; border-radius:20px; font-size:14px; z-index:99; }
 /* jeux géo : survol des zones cliquables */
 .geo-t { transition: filter .12s; }
@@ -467,6 +482,15 @@ body.theme-adam .syl-1 { color:#c9962c; }
 .mot-ligne:last-child { border-bottom:none; }
 .mot-correct { font-size:17px; font-weight:700; letter-spacing:.02em; }
 .mot-erreur { font-size:12.5px; opacity:.65; font-style:italic; margin-top:2px; }
+/* une liste photographiée fait parfois cent mots : en lignes, l'écran n'en finit
+   plus — en pastilles, elle se lit d'un coup d'œil */
+.mot-nuage { display:flex; flex-wrap:wrap; gap:7px; }
+.mot-puce { display:inline-flex; align-items:center; gap:6px; background:rgba(0,0,0,.04);
+  border:1.5px solid rgba(0,0,0,.1); border-radius:999px; padding:7px 12px; font-size:14.5px;
+  font-family:var(--font-body); color:inherit; cursor:pointer; transition:background .12s, border-color .12s; }
+.mot-puce span { font-size:11px; opacity:.45; }
+.mot-puce:hover { background:rgba(201,99,106,.1); border-color:rgba(201,99,106,.45); }
+.mot-puce:hover span { opacity:.9; }
 .mot-meta { font-size:12px; opacity:.6; margin-top:2px; letter-spacing:.1em; }
 .mot-geant { font-size:clamp(34px,10vw,52px); font-weight:800; letter-spacing:.06em;
   margin:18px 0; font-family:var(--font-display); line-height:1.25; word-break:break-word; }

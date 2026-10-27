@@ -16,6 +16,8 @@ function fausseDb(fixtures) {
     const self = {
       then: (f, g) => Promise.resolve(res).then(f, g),
       select: () => self, eq: () => self, lte: () => self, order: () => self, limit: () => self,
+      // `.in('id', [...])` : valider toute une liste de mots d'un seul geste
+      in: (col, vals) => { const d = ecrits[ecrits.length - 1]; if (d) { d.col = col; d.ids = vals; } return self; },
       maybeSingle: () => Promise.resolve({ data: res.data[0], error: null }),
       single: () => Promise.resolve({ data: res.data[0], error: null }),
       insert: p => { ecrits.push({ table, op: 'insert', p }); return make(table); },
@@ -45,7 +47,8 @@ function charge(fixtures, opts) {
     getElementById: id => elements[id] || null,
     createElement: () => el('tmp'), addEventListener() {},
   };
-  const stockage = { _d: {}, getItem(k) { return this._d[k] || null; }, setItem(k, v) { this._d[k] = v; }, removeItem(k) { delete this._d[k]; } };
+  // o.prefs : ce que l'appareil avait déjà retenu avant d'ouvrir l'app
+  const stockage = { _d: Object.assign({}, o.prefs || {}), getItem(k) { return this._d[k] || null; }, setItem(k, v) { this._d[k] = v; }, removeItem(k) { delete this._d[k]; } };
   const synth = o.sansVoix ? undefined : {
     cancel() {}, speak(u) { parles.push(u.text); if (u.onend) setTimeout(() => u.onend(), 0); },
     getVoices: () => [{ lang: 'fr-FR', localService: true, name: 'Amelie' }],
@@ -57,7 +60,9 @@ function charge(fixtures, opts) {
     'callCours', 'coursCur', 'drawCours', 'renderDashboard', 'BOX_JOURS', 'jourPlus', 'console', 'setTimeout',
     src + '\n;return {syllabes, syllabesHtml, lectTexteBrut, lectDecoupe, openLecture, drawLecture, lectCorpsHtml, '
     + 'renderMots, drawMots, motDiffHtml, motNormalise, drawMotEtape, drawDictee, fillMotsParentCard, openRecapOrtho, '
-    + 'motsAjoute, startMots, TYPE_LABEL, lectDispo, '
+    + 'motsAjoute, startMots, TYPE_LABEL, lectDispo, motsListeTous, motStatut, '
+    + 'vxDispo, vxBtn, vxCharge, vxBascule, vxDire, vxAuto, vxStop, vxNettoie, vxEtiquette, '
+    + 'get vxOn(){return vxOn}, set vxOn(v){vxOn=v}, '
     + 'get motsList(){return motsList}, set motsList(v){motsList=v}, '
     + 'get motState(){return motState}, set motState(v){motState=v}, '
     + 'get dicteeState(){return dicteeState}, set dicteeState(v){dicteeState=v}, '
@@ -310,6 +315,159 @@ console.log('\n— récapitulatif parent —');
   vrai('les mots acquis figurent', /Mots acquis/.test(r));
   vrai('le document se dit non diagnostique', /ne constitue en aucun cas un bilan/.test(r));
   vrai('le bouton imprimer est exclu de l\'impression', /class="card no-print"/.test(r));
+}
+
+/* ---------- la voix de l'assistant ----------
+   Le moteur de lecture est le même que pour la lecture guidée : ce qui se teste ici,
+   c'est la décision de parler ou non, et ce qu'on donne à dire. */
+console.log('\n— la voix de l\'assistant —');
+{
+  const { C } = charge({});
+  vrai('un appareil qui sait parler le propose', C.vxDispo() === true);
+  vrai('le bouton existe', /id="vx-btn"/.test(C.vxBtn()));
+  vrai('elle est éteinte au départ', C.vxCharge() === false);
+  vrai("et le bouton le dit", /non/.test(C.vxEtiquette()));
+}
+{
+  const { C } = charge({}, { sansVoix: true });
+  vrai("sans voix sur l'appareil, rien n'est proposé", C.vxDispo() === false);
+  vrai('aucun bouton qui ne marcherait pas', C.vxBtn() === '');
+}
+{
+  // le choix est retenu d'une fois sur l'autre, par enfant
+  const { C, toasts, parles } = charge({});
+  C.vxCharge();
+  C.vxAuto('Première réponse.');
+  vrai("éteinte, elle ne dit rien", parles.length === 0, JSON.stringify(parles));
+  C.vxBascule();
+  vrai('allumée, elle le dit', toasts.some(t => /voix haute/.test(t)), JSON.stringify(toasts));
+  vrai('et on entend tout de suite la dernière réponse', parles.some(t => /Première réponse/.test(t)), JSON.stringify(parles));
+  C.vxAuto('Deuxième réponse.');
+  vrai('la réponse suivante est dite aussi', parles.some(t => /Deuxième/.test(t)));
+  C.vxBascule();
+  vrai('on peut la rééteindre', C.vxOn === false);
+  const n = parles.length;
+  C.vxAuto('Troisième.');
+  vrai('et elle se taît pour de bon', parles.length === n);
+}
+{
+  const { C } = charge({}, { prefs: { adalix_voix_alix: '1' } });
+  vrai("si elle était allumée hier, elle l'est encore", C.vxCharge() === true);
+}
+{
+  const { C } = charge({}, { prefs: { adalix_voix_adam: '1' }, child: 'alix' });
+  vrai("le choix d'Adam ne s'applique pas à Alix", C.vxCharge() === false);
+}
+{
+  // ce qui s'écrit ne se dit pas
+  const { C } = charge({});
+  const n = C.vxNettoie('## Les **volcans** 🌋\n- un point\n> une règle\nVoir https://exemple.fr/page');
+  vrai('les dièses des titres sautent', !/#/.test(n), n);
+  vrai('les étoiles du gras sautent', !/\*/.test(n), n);
+  vrai('mais le mot reste', /volcans/.test(n));
+  vrai('les emojis ne sont pas lus', !/🌋/.test(n), n);
+  vrai("une adresse devient « un lien »", /un lien/.test(n) && !/https/.test(n), n);
+  vrai('les tirets de puce sautent', !/^-/m.test(n), n);
+}
+{
+  // le 🔊 d'une réponse parle même si la voix automatique est éteinte
+  const { C, parles } = charge({});
+  C.vxCharge();
+  C.vxDire('Je te relis la question.');
+  vrai('à la demande, elle parle quand même', parles.some(t => /relis/.test(t)), JSON.stringify(parles));
+}
+{
+  const { C, parles } = charge({});
+  C.vxDire('   ');
+  vrai('rien à dire, rien de dit', parles.length === 0);
+}
+
+/* ---------- une liste de mots photographiée ----------
+   Elle a photographié quatre listes de vocabulaire et son carnet est resté vide. Ces
+   mots-là ne sont pas des fautes : ils ne se racontent pas comme les mots relevés dans
+   un cahier, et il faut pouvoir les garder tous d'un seul geste. */
+console.log('\n— les mots d\'une liste photographiée —');
+const MOTS_LISTE = [
+  { id: 1, child: 'alix', mot: 'coquillage', erreur: '', syllabes: 'co-quil-lage', type: 'autre', source: 'liste', statut: 'propose', box: 1, due: '2026-10-24' },
+  { id: 2, child: 'alix', mot: 'trésor', erreur: '', syllabes: 'tré-sor', type: 'autre', source: 'liste', statut: 'propose', box: 1, due: '2026-10-24' },
+];
+const MOT_RELEVE = { id: 3, child: 'alix', mot: 'bateau', erreur: 'bato', syllabes: 'ba-teau', type: 'phonetique', source: 'cours', statut: 'propose', box: 1, due: '2026-10-24' };
+{
+  const { C, el } = charge({ adalix_mots: MOTS_LISTE });
+  C.motsList = MOTS_LISTE.slice();
+  C.drawMots();
+  const h = html(el);
+  sain('liste photographiée', h);
+  vrai('la liste a sa propre carte', /Ta liste de mots/.test(h));
+  vrai('on ne lui parle pas de faute', !/lus différemment/.test(h));
+  vrai('les deux mots sont là', /coquillage/.test(h) && /trésor/.test(h));
+  vrai('on peut tout garder d\'un geste', /motsListeTous\('actif'\)/.test(h));
+  vrai('et tout écarter', /motsListeTous\('ecarte'\)/.test(h));
+  vrai('chaque mot peut partir seul', /motStatut\(1,'ecarte'\)/.test(h));
+}
+{
+  const { C, el } = charge({ adalix_mots: [MOT_RELEVE] });
+  C.motsList = [MOT_RELEVE];
+  C.drawMots();
+  const h = html(el);
+  vrai('un mot relevé dans le cahier garde sa carte à lui', /étaient dans ton cahier/.test(h));
+  vrai('avec ce qu\'il avait écrit', /bato/.test(h));
+  vrai('et pas la carte des listes', !/Ta liste de mots/.test(h));
+}
+{
+  const { C, el } = charge({ adalix_mots: MOTS_LISTE.concat([MOT_RELEVE]) });
+  C.motsList = MOTS_LISTE.concat([MOT_RELEVE]);
+  C.drawMots();
+  const h = html(el);
+  sain('les deux cartes', h);
+  vrai('les deux sortes cohabitent', /Ta liste de mots/.test(h) && /étaient dans ton cahier/.test(h));
+}
+{
+  const { C, db, toasts } = charge({ adalix_mots: MOTS_LISTE.concat([MOT_RELEVE]) });
+  C.motsList = MOTS_LISTE.concat([MOT_RELEVE]);
+  await C.motsListeTous('actif');
+  const maj = db.ecrits.filter(e => e.op === 'update');
+  vrai('un seul envoi pour toute la liste', maj.length === 1, JSON.stringify(db.ecrits));
+  vrai('les mots passent dans le carnet', maj[0].p.statut === 'actif');
+  vrai('seuls les mots de la liste sont touchés', JSON.stringify(maj[0].ids) === '[1,2]', JSON.stringify(maj[0].ids));
+  vrai('le mot relevé dans le cahier reste à valider', C.motsList[2].statut === 'propose');
+  vrai('et on le dit', toasts.some(t => /carnet/.test(t)), JSON.stringify(toasts));
+}
+
+console.log('\n— ajouter des mots sans écraser ce qui est déjà travaillé —');
+{
+  // une liste photographiée ne doit pas faire repartir à zéro un mot presque gagné
+  const deja = [{ mot: 'trésor' }, { mot: 'arbre' }];
+  const { C, db } = charge({ adalix_mots: deja });
+  const n = await C.motsAjoute([{ correct: 'trésor', ecrit: '', syllabes: 'tré-sor', type: 'autre' },
+    { correct: 'coquillage', ecrit: '', syllabes: 'co-quil-lage', type: 'autre' }], 'liste', 7, 'propose');
+  const ecrit = db.ecrits.find(e => e.op === 'upsert');
+  vrai('seul le mot nouveau est ajouté', n === 1, String(n));
+  vrai('et c\'est bien le bon', ecrit.p.length === 1 && ecrit.p[0].mot === 'coquillage', JSON.stringify(ecrit.p));
+  vrai('la source est notée', ecrit.p[0].source === 'liste');
+  vrai('le cours d\'origine est gardé', ecrit.p[0].cours_id === 7);
+}
+{
+  // une faute, elle, DOIT redescendre dans les boîtes : c'est tout l'intérêt
+  const { C, db } = charge({ adalix_mots: [{ mot: 'bateau' }] });
+  const n = await C.motsAjoute([{ correct: 'bateau', ecrit: 'bato', syllabes: 'ba-teau', type: 'phonetique' }], 'dictee', null, 'actif');
+  const ecrit = db.ecrits.find(e => e.op === 'upsert');
+  vrai('un mot raté est réécrit', n === 1 && ecrit.p.length === 1);
+  vrai('il repart de la première boîte', ecrit.p[0].box === 1);
+}
+{
+  // deux listes partagent souvent un mot : deux lignes identiques et Postgres refuse tout
+  const { C, db } = charge({ adalix_mots: [] });
+  const n = await C.motsAjoute([{ correct: 'arbre', ecrit: '', type: 'autre' }, { correct: 'Arbre', ecrit: '', type: 'autre' },
+    { correct: 'moment', ecrit: '', type: 'autre' }], 'liste', 1, 'propose');
+  const ecrit = db.ecrits.find(e => e.op === 'upsert');
+  vrai('le doublon est écarté avant l\'envoi', n === 2, String(n));
+  vrai('et il ne reste que deux lignes', ecrit.p.length === 2, JSON.stringify(ecrit.p.map(m => m.mot)));
+}
+{
+  const { C, db } = charge({ adalix_mots: [{ mot: 'arbre' }] });
+  const n = await C.motsAjoute([{ correct: 'arbre', ecrit: '', type: 'autre' }], 'liste', 1, 'propose');
+  vrai('une liste déjà connue en entier n\'écrit rien', n === 0 && !db.ecrits.some(e => e.op === 'upsert'));
 }
 
 console.log('\n' + (ko ? `❌ ${ko} échec(s), ${ok} test(s) passés` : `✅ ${ok} tests passés`));

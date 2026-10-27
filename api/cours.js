@@ -54,8 +54,22 @@ function qui(child) {
 }
 
 /* ---------- mode transcrire : les photos → un cours au propre ---------- */
-function systemTranscrire(child, matiere) {
-  return `Tu mets au propre le cours d'un collégien français à partir de photos de son cahier, de son manuel ou du tableau. L'enfant est ${qui(child)}.${matiere && matiere !== 'autre' ? `\nMatière annoncée par l'enfant : ${matiere}.` : ''}
+function systemTranscrire(child, matiere, suite) {
+  return `Tu mets au propre le cours d'un collégien français à partir de photos de son cahier, de son manuel ou du tableau. L'enfant est ${qui(child)}.${matiere && matiere !== 'autre' ? `\nMatière annoncée par l'enfant : ${matiere}.` : ''}${suite ? `
+
+C'EST LA SUITE D'UN COURS DÉJÀ COMMENCÉ
+Un cours long est photographié en plusieurs fois. Voici ce qui a déjà été mis au propre, à partir des pages précédentes :
+---
+${suite}
+---
+Tu transcris UNIQUEMENT les nouvelles photos, dans la continuité : pas de nouveau titre si c'est la suite de la même partie, et tu ne répètes RIEN de ce qui est au-dessus. En revanche "resume" et "points_cles" doivent couvrir L'ENSEMBLE du cours (ce qui précède + les nouvelles pages), puisque tu es le seul à voir le tout.` : ''}${matiere === 'orthographe' ? `
+
+CE N'EST PAS UN CHAPITRE, C'EST UNE LISTE DE MOTS À APPRENDRE
+L'enfant a photographié une liste de mots d'orthographe ou de vocabulaire (celle de la semaine, à savoir écrire pour la dictée). Alors :
+- "texte" présente les listes telles quelles, une par une, avec un titre par liste (\`## Liste 1\`) et les mots séparés par " - ". N'invente aucune définition dans le texte, n'ajoute aucune phrase d'exemple.
+- "liste_mots" contient CHAQUE mot de la liste, dans l'ordre, découpé en syllabes. C'est le champ le plus important : c'est lui qui remplit son carnet de mots. N'y mets que les mots à apprendre, jamais les titres, les numéros ni les consignes.
+- "mots_a_revoir" reste VIDE : ces mots ne sont pas des fautes, ce sont des mots à apprendre.
+- "a_retenir" reste vide aussi : on n'interroge pas sur une liste de mots avec des cartes question/réponse.` : ''}
 
 RÈGLE ABSOLUE — FIDÉLITÉ
 Tu transcris ce qui est SUR les photos. Tu n'ajoutes aucune connaissance extérieure dans le cours lui-même, tu n'inventes rien, tu ne complètes pas un paragraphe coupé. Un cours inventé est bien pire qu'un cours incomplet : l'enfant réviserait du faux.
@@ -82,6 +96,7 @@ LES AUTRES CHAMPS (là, tu as le droit d'apporter ton aide)
 - "points_cles" : 3 à 6 phrases, l'essentiel à ne pas rater.
 - "vocabulaire" : 0 à 8 mots difficiles du cours, définis simplement et pour SON âge.
 - "a_retenir" : 4 à 10 cartes question/réponse tirées du cours, qui serviront à l'interroger plus tard. Questions précises et vérifiables (pas "parle-moi de la Révolution"), réponses courtes. Donne à chaque carte une "notion" de 2-4 mots.
+- "liste_mots" : à remplir SEULEMENT si le document photographié EST une liste de mots à apprendre (liste d'orthographe, de vocabulaire, de verbes). Sinon, laisse-le vide. Pour chaque mot : "mot" (l'orthographe juste) et "syllabes" (le mot découpé avec des traits d'union, par ex. "co-quil-lage").
 - "mots_a_revoir" : 0 à 8 mots que L'ENFANT a mal orthographiés dans son cahier. Tu ne les signales que si tu es SÛR : un mot que tu as simplement eu du mal à déchiffrer va dans "incertitudes", jamais ici — on ferait réviser à l'enfant une faute qu'il n'a pas commise. Écarte les noms propres, les mots étrangers et les termes techniques du chapitre, sauf faute évidente. Pour chaque mot : "ecrit" (ce qu'il a écrit), "correct" (l'orthographe juste), "syllabes" (le mot correct découpé en syllabes avec des traits d'union, par ex. "ba-teau"), et "type" :
   · "phonetique" — ça ne s'entend pas pareil ou ça ne peut pas se lire ainsi (bato → bateau, ils son → ils sont)
   · "grammatical" — accord, conjugaison, homophone (les chien mange, a/à, et/est, ses/ces)
@@ -92,7 +107,7 @@ CATALOGUE DES SITES AUTORISÉS (identifiant — nom)
 ${CATALOGUE}
 
 RÉPONSE — UNIQUEMENT ce JSON, sans texte autour, sans bloc de code :
-{"titre":"titre du cours","matiere":"histoire|geo|emc|francais|maths|svt|physique|techno|anglais|espagnol|allemand|latin|arts|musique|autre","niveau":"6e|5e|4e|3e|?","chapitre":"nom du chapitre si visible","resume":"...","texte":"le cours au propre en mini-Markdown","points_cles":["..."],"vocabulaire":[{"mot":"...","def":"..."}],"a_retenir":[{"notion":"...","q":"...","r":"..."}],"mots_a_revoir":[{"ecrit":"bato","correct":"bateau","syllabes":"ba-teau","type":"phonetique"}],"ressources":[{"site":"identifiant","requete":"...","titre":"...","pourquoi":"..."}],"incertitudes":["..."]}`;
+{"titre":"titre du cours","matiere":"histoire|geo|emc|francais|orthographe|maths|svt|physique|techno|anglais|espagnol|allemand|latin|arts|musique|autre","niveau":"6e|5e|4e|3e|?","chapitre":"nom du chapitre si visible","resume":"...","texte":"le cours au propre en mini-Markdown","points_cles":["..."],"vocabulaire":[{"mot":"...","def":"..."}],"a_retenir":[{"notion":"...","q":"...","r":"..."}],"liste_mots":[{"mot":"coquillage","syllabes":"co-quil-lage"}],"mots_a_revoir":[{"ecrit":"bato","correct":"bateau","syllabes":"ba-teau","type":"phonetique"}],"ressources":[{"site":"identifiant","requete":"...","titre":"...","pourquoi":"..."}],"incertitudes":["..."]}`;
 }
 
 /* ---------- mode exos : une fiche d'exercices sur ce cours ---------- */
@@ -297,24 +312,27 @@ module.exports = async (req, res) => {
 const IMG_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 async function transcrire(req, res, key, child) {
-  const { photos, matiere, notes } = req.body || {};
-  const imgs = liste(photos, 6).filter(p => p && typeof p.data === 'string'
+  const { photos, matiere, notes, suite } = req.body || {};
+  /* L'app envoie les pages par paquets de quatre. Huit laisse de la marge si un jour
+     elle en envoie plus, sans ouvrir la porte à une requête démesurée. */
+  const imgs = liste(photos, 8).filter(p => p && typeof p.data === 'string'
     && IMG_TYPES.includes(p.media_type) && p.data.length < 4_000_000);
   if (!imgs.length) { res.status(200).json({ error: "Aucune photo lisible — reprends-la en plein jour, bien à plat." }); return; }
 
   const blocks = imgs.map(p => ({ type: 'image', source: { type: 'base64', media_type: p.media_type, data: p.data } }));
+  const suiteTxt = str(suite, 4000);
   blocks.push({
     type: 'text',
-    text: `Voici ${imgs.length === 1 ? 'la photo' : `les ${imgs.length} photos`} de mon cours, dans l'ordre.`
+    text: `Voici ${imgs.length === 1 ? 'la photo' : `les ${imgs.length} photos`} ${suiteTxt ? 'de la SUITE de mon cours' : 'de mon cours'}, dans l'ordre.`
       + (notes ? `\n\nCe que je précise : ${str(notes, 400)}` : '')
-      + `\n\nMets-le au propre.`,
+      + `\n\nMets-${suiteTxt ? 'les' : 'le'} au propre.`,
   });
 
   const r = await appelClaude(key, {
     model: process.env.ANTHROPIC_MODEL_COURS || 'claude-sonnet-5-5',
     max_tokens: 8000,
     output_config: { effort: 'medium' },
-    system: systemTranscrire(child, str(matiere, 20)),
+    system: systemTranscrire(child, str(matiere, 20), suiteTxt),
     messages: [{ role: 'user', content: blocks }],
   }, true);
 
@@ -341,6 +359,11 @@ async function transcrire(req, res, key, child) {
       a_retenir: liste(out.a_retenir, 12)
         .map(c => ({ notion: str(c && c.notion, 60), q: str(c && c.q, 300), r: str(c && c.r, 400) }))
         .filter(c => c.q && c.r),
+      /* Une liste d'orthographe de la semaine en compte vingt à trente ; quatre listes
+         photographiées ensemble, une centaine. On plafonne large mais on plafonne. */
+      liste_mots: liste(out.liste_mots, 120)
+        .map(m => ({ mot: str(m && m.mot, 40), syllabes: str(m && m.syllabes, 60) }))
+        .filter(m => m.mot && /[a-zà-öø-ÿ]/i.test(m.mot)),
       mots_a_revoir: liste(out.mots_a_revoir, 8).map(m => ({
         ecrit: str(m && m.ecrit, 40), correct: str(m && m.correct, 40),
         syllabes: str(m && m.syllabes, 60), type: typeFaute(m && m.type),

@@ -10,6 +10,9 @@ const MATIERES = [
   { id: 'geo',      emoji: '🗺️', label: 'Géographie' },
   { id: 'emc',      emoji: '⚖️', label: 'EMC' },
   { id: 'francais', emoji: '📖', label: 'Français' },
+  /* Les listes de mots à apprendre ont leur propre case : ce n'est pas un chapitre de
+     français, et ce qui en sort ne va pas au même endroit (voir MATS_MOTS plus bas). */
+  { id: 'orthographe', emoji: '🔤', label: 'Orthographe' },
   { id: 'maths',    emoji: '➗', label: 'Maths' },
   { id: 'svt',      emoji: '🌱', label: 'SVT' },
   { id: 'physique', emoji: '🧪', label: 'Physique-chimie' },
@@ -28,13 +31,24 @@ const matOf = id => MATIERES.find(m => m.id === id) || MATIERES[MATIERES.length 
    tard, à chaque échec elle repart au début. Cinq boîtes suffisent pour tenir un
    trimestre sans que l'enfant ait l'impression de ressasser. */
 const BOX_JOURS = { 1: 1, 2: 3, 3: 7, 4: 16, 5: 35 };
-const MAX_PHOTOS = 5;
+/* Autant de pages qu'il veut : un cours de SVT en fait parfois huit, et refuser la
+   neuvième n'aide personne. C'est l'ENVOI qui se découpe, par paquets de quatre pages :
+   une requête courte passe sur une connexion de téléphone, et surtout on n'encode
+   jamais dix pages en base64 d'un seul coup — c'est là que l'onglet mourait. */
+const PHOTOS_PAR_ENVOI = 4;
+/* Les listes de mots qui rejoignent « Mes mots ». La liste de verbes irréguliers
+   anglais d'Adam n'a rien à faire dans un carnet d'orthographe française. */
+const MATS_MOTS = ['orthographe', 'francais'];
 
 let coursList = null;      // cours du profil courant, du plus récent au plus ancien
 let coursCur = null;       // le cours ouvert
 let coursNotions = [];     // notions du cours ouvert
 let coursFiltre = 'all';
-let coursPhotos = [];      // photos en attente : {media_type, data, archive, dataUrl}
+let coursPhotos = [];      // pages en attente : {grande, petite} (des Blobs) + url d'aperçu
+let coursAttente = null;   // des pages retrouvées au démarrage, pas encore mises au propre
+let coursNotes = '';       // ce qu'il a précisé sur ses photos, gardé avec elles
+let coursErr = '';         // le dernier échec de lecture, affiché DANS la page
+let coursCodeDemande = false;   // le code famille vient d'être redemandé : ce n'est pas un échec
 let coursDraft = null;     // cours mis au propre, pas encore enregistré
 let coursBusy = false;
 let coursDue = [];         // notions à revoir aujourd'hui, tous cours confondus
@@ -65,19 +79,136 @@ async function callCours(payload, relance) {
       : "Le serveur n'a pas répondu correctement — réessaie.");
     return null;
   }
-  if (j.error === 'code_famille') { badFamilyCode(relance); return null; }
+  if (j.error === 'code_famille') { coursCodeDemande = true; badFamilyCode(relance); return null; }
   return j;
 }
 
-/* Vercel refuse un corps de requête au-delà d'environ 4,5 Mo. Cinq pages denses en
-   1500px peuvent dépasser. Dans ce cas on envoie les versions d'archive (1000px) :
+/* ---------- les pages photographiées ----------
+   Alix a perdu ses photos plusieurs fois : elle appuyait sur « Mettre au propre », et
+   l'app revenait à l'écran de départ « comme si elle n'avait rien fait ». Deux causes,
+   traitées ici : une requête énorme (jusqu'à quatre mégaoctets de texte base64 fabriqués
+   d'un coup en mémoire, sur un téléphone qui n'en a pas tant) et un échec qui ne se
+   voyait pas — un toast de trois secondes, et l'écran redevenait comme avant.
+
+   Désormais une page est un Blob : le navigateur le garde hors du tas JavaScript, et
+   IndexedDB le conserve même si l'onglet meurt. Le base64 n'existe que le temps d'un
+   paquet de quatre pages, puis il est jeté. */
+
+/* Un canvas → un Blob. `toBlob` manque sur quelques vieux navigateurs : on repasse
+   alors par le dataURL, qui lui existe partout. */
+function canvasBlob(cv, q) {
+  return new Promise(res => {
+    try {
+      if (cv.toBlob) { cv.toBlob(b => res(b || null), 'image/jpeg', q); return; }
+      const d = String(cv.toDataURL('image/jpeg', q) || '');
+      const bin = atob(d.slice(d.indexOf(',') + 1));
+      const u8 = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      res(new Blob([u8], { type: 'image/jpeg' }));
+    } catch (e) { res(null); }
+  });
+}
+function blobBase64(b) {
+  return new Promise(res => {
+    try {
+      const fr = new FileReader();
+      fr.onload = () => { const t = String(fr.result || ''); res(t.slice(t.indexOf(',') + 1)); };
+      fr.onerror = () => res('');
+      fr.readAsDataURL(b);
+    } catch (e) { res(''); }
+  });
+}
+
+/* Vercel refuse un corps de requête au-delà d'environ 4,5 Mo. Quatre pages denses en
+   1500px peuvent s'en approcher. Dans ce cas on envoie les versions d'archive (1000px) :
    le cours reste parfaitement lisible, et mieux vaut un peu moins fin qu'un échec. */
 const SEUIL_ENVOI = 3.2 * 1024 * 1024;
-function photosAEnvoyer() {
-  const poids = champ => coursPhotos.reduce((n, p) => n + String(p[champ] || '').length, 0);
-  const champ = poids('data') <= SEUIL_ENVOI ? 'data' : 'archive';
-  return coursPhotos.map(p => ({ media_type: p.media_type, data: p[champ] }));
+async function photosPaquet(debut, fin) {
+  const pages = coursPhotos.slice(debut, fin);
+  const grandes = await Promise.all(pages.map(p => blobBase64(p.grande)));
+  if (grandes.reduce((n, d) => n + d.length, 0) <= SEUIL_ENVOI) {
+    return grandes.map(d => ({ media_type: 'image/jpeg', data: d }));
+  }
+  const petites = await Promise.all(pages.map(p => blobBase64(p.petite)));
+  return petites.map(d => ({ media_type: 'image/jpeg', data: d }));
 }
+
+/* ---------- garder les pages hors de la mémoire ----------
+   IndexedDB stocke les Blobs tels quels, survit à la mort de l'onglet et n'a pas la
+   limite de 5 Mo du sessionStorage. Si le navigateur n'en veut pas (mode privé, quota
+   plein), tout continue de marcher : on ne promet simplement plus de les retrouver. */
+const IDB_NOM = 'adalix_pages', IDB_MAGASIN = 'attente';
+let idbPret = null;
+function idbOuvre() {
+  if (idbPret) return idbPret;
+  idbPret = new Promise(res => {
+    try {
+      if (typeof indexedDB === 'undefined' || !indexedDB || !indexedDB.open) { res(null); return; }
+      const r = indexedDB.open(IDB_NOM, 1);
+      r.onupgradeneeded = () => { try { r.result.createObjectStore(IDB_MAGASIN); } catch (e) { /* déjà là */ } };
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => res(null);
+    } catch (e) { res(null); }
+  });
+  return idbPret;
+}
+function idbAction(mode, fn) {
+  return idbOuvre().then(d => {
+    if (!d) return null;
+    return new Promise(res => {
+      try {
+        const t = d.transaction(IDB_MAGASIN, mode);
+        const dem = fn(t.objectStore(IDB_MAGASIN));
+        t.onabort = () => res(null);
+        t.onerror = () => res(null);
+        if (dem) { dem.onsuccess = () => res(dem.result); dem.onerror = () => res(null); }
+        else t.oncomplete = () => res(true);
+      } catch (e) { res(null); }
+    });
+  });
+}
+const idbClef = () => String(child || 'x');
+/* Appelée à CHAQUE page prise : si l'onglet meurt à la page suivante, les précédentes
+   sont déjà à l'abri. Sans page à garder on ne fait RIEN — surtout pas effacer : des
+   pages en attente ne doivent pas disparaître parce qu'il a ouvert l'écran d'ajout ou
+   tapé une note. Seuls un retrait explicite, « les jeter » et l'enregistrement effacent. */
+function photosGarde() {
+  if (!coursPhotos.length) return Promise.resolve(null);
+  return idbAction('readwrite', st => st.put({
+    matiere: matChoisie, notes: coursNotes, ts: Date.now(),
+    pages: coursPhotos.map(p => ({ grande: p.grande, petite: p.petite })),
+  }, idbClef()));
+}
+function photosOublie() { return idbAction('readwrite', st => st.delete(idbClef())); }
+/* Il vient de retirer une page lui-même : s'il n'en reste aucune, c'est qu'il a tout
+   effacé exprès, et le stockage doit suivre. */
+function photosNote() { return coursPhotos.length ? photosGarde() : photosOublie(); }
+async function photosEnAttente() {
+  const v = await idbAction('readonly', st => st.get(idbClef()));
+  return (v && Array.isArray(v.pages) && v.pages.length) ? v : null;
+}
+/* Une page prise reste une page prise : on lui refait une URL d'aperçu et on repart. */
+function photosReprends(v) {
+  coursPhotosVide();
+  coursPhotos = (v.pages || []).map(p => ({ grande: p.grande, petite: p.petite, url: URL.createObjectURL(p.petite) }));
+  matChoisie = matOf(v.matiere).id;
+  coursNotes = String(v.notes || '');
+  coursAttente = null;
+}
+function coursPhotosVide() {
+  coursPhotos.forEach(p => { try { URL.revokeObjectURL(p.url); } catch (e) { /* déjà libérée */ } });
+  coursPhotos = [];
+}
+
+/* L'écran qui s'éteint pendant la lecture, c'est Android qui reprend la mémoire de
+   Chrome — et le travail perdu. On demande à rester éveillé le temps de l'envoi. */
+async function veilleDemande() {
+  try {
+    if (navigator.wakeLock && navigator.wakeLock.request) return await navigator.wakeLock.request('screen');
+  } catch (e) { /* refusée ou indisponible : on continue sans */ }
+  return null;
+}
+function veilleFin(v) { try { if (v && v.release) v.release(); } catch (e) { /* déjà relâchée */ } }
 
 /* ---------- mini-Markdown : le cours au propre, joliment ----------
    Volontairement limité au sous-ensemble que l'IA a pour consigne de produire
@@ -132,6 +263,10 @@ async function renderCours() {
   if (child === 'parent') { renderDashboard(); return; }
   $('#main').innerHTML = '<div class="card">Chargement de tes cours…</div>';
   await Promise.all([loadCours(), loadDue()]);
+  /* Des pages photographiées qu'on n'a pas eu le temps de mettre au propre : l'onglet a
+     pu mourir entre-temps, elles sont quand même là. On ne les ouvre pas de force — on
+     les montre, et c'est lui qui décide. */
+  coursAttente = coursPhotos.length ? null : await photosEnAttente();
   drawCoursList();
 }
 
@@ -149,6 +284,15 @@ function drawCoursList() {
         ${nbDue ? `<button class="btn ghost" onclick="startRevision()">🔁 ${nbDue} notion${nbDue > 1 ? 's' : ''} à revoir</button>` : ''}
       </div>
     </div>
+
+    ${coursAttente ? `<div class="card" style="border-left:5px solid #3e9c7a;">
+      <h3>📸 Tes pages t'attendent</h3>
+      <div style="font-size:13.5px;line-height:1.55;">Tu avais photographié <b>${coursAttente.pages.length} page${coursAttente.pages.length > 1 ? 's' : ''}</b> en ${esc(matOf(coursAttente.matiere).label.toLowerCase())} sans les mettre au propre. Elles sont gardées : rien n'est perdu.</div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn" onclick="reprendrePages()">▶️ Reprendre où j'en étais</button>
+        <button class="btn ghost" onclick="jeterPages()">🗑️ Les jeter</button>
+      </div>
+    </div>` : ''}
 
     ${nbDue ? `<div class="card" style="border-left:5px solid #e8963f;">
       <h3>🔁 C'est le moment de revoir</h3>
@@ -182,9 +326,33 @@ function drawCoursList() {
 }
 function setCoursFiltre(f) { coursFiltre = f; drawCoursList(); }
 
+function reprendrePages() {
+  if (!coursAttente) return;
+  photosReprends(coursAttente);
+  openAjoutCours(true);
+  toast(`${coursPhotos.length} page${coursPhotos.length > 1 ? 's' : ''} retrouvée${coursPhotos.length > 1 ? 's' : ''} 📸`);
+}
+function jeterPages() {
+  const n = coursAttente ? coursAttente.pages.length : 0;
+  modal(`<h3>🗑️ Jeter ces ${n} page${n > 1 ? 's' : ''} ?</h3>
+    <p style="font-size:13.5px;">Tu devras les reprendre en photo. Si tu n'es pas sûr, garde-les : elles ne dérangent personne.</p>
+    <div class="actions"><button class="btn" style="background:#c9636a;" onclick="confirmJeterPages()">Oui, jeter</button><button class="btn ghost" onclick="closeModal()">Annuler</button></div>`);
+}
+async function confirmJeterPages() {
+  closeModal();
+  await photosOublie();
+  coursAttente = null;
+  drawCoursList();
+  toast('Pages jetées');
+}
+
 /* ---------- ajout d'un cours : photos → mise au propre ---------- */
-function openAjoutCours() {
-  coursPhotos = []; coursDraft = null;
+/* `reprise` : on garde les pages déjà prises. C'est le cas quand il revient du cours
+   mis au propre pour ajouter une page, et quand il reprend des pages retrouvées au
+   démarrage. Sans ça, le bouton « revenir aux photos » les effaçait toutes. */
+function openAjoutCours(reprise) {
+  if (!reprise) { coursPhotosVide(); coursNotes = ''; }
+  coursDraft = null; coursErr = '';
   // téléphone ou tablette : on propose l'appareil photo. Sur ordinateur il n'y en a pas,
   // et `capture` y est ignoré — un bouton « Prendre une photo » qui ouvre l'explorateur
   // de fichiers est un mensonge : on affiche le glisser-déposer et le collage à la place.
@@ -194,9 +362,9 @@ function openAjoutCours() {
     <div class="card">
       <h3>📸 Un nouveau cours</h3>
       <div style="font-size:11.5px;opacity:.6;text-transform:uppercase;letter-spacing:1px;margin-top:8px;">Quelle matière ?</div>
-      <div class="imgchips" id="cours-mat">${MATIERES.map((m, i) => `<button class="imgchip${i === 0 ? ' sel' : ''}" data-mat="${m.id}" onclick="pickMat('${m.id}')">${m.emoji} ${m.label}</button>`).join('')}</div>
+      <div class="imgchips" id="cours-mat">${MATIERES.map(m => `<button class="imgchip${m.id === matChoisie ? ' sel' : ''}" data-mat="${m.id}" onclick="pickMat('${m.id}')">${m.emoji} ${m.label}</button>`).join('')}</div>
 
-      <div style="font-size:11.5px;opacity:.6;text-transform:uppercase;letter-spacing:1px;margin-top:12px;">Les photos (${MAX_PHOTOS} maximum)</div>
+      <div style="font-size:11.5px;opacity:.6;text-transform:uppercase;letter-spacing:1px;margin-top:12px;">Les photos (autant de pages que tu veux)</div>
       <div style="font-size:12.5px;opacity:.75;margin:4px 0 8px;">${tactile
         ? "Cadre bien la page, à plat, en pleine lumière, sans ton ombre dessus. Une page par photo : si le cours en fait trois, appuie trois fois."
         : "Glisse tes images ici, ou colle une capture d'écran avec Ctrl + V. Pour photographier un cahier, ouvre plutôt l'app sur le téléphone : elle y déclenche l'appareil photo toute seule."}</div>
@@ -212,14 +380,16 @@ function openAjoutCours() {
       <div id="cours-photos"></div>
 
       <div style="font-size:11.5px;opacity:.6;text-transform:uppercase;letter-spacing:1px;margin-top:14px;">Quelque chose à préciser ? (facultatif)</div>
-      <textarea id="cours-notes" rows="2" placeholder="Ex : la prof a dit que le schéma de la page 2 tombera au contrôle"></textarea>
+      <textarea id="cours-notes" rows="2" placeholder="Ex : la prof a dit que le schéma de la page 2 tombera au contrôle" oninput="coursNotes=this.value" onblur="photosGarde()">${esc(coursNotes)}</textarea>
 
       <div class="actions" style="margin-top:12px;">
         <button class="btn" id="cours-go" onclick="lancerTranscription()">✨ Mettre au propre</button>
       </div>
+      <div id="cours-erreur"></div>
     </div>
   </div>`;
   drawCoursPhotos();
+  coursDrawErr();
 }
 let matChoisie = MATIERES[0].id;
 function pickMat(id) {
@@ -228,9 +398,7 @@ function pickMat(id) {
 }
 
 function coursFiles(files) {
-  const restants = MAX_PHOTOS - coursPhotos.length;
-  if (restants <= 0) { toast(`${MAX_PHOTOS} photos maximum`); return; }
-  Array.from(files || []).filter(f => f && f.type && f.type.startsWith('image/')).slice(0, restants).forEach(coursAjouteFichier);
+  Array.from(files || []).filter(f => f && f.type && f.type.startsWith('image/')).forEach(coursAjouteFichier);
 }
 /* Coller une capture d'écran (Ctrl + V) — le geste naturel sur ordinateur, quand le
    cours est un document de l'ENT ou une page scannée plutôt qu'un cahier. */
@@ -255,24 +423,22 @@ function coursAjouteFichier(file) {
 /* Deux tailles de chaque page : la grande part au serveur pour être lue, la petite est
    archivée et sert d'aperçu. Partagé par le fichier choisi et par l'appareil photo
    intégré — la source est une <img> ou un <canvas>, drawImage accepte les deux. */
-function coursPousseImage(source, w, h) {
+async function coursPousseImage(source, w, h) {
   if (!w || !h) { toast('Image illisible — reprends-la'); return; }
   const rendu = (max, q) => {
     const s = Math.min(1, max / Math.max(w, h));
     const cv = document.createElement('canvas');
     cv.width = Math.round(w * s); cv.height = Math.round(h * s);
     cv.getContext('2d').drawImage(source, 0, 0, cv.width, cv.height);
-    return cv.toDataURL('image/jpeg', q);
+    return canvasBlob(cv, q);
   };
-  const grande = rendu(1500, 0.82);
-  const petite = rendu(1000, 0.68);
-  coursPhotos.push({
-    media_type: 'image/jpeg',
-    data: grande.split(',')[1],
-    archive: petite.split(',')[1],
-    dataUrl: petite,
-  });
+  const grande = await rendu(1500, 0.82);
+  const petite = await rendu(1000, 0.68);
+  if (!grande || !petite) { toast('Image illisible — reprends-la'); return; }
+  coursPhotos.push({ grande, petite, url: URL.createObjectURL(petite) });
   drawCoursPhotos();
+  await photosGarde();
+  if (coursPhotos.length === 13) toast('Treize pages ! La lecture va prendre un moment 😅');
 }
 
 /* ---------- appareil photo intégré ----------
@@ -296,7 +462,6 @@ function camRepli() {
   if (el) el.click(); else toast('Aucun appareil photo disponible sur cet appareil');
 }
 async function ouvrirCamera() {
-  if (coursPhotos.length >= MAX_PHOTOS) { toast(`${MAX_PHOTOS} photos maximum`); return; }
   if (!cameraDispo()) { camRepli(); return; }
   try {
     camStream = await navigator.mediaDevices.getUserMedia({
@@ -324,6 +489,18 @@ function camAideTexte() {
     ? `${n} page${n > 1 ? 's' : ''} prise${n > 1 ? 's' : ''} — tourne la page et recommence, ou touche « Terminé ».`
     : 'Cadre la page à plat, bien éclairée, sans ton ombre dessus.';
 }
+/* La dernière page prise, en petit, avec de quoi la refaire : on sait tout de suite
+   qu'une photo est floue ou mal cadrée, et il ne faut pas avoir à fermer l'appareil
+   photo pour s'en débarrasser. */
+function camDernierHtml() {
+  const n = coursPhotos.length;
+  if (!n) return '<div class="cam-compteur">0 page</div>';
+  return `<button class="cam-annule" onclick="camAnnuleDerniere()" title="Reprendre cette page">
+      <img src="${coursPhotos[n - 1].url}" alt="">
+      <span>↩️ Reprendre</span>
+    </button>
+    <div class="cam-compteur">${n} page${n > 1 ? 's' : ''}</div>`;
+}
 function drawCamera() {
   $('#modal-root').innerHTML = `<div class="cam-plein">
     <video id="cam-video" playsinline autoplay muted></video>
@@ -331,26 +508,34 @@ function drawCamera() {
     <div class="cam-barre">
       <button class="cam-fermer" onclick="fermerCamera()">Terminé</button>
       <button class="cam-declic" id="cam-declic" onclick="camDeclic()" title="Prendre la photo"></button>
-      <div class="cam-compteur" id="cam-compteur">${coursPhotos.length} / ${MAX_PHOTOS}</div>
+      <div class="cam-dernier" id="cam-dernier">${camDernierHtml()}</div>
     </div>
   </div>`;
 }
-/* Après une prise on ne redessine QUE le compteur : refaire tout l'écran détruirait la
-   balise vidéo et redémarrerait la caméra, avec un clignotement à chaque page. */
+/* Après une prise on ne redessine QUE le bas de l'écran : refaire tout l'écran
+   détruirait la balise vidéo et redémarrerait la caméra, avec un clignotement à
+   chaque page. */
 function majCamera() {
-  const c = $('#cam-compteur'); if (c) c.textContent = `${coursPhotos.length} / ${MAX_PHOTOS}`;
+  const c = $('#cam-dernier'); if (c) c.innerHTML = camDernierHtml();
   const a = $('#cam-aide'); if (a) a.textContent = camAideTexte();
 }
-function camDeclic() {
+async function camDeclic() {
   const v = $('#cam-video');
   if (!v || !v.videoWidth) { toast('Un instant, la caméra démarre…'); return; }
   const cv = document.createElement('canvas');
   cv.width = v.videoWidth; cv.height = v.videoHeight;
   cv.getContext('2d').drawImage(v, 0, 0, cv.width, cv.height);
-  coursPousseImage(cv, cv.width, cv.height);
+  await coursPousseImage(cv, cv.width, cv.height);
   toast(`Page ${coursPhotos.length} 📸`);
-  if (coursPhotos.length >= MAX_PHOTOS) { fermerCamera(); return; }
   majCamera();
+}
+async function camAnnuleDerniere() {
+  if (!coursPhotos.length) { toast("Il n'y a encore aucune page"); return; }
+  const p = coursPhotos.pop();
+  try { URL.revokeObjectURL(p.url); } catch (e) { /* déjà libérée */ }
+  await photosNote();
+  majCamera();
+  toast('Page effacée — refais-la 📸');
 }
 function fermerCamera() {
   if (camStream) {
@@ -364,41 +549,117 @@ function drawCoursPhotos() {
   const el = $('#cours-photos'); if (!el) return;
   el.innerHTML = coursPhotos.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
     ${coursPhotos.map((p, i) => `<div style="position:relative;">
-      <img src="${p.dataUrl}" style="height:92px;border-radius:10px;display:block;box-shadow:0 2px 8px rgba(0,0,0,.18);">
+      <img src="${p.url}" style="height:92px;border-radius:10px;display:block;box-shadow:0 2px 8px rgba(0,0,0,.18);">
       <button onclick="coursRetirePhoto(${i})" title="Retirer" style="position:absolute;top:-6px;right:-6px;width:24px;height:24px;border-radius:50%;border:none;background:#c9636a;color:#fff;cursor:pointer;font-size:13px;line-height:1;">✕</button>
       <div style="position:absolute;bottom:4px;left:4px;background:rgba(0,0,0,.6);color:#fff;border-radius:6px;font-size:11px;padding:1px 6px;">${i + 1}</div>
     </div>`).join('')}
   </div>` : '';
 }
-function coursRetirePhoto(i) { coursPhotos.splice(i, 1); drawCoursPhotos(); }
+async function coursRetirePhoto(i) {
+  const p = coursPhotos.splice(i, 1)[0];
+  if (p) { try { URL.revokeObjectURL(p.url); } catch (e) { /* déjà libérée */ } }
+  drawCoursPhotos();
+  await photosNote();
+}
+
+/* Un échec DOIT se voir. Avant, un toast de trois secondes disparaissait et l'écran
+   redevenait exactement comme avant d'appuyer : Alix croyait que le bouton n'avait rien
+   fait, et personne ne savait quoi réparer. */
+function coursDrawErr() {
+  const el = $('#cours-erreur'); if (!el) return;
+  el.innerHTML = coursErr ? `<div class="ecrit-box" style="margin-top:12px;border-left:5px solid #c9636a;">
+    <b>😕 La lecture n'a pas abouti</b>
+    <div style="margin-top:4px;">${esc(coursErr)}</div>
+    <div style="font-size:13px;opacity:.8;margin-top:6px;">Tes pages sont gardées — tu ne les reprends pas en photo.</div>
+    <div class="actions" style="margin-top:10px;"><button class="btn" onclick="lancerTranscription()">🔄 Réessayer</button></div>
+  </div>` : '';
+}
 
 async function lancerTranscription() {
   if (coursBusy) return;
   if (!coursPhotos.length) { toast('Ajoute au moins une photo 📷'); return; }
-  coursBusy = true;
+  coursBusy = true; coursErr = ''; coursCodeDemande = false; coursDrawErr();
+  const champNotes = $('#cours-notes');
+  if (champNotes && typeof champNotes.value === 'string') coursNotes = champNotes.value;
+  const total = coursPhotos.length;
   const btn = $('#cours-go');
-  if (btn) { btn.disabled = true; btn.textContent = '✨ Je lis ton cours…'; }
-  const notes = ($('#cours-notes') || {}).value || '';
+  const veille = await veilleDemande();
   try {
-    const j = await callCours({
-      mode: 'transcrire', matiere: matChoisie, notes, photos: photosAEnvoyer(),
-    }, lancerTranscription);
-    if (!j) return;
-    if (j.error || !j.cours) { toast(j.error || 'Échec de la lecture'); return; }
-    coursDraft = j.cours;
+    /* Les pages partent par paquets : une requête de quatre pages passe là où une de
+       dix échouait, et le modèle lit mieux quatre pages à la fois. Chaque paquet reçoit
+       le texte déjà mis au propre, pour écrire la suite et pas un deuxième cours. */
+    let fusion = null;
+    for (let d = 0; d < total; d += PHOTOS_PAR_ENVOI) {
+      const f = Math.min(total, d + PHOTOS_PAR_ENVOI);
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = total > PHOTOS_PAR_ENVOI ? `✨ Je lis tes pages ${d + 1} à ${f} sur ${total}…` : '✨ Je lis ton cours…';
+      }
+      const photos = await photosPaquet(d, f);
+      const envoi = () => callCours({
+        mode: 'transcrire', matiere: matChoisie, notes: coursNotes, photos,
+        suite: fusion ? String(fusion.texte || '').slice(-4000) : undefined,
+      }, lancerTranscription);
+      /* Une connexion de téléphone lâche au milieu d'un envoi de deux mégaoctets :
+         on réessaie une fois avant de déranger l'enfant. */
+      let j = await envoi();
+      if (coursCodeDemande) return;                       // le code famille est redemandé
+      if (!j || j.error) { j = await envoi(); if (coursCodeDemande) return; }
+      if (!j) { coursErr = "Le serveur n'a pas répondu. Vérifie que tu as du réseau, puis réessaie."; return; }
+      if (j.error || !j.cours) { coursErr = j.error || "Je n'ai pas réussi à lire ces pages."; return; }
+      fusion = fusionneCours(fusion, j.cours);
+    }
+    /* Il a choisi « Orthographe » : c'est là que son cours doit atterrir, même si le
+       modèle a répondu « français ». C'est ce choix qui envoie la liste dans son
+       carnet de mots. */
+    if (matChoisie === 'orthographe') fusion.matiere = 'orthographe';
+    coursDraft = fusion;
     drawDraft();
   } catch (e) {
-    toast('Erreur de connexion — réessaie');
+    coursErr = 'La connexion a été coupée pendant la lecture.';
   } finally {
     coursBusy = false;
+    veilleFin(veille);
     const b = $('#cours-go'); if (b) { b.disabled = false; b.textContent = '✨ Mettre au propre'; }
+    coursDrawErr();
   }
+}
+
+/* Plusieurs paquets de pages, un seul cours à la fin. Le titre et la matière viennent
+   des premières pages ; le résumé et les points clés du dernier paquet, qui a reçu tout
+   ce qui précède ; les listes s'additionnent sans doublon. */
+function fusionneCours(a, b) {
+  if (!a) return b;
+  const clef = e => String((e && (e.mot || e.correct || e.q || e.url || e)) || '').toLowerCase();
+  const plus = (x, y) => {
+    const out = (x || []).slice();
+    const vus = {};
+    out.forEach(e => { vus[clef(e)] = 1; });
+    (y || []).forEach(e => { const k = clef(e); if (!vus[k]) { vus[k] = 1; out.push(e); } });
+    return out;
+  };
+  const prem = (x, y) => x || y;
+  return {
+    titre: prem(a.titre, b.titre),
+    matiere: prem(a.matiere, b.matiere),
+    niveau: prem(a.niveau, b.niveau),
+    chapitre: prem(a.chapitre, b.chapitre),
+    resume: b.resume || a.resume,
+    texte: [a.texte, b.texte].filter(Boolean).join('\n\n'),
+    points_cles: (b.points_cles || []).length ? b.points_cles : a.points_cles,
+    vocabulaire: plus(a.vocabulaire, b.vocabulaire),
+    a_retenir: plus(a.a_retenir, b.a_retenir),
+    mots_a_revoir: plus(a.mots_a_revoir, b.mots_a_revoir),
+    liste_mots: plus(a.liste_mots, b.liste_mots),
+    ressources: plus(a.ressources, b.ressources),
+    incertitudes: (a.incertitudes || []).concat(b.incertitudes || []),
+  };
 }
 
 function drawDraft() {
   const d = coursDraft;
   $('#main').innerHTML = `<div class="narrow">
-    <button class="back-btn" onclick="openAjoutCours()">← Reprendre les photos</button>
+    <button class="back-btn" onclick="openAjoutCours(true)">← Revenir à mes photos</button>
     <div class="card" style="border-left:5px solid #3e9c7a;">
       <h3>✅ Voilà ton cours au propre</h3>
       <div style="font-size:13.5px;">Relis-le avant d'enregistrer : si un mot a été mal lu, corrige-le maintenant — tout le reste (les exercices, les interros) sera construit sur ce texte.</div>
@@ -474,17 +735,29 @@ async function enregistrerCours() {
     }
     // les mots mal orthographiés dans le cahier rejoignent le carnet (lecture.js), en
     // « proposé » : une écriture mal déchiffrée ne doit jamais devenir une faute à réviser
-    const motsVus = (d.mots_a_revoir || []).length;
-    if (motsVus) await motsAjoute(d.mots_a_revoir, 'cours', id, 'propose');
+    let motsVus = (d.mots_a_revoir || []).length ? await motsAjoute(d.mots_a_revoir, 'cours', id, 'propose') : 0;
+    /* Une liste de mots photographiée EST le cours : chaque mot va dans « Mes mots »,
+       où il sera entraîné et dicté. En proposition, là aussi : l'app a pu mal lire une
+       écriture, et on ne fait pas apprendre un mot de travers. */
+    if (MATS_MOTS.indexOf(d.matiere) >= 0 && (d.liste_mots || []).length) {
+      motsVus += await motsAjoute(
+        d.liste_mots.map(m => ({ correct: m.mot, ecrit: '', syllabes: m.syllabes, type: 'autre' })),
+        'liste', id, 'propose');
+    }
 
-    // les photos d'origine, dans leur propre table pour ne pas alourdir la liste des cours
-    if (coursPhotos.length) {
-      const { error: ePhoto } = await db.from('adalix_cours_photos').insert(coursPhotos.map((p, i) => ({
-        cours_id: id, child, rang: i, media_type: 'image/jpeg', data: p.archive,
+    /* les photos d'origine, dans leur propre table pour ne pas alourdir la liste des
+       cours. Par lots de trois : un cours de douze pages ferait sinon un seul envoi
+       énorme, exactement ce qu'on vient d'éviter à la lecture. */
+    for (let d0 = 0; d0 < coursPhotos.length; d0 += 3) {
+      const lot = coursPhotos.slice(d0, d0 + 3);
+      const datas = await Promise.all(lot.map(p => blobBase64(p.petite)));
+      const { error: ePhoto } = await db.from('adalix_cours_photos').insert(datas.map((data, i) => ({
+        cours_id: id, child, rang: d0 + i, media_type: 'image/jpeg', data,
       })));
       if (ePhoto) console.error('photos non enregistrées', ePhoto);
     }
-    coursPhotos = []; coursDraft = null;
+    coursPhotosVide(); coursDraft = null; coursNotes = ''; coursAttente = null;
+    await photosOublie();
     toast(motsVus ? `Cours enregistré 💾 — ${motsVus} mot${motsVus > 1 ? 's' : ''} à regarder dans « Mes mots »` : 'Cours enregistré 💾');
     await renderCours();
     openCours(id);
@@ -573,6 +846,7 @@ async function confirmSupprCours() {
 /* ---------- interro orale ---------- */
 function startInterro() {
   tutorMsgs = []; tutorFini = false; tutorBilan = {};
+  vxCharge();   // une interro orale mérite une voix : son choix est retenu
   drawInterroScreen();
   envoyerInterro('');
 }
@@ -590,6 +864,7 @@ function drawInterroScreen() {
       </div>
       ${micDispo() ? `<div style="font-size:12px;opacity:.65;margin-top:5px;">🎤 Touche le micro et réponds à voix haute : tes mots s'écrivent tout seuls, tu relis, puis tu envoies.</div>` : ''}
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+        ${vxBtn()}
         <button class="btn ghost" onclick="passerQuestion()">⏭️ Je ne sais pas, passe</button>
         <button class="btn${tutorFini ? '' : ' ghost'}" onclick="finirInterro()">🏁 Terminer${tutorFini ? ' et enregistrer' : ''}</button>
       </div>
@@ -599,9 +874,19 @@ function drawInterroScreen() {
 }
 function drawInterro() {
   const box = $('#chat-box'); if (!box) return;
-  box.innerHTML = tutorMsgs.map(m => `<div class="msg ${m.role === 'user' ? 'user' : 'bot'}">${esc(m.content)}</div>`).join('')
+  box.innerHTML = tutorMsgs.map((m, i) => `<div class="msg ${m.role === 'user' ? 'user' : 'bot'}">${esc(m.content)}${
+    m.role === 'assistant' && m.content && m.content !== '…' && vxDispo()
+      ? `<div style="text-align:right;margin-top:4px;"><button onclick="vxDireQuestion(${i})" title="Me relire la question" style="background:none;border:none;cursor:pointer;font-size:15px;opacity:.45;">🔊</button></div>`
+      : ''}</div>`).join('')
     || '<div style="color:#999;font-size:13px;text-align:center;margin-top:30px;">Le tuteur prépare sa première question…</div>';
   box.scrollTop = box.scrollHeight;
+}
+/* Réentendre la question : à l'oral, une question qu'on n'a pas bien saisie se
+   redemande — sauf qu'ici elle est écrite, et la relire est justement l'effort qu'on
+   essaie de lui épargner. */
+function vxDireQuestion(i) {
+  const m = tutorMsgs[i];
+  if (m && m.content) vxDire(m.content);
 }
 function passerQuestion() { const i = $('#interro-in'); if (i) { i.value = 'Je ne sais pas, passe à la question suivante.'; envoyerInterro(); } }
 
@@ -623,6 +908,7 @@ async function envoyerInterro(forcee) {
     if (!j) { tutorMsgs.pop(); drawInterro(); return; }
     if (j.error || !j.reply) { tutorMsgs[tutorMsgs.length - 1] = { role: 'assistant', content: j.error || 'Oups, réessaie !' }; drawInterro(); return; }
     tutorMsgs[tutorMsgs.length - 1] = { role: 'assistant', content: j.reply };
+    vxAuto(j.reply);   // il pose sa question à voix haute, si sa voix est allumée
     if (j.bilan) { tutorBilan[j.bilan.notion] = !!j.bilan.ok; await majNotion(j.bilan.notion, j.bilan.ok); }
     // le tuteur vient de faire son bilan final : le bouton « Terminer » devient l'action principale
     if (j.fini && !tutorFini) { tutorFini = true; drawInterroScreen(); return; }
@@ -651,7 +937,7 @@ async function majNotion(nom, ok) {
 }
 
 async function finirInterro() {
-  micStop();   // le micro ne doit pas rester ouvert derrière l'écran qu'on quitte
+  micStop(); vxStop();   // ni micro ouvert ni voix qui parle derrière l'écran qu'on quitte
   // on n'enregistre que ce que le tuteur a réellement tranché pendant CETTE session
   const notions = Object.keys(tutorBilan);
   if (notions.length) {

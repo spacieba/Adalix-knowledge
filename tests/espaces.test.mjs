@@ -75,31 +75,40 @@ function chargeApp(profil, options) {
   const bouchon = nom => (...a) => { appels.push({ nom, a }); };
   /* cours.js répond pour l'année scolaire : app.js ne connaît ni les matières ni les
      tables des cours, il les demande. opt.mats / opt.annee règlent la réponse. */
+  /* La voix de l'assistant vit dans lecture.js (un seul moteur de lecture pour toute
+     l'app). Ici on la simule pour vérifier ce qui relève d'app.js : le bouton est-il
+     proposé, la réponse est-elle dite, la voix se taît-elle quand on part ?
+     o.voix : l'appareil sait parler. */
+  const dits = [], vxArrets = [];
   const f = new Function('window', 'document', 'localStorage', 'console', 'fetch', 'setTimeout',
     'coursBadgeEspace', 'renderCours', 'renderMots', 'fillCoursParentCard', 'fillMotsParentCard', 'Image', 'URL', 'navigator',
     'sessionStorage', 'location', 'matieresInterro', 'interroAnnee',
+    'vxDispo', 'vxBtn', 'vxCharge', 'vxStop', 'vxAuto', 'vxDire',
     src + '\n;return {TABS, ESPACES, showEspaces, enterEspace, showTab, buildNav, majEnTete, '
     + 'majInstall, htmlInstall, estInstallee, estIPhone, estMobile, estChromium, '
     + 'lancerInstall, aideInstallIPhone, aideInstallManuelle, navInstall, '
     + 'selectProfile, logout, SES, '
     + 'GE_SUJETS, joursVus, contexteEte, openInterroMenu, interroSujets, lancerInterro, arreterInterro, '
-    + 'niveauScolaire, renderChat, micDispo, micBtn, micToggle, micStop, '
+    + 'niveauScolaire, renderChat, drawChat, sendChat, vxDireMsg, micDispo, micBtn, micToggle, micStop, '
     + 'get espace(){return espace}, set espace(v){espace=v}, get child(){return child}, set child(v){child=v}, '
     + 'get assistantName(){return assistantName}, set assistantName(v){assistantName=v}, '
     + 'get niveauVu(){return niveauVu}, set niveauVu(v){niveauVu=v}, '
     + 'get quizMode(){return quizMode}, get quizSujet(){return quizSujet}, get quizCtx(){return quizCtx}, '
     + 'get chatMsgs(){return chatMsgs}, '
     + 'get tab(){return tab}};');
-  const C = f(win, doc, stockage, { log() {}, warn() {}, error() {} }, async () => ({ json: async () => ({}) }),
+  const C = f(win, doc, stockage, { log() {}, warn() {}, error() {} }, async () => ({ json: async () => (opt.reponse || {}) }),
     fn => { appels.push({ nom: 'setTimeout' }); return 0; },
     bouchon('coursBadgeEspace'), bouchon('renderCours'), bouchon('renderMots'), bouchon('fillCoursParentCard'), bouchon('fillMotsParentCard'),
     function () { return {}; }, { createObjectURL: () => '', revokeObjectURL() {} }, nav,
     sessionStorage, location,
     async () => opt.mats || [{ id: 'histoire', emoji: '🏛️', label: 'Histoire', cours: 2 },
                               { id: 'svt', emoji: '🌱', label: 'SVT', cours: 0 }],
-    async mat => opt.annee === null ? null : (opt.annee || { emoji: '🏛️', label: 'Histoire', ctx: 'ANNÉE SCOLAIRE — Histoire. ' + mat }));
+    async mat => opt.annee === null ? null : (opt.annee || { emoji: '🏛️', label: 'Histoire', ctx: 'ANNÉE SCOLAIRE — Histoire. ' + mat }),
+    () => !!opt.voix,
+    () => (opt.voix ? '<button class="btn ghost" id="vx-btn" onclick="vxBascule()">🔇 Sa voix : non</button>' : ''),
+    () => {}, () => vxArrets.push(1), t => dits.push({ auto: true, t }), t => dits.push({ auto: false, t }));
   C.child = profil || 'alix';
-  return { C, el, elements, appels, win, defilements, session, ecouteursWin, rechargements, micros };
+  return { C, el, elements, appels, win, defilements, session, ecouteursWin, rechargements, micros, dits, vxArrets };
 }
 
 /* ---------- cohérence du découpage ---------- */
@@ -634,6 +643,68 @@ console.log('\n— répondre à l\'oral : le micro');
   vrai('un micro bloqué éteint le bouton', !el('mic-chat-in').classList.contains('on'));
   micros[0].onend();
   vrai('la fin de l\'écoute éteint le bouton', !el('mic-chat-in').classList.contains('on'));
+}
+
+/* ---------- la voix de l'assistant ----------
+   Elle a déjà un micro pour répondre ; lui donner une voix ferme la boucle, et pour
+   Alix c'est le vrai gain : réécouter n'est pas relire. La décision de parler vit dans
+   lecture.js ; ce qui se teste ici, c'est ce qu'app.js propose et demande. */
+console.log('\n— la voix de l\'assistant dans le chat —');
+{
+  const { C, el } = chargeApp('alix', { voix: true });
+  C.assistantName = 'Nova';
+  C.renderChat();
+  const h = el('main').innerHTML;
+  vrai('le bouton de voix est proposé', /id="vx-btn"/.test(h));
+  vrai("et l'enfant sait ce que ça fait", /voix haute/.test(h));
+}
+{
+  const { C, el } = chargeApp('alix', {});
+  C.assistantName = 'Nova';
+  C.renderChat();
+  const h = el('main').innerHTML;
+  vrai("sans voix sur l'appareil, aucun bouton", !/vx-btn/.test(h));
+  vrai("et aucune promesse de voix", !/voix haute/.test(h));
+}
+{
+  // un 🔊 sur chaque réponse, pour la réentendre sans tout relire
+  const { C, el, dits } = chargeApp('alix', { voix: true });
+  C.assistantName = 'Nova';
+  C.renderChat();
+  C.chatMsgs.push({ role: 'user', content: 'Explique-moi les volcans' });
+  C.chatMsgs.push({ role: 'assistant', content: 'Un volcan est une ouverture.' });
+  C.drawChat();
+  const h = el('chat-box').innerHTML;
+  vrai('la réponse porte un 🔊', /vxDireMsg\(1\)/.test(h), h);
+  vrai('la question de l\'enfant, non', !/vxDireMsg\(0\)/.test(h));
+  C.vxDireMsg(1);
+  vrai('le toucher fait relire la réponse', dits.some(d => !d.auto && /ouverture/.test(d.t)), JSON.stringify(dits));
+}
+{
+  const { C, el } = chargeApp('alix', {});
+  C.assistantName = 'Nova';
+  C.renderChat();
+  C.chatMsgs.push({ role: 'assistant', content: 'Une réponse.' });
+  C.drawChat();
+  vrai('sans voix, aucun 🔊 inutile', !/vxDireMsg/.test(el('chat-box').innerHTML));
+}
+{
+  const { C, el, dits } = chargeApp('alix', { voix: true, reponse: { reply: 'Les volcans crachent de la lave.' } });
+  C.assistantName = 'Nova';
+  C.renderChat();
+  el('chat-in').value = 'Parle-moi des volcans';
+  await C.sendChat();
+  vrai('la réponse est affichée', /lave/.test(el('chat-box').innerHTML));
+  vrai('et proposée à la voix', dits.some(d => d.auto && /lave/.test(d.t)), JSON.stringify(dits));
+}
+{
+  // on change d'onglet : ni micro ouvert, ni voix qui continue
+  const { C, vxArrets } = chargeApp('alix', { voix: true });
+  C.assistantName = 'Nova';
+  C.enterEspace('tuteur', 'chat');
+  const avant = vxArrets.length;
+  C.showTab('mots');
+  vrai("quitter l'écran fait taire l'assistant", vxArrets.length > avant);
 }
 
 console.log('\n' + (ko ? `❌ ${ko} échec(s), ${ok} test(s) passés` : `✅ ${ok} tests passés`));

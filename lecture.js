@@ -109,6 +109,70 @@ function lectStop() {
   lectEnCours = false;
 }
 
+/* ---------- la voix de l'assistant ----------
+   Le moteur de lecture est déjà là (lectDire) : la voix de l'assistant n'est qu'une
+   couche au-dessus, pour qu'il n'y ait qu'une voix et qu'un réglage de vitesse dans
+   toute l'app. Elle sert au tuteur du chat et à l'interro d'un cours.
+
+   Éteinte au départ, et le choix est retenu par enfant : une voix qui se met à parler
+   sans prévenir en classe ou le soir, c'est l'app qu'on referme. Une fois allumée, elle
+   lit chaque réponse qui arrive. */
+let vxOn = false;
+let vxDernier = '';     // la dernière réponse reçue, pour la réentendre
+function vxClef() { return 'adalix_voix_' + (child || 'x'); }
+function vxCharge() {
+  try { vxOn = localStorage.getItem(vxClef()) === '1'; } catch (e) { vxOn = false; }
+  lectChargePref();
+  return vxOn;
+}
+function vxDispo() { return lectDispo(); }
+function vxEtiquette() { return vxOn ? '🔊 Sa voix : oui' : '🔇 Sa voix : non'; }
+/* Jamais un bouton qui ne marche pas : pas de voix sur l'appareil, pas de bouton. */
+function vxBtn() {
+  if (!vxDispo()) return '';
+  return `<button class="btn ghost" id="vx-btn" onclick="vxBascule()" title="Lire les réponses à voix haute">${vxEtiquette()}</button>`;
+}
+function vxBascule() {
+  vxOn = !vxOn;
+  try { localStorage.setItem(vxClef(), vxOn ? '1' : '0'); } catch (e) { /* mode privé */ }
+  const b = $('#vx-btn'); if (b) b.innerHTML = vxEtiquette();
+  if (!vxOn) { vxStop(); toast('Voix éteinte 🔇'); return; }
+  lectChargePref();
+  toast('Je te lirai mes réponses à voix haute 🔊');
+  if (vxDernier) vxDire(vxDernier);   // on entend tout de suite que ça marche
+}
+/* Ce qui s'écrit ne se dit pas : les étoiles du gras, les dièses des titres, les
+   adresses et les emojis sonnent affreusement une fois lus à voix haute. */
+function vxNettoie(t) {
+  return String(t || '')
+    .replace(/```[\s\S]*?```/g, ' un exemple de code. ')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*\n]+)\*/g, '$1')
+    .replace(/^\s*#{1,6}\s+/gm, '')
+    .replace(/^\s*>\s?/gm, '')
+    .replace(/^\s*[-*•]\s+/gm, '')
+    .replace(/https?:\/\/\S+/g, ' un lien ')
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{FE0F}\u{20E3}]/gu, '')
+    .replace(/[ \t]+/g, ' ')
+    .trim();
+}
+/* Dire ce texte maintenant, même si la voix automatique est éteinte : c'est le 🔊 que
+   l'enfant vient de toucher à côté d'une réponse. */
+function vxDire(t) {
+  if (!vxDispo()) return;
+  const txt = vxNettoie(t);
+  if (!txt) return;
+  lectChargePref();
+  lectDire(txt);
+}
+/* Une réponse vient d'arriver : on la lit si la voix est allumée, et on la retient. */
+function vxAuto(t) {
+  vxDernier = String(t || '');
+  if (vxOn) vxDire(t);
+}
+function vxStop() { if (vxDispo()) lectStop(); }
+
 /* ---------- vue « lecture guidée » d'un cours ---------- */
 /* Le Markdown est retiré : on lit un texte nu, et chaque mot devient cliquable et
    surlignable. Une ponctuation est ajoutée en fin de ligne quand elle manque, sinon
@@ -234,6 +298,11 @@ async function renderMots() {
 
 function drawMots() {
   const proposes = motsList.filter(m => m.statut === 'propose');
+  /* Deux sortes de propositions, et elles ne se racontent pas pareil : un mot relevé
+     dans un cahier (on a vu une faute, d'où `erreur`), et un mot d'une liste qu'il a
+     photographiée pour l'apprendre — là il n'a rien raté du tout. */
+  const releves = proposes.filter(m => m.erreur);
+  const listes = proposes.filter(m => !m.erreur);
   const actifs = motsList.filter(m => m.statut === 'actif');
   const dus = actifs.filter(m => m.due <= todayStr());
   const gagnes = actifs.filter(m => m.box >= 4);
@@ -250,10 +319,20 @@ function drawMots() {
       ${actifs.length ? `<div style="font-size:12.5px;opacity:.7;margin-top:10px;">${actifs.length} mot${actifs.length > 1 ? 's' : ''} suivi${actifs.length > 1 ? 's' : ''}${gagnes.length ? ` · <b>${gagnes.length}</b> gagné${gagnes.length > 1 ? 's' : ''} 🎉` : ''}</div>` : ''}
     </div>
 
-    ${proposes.length ? `<div class="card" style="border-left:5px solid #e8963f;">
+    ${listes.length ? `<div class="card" style="border-left:5px solid #7eb5f4;">
+      <h3>📋 Ta liste de mots</h3>
+      <div style="font-size:13px;opacity:.8;margin-bottom:10px;">Tu l'as photographiée, et j'y ai lu ces <b>${listes.length} mots</b>. Garde-les tous d'un coup, ou enlève ceux que j'ai mal lus. Ensuite ils reviendront dans ton entraînement et dans tes dictées.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+        <button class="btn" onclick="motsListeTous('actif')">✓ Tout garder</button>
+        <button class="btn ghost" onclick="motsListeTous('ecarte')">✕ Tout écarter</button>
+      </div>
+      <div class="mot-nuage">${listes.map(m => `<button class="mot-puce" onclick="motStatut(${m.id},'ecarte')" title="Enlever ce mot de la liste">${esc(m.mot)}<span>✕</span></button>`).join('')}</div>
+    </div>` : ''}
+
+    ${releves.length ? `<div class="card" style="border-left:5px solid #e8963f;">
       <h3>🔍 Ces mots étaient dans ton cahier</h3>
       <div style="font-size:13px;opacity:.8;margin-bottom:10px;">Je les ai lus différemment de l'orthographe habituelle. Garde ceux que tu veux travailler, écarte les autres — il m'arrive de mal déchiffrer une écriture.</div>
-      ${proposes.map(m => `<div class="mot-ligne">
+      ${releves.map(m => `<div class="mot-ligne">
         <div style="flex:1;min-width:0;">
           <div class="mot-correct">${syllabesHtml(m.mot, m.syllabes)}</div>
           ${m.erreur ? `<div class="mot-erreur">tu avais écrit : ${esc(m.erreur)}</div>` : ''}
@@ -282,6 +361,18 @@ function drawMots() {
 function motJauge(box) {
   const n = Math.max(1, Math.min(5, box || 1));
   return '●'.repeat(n) + '<span style="opacity:.25;">' + '●'.repeat(5 - n) + '</span>';
+}
+
+/* Une liste de vingt-cinq mots validée mot par mot, c'est vingt-cinq gestes : elle
+   abandonnerait avant la fin, et avec raison. */
+async function motsListeTous(statut) {
+  const ids = motsList.filter(m => m.statut === 'propose' && !m.erreur).map(m => m.id);
+  if (!ids.length) return;
+  const { error } = await db.from('adalix_mots').update({ statut, updated_at: new Date().toISOString() }).in('id', ids);
+  if (error) { console.error(error); toast('Enregistrement impossible'); return; }
+  motsList.forEach(m => { if (ids.indexOf(m.id) >= 0) m.statut = statut; });
+  drawMots();
+  toast(statut === 'actif' ? `${ids.length} mots dans ton carnet 📒` : 'Liste écartée');
 }
 
 async function motStatut(id, statut) {
@@ -322,10 +413,24 @@ async function motsAjoute(mots, source, coursId, statut) {
       statut: statut || 'propose', box: 1, due: todayStr(), updated_at: new Date().toISOString(),
     }))
     .filter(m => m.mot);
-  if (!propres.length) return 0;
-  const { error } = await db.from('adalix_mots').upsert(propres, { onConflict: 'child,mot' });
+  /* Deux listes photographiées partagent souvent un mot (« arbre », « moment ») :
+     deux lignes identiques dans le même upsert, et Postgres refuse tout l'envoi. */
+  const vus = {};
+  let aEcrire = propres.filter(m => { const k = m.mot.toLowerCase(); if (vus[k]) return false; vus[k] = 1; return true; });
+  /* Une liste de mots à apprendre n'est pas une faute : un mot déjà dans le carnet
+     (peut-être en boîte 4, presque gagné) ou écarté exprès ne doit pas repartir à zéro
+     parce qu'il réapparaît sur une photo. On n'ajoute donc que les mots nouveaux.
+     Pour une faute, en revanche, le mot DOIT redescendre : c'est tout l'intérêt. */
+  if (source === 'liste') {
+    const { data: deja } = await db.from('adalix_mots').select('mot').eq('child', child);
+    const connus = {};
+    (deja || []).forEach(m => { connus[String(m.mot || '').toLowerCase()] = 1; });
+    aEcrire = aEcrire.filter(m => !connus[m.mot.toLowerCase()]);
+  }
+  if (!aEcrire.length) return 0;
+  const { error } = await db.from('adalix_mots').upsert(aEcrire, { onConflict: 'child,mot' });
   if (error) { console.error('mots non enregistrés', error); return 0; }
-  return propres.length;
+  return aEcrire.length;
 }
 
 /* ---------- entraînement : regarde → cache → écris → vérifie ---------- */

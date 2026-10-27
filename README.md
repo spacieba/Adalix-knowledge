@@ -17,7 +17,7 @@ api/image.js       fonction serverless Vercel — proxy vers l'API Runware (gén
 api/cours.js       fonction serverless Vercel — module des cours (transcription, exercices, correction, interro)
 manifest.json      installation sur l'écran d'accueil (PWA)
 sw.js              service worker minimal, sans cache — ne sert qu'à rendre l'app installable
-tests/             tests Node sans dépendance, 816 au total (voir tests/README.md)
+tests/             tests Node sans dépendance, 1010 au total (voir tests/README.md)
 ```
 
 Pas de build : c'est du HTML/JS statique + des fonctions serverless Node. Vercel déploie ce dossier tel quel.
@@ -111,14 +111,67 @@ perdue, et le geste central du module était donc inutilisable.
 page ne passe jamais en arrière-plan, donc le système ne peut rien reprendre, et on
 enchaîne les pages d'un cours sans aller-retour. Une prise dessine la vidéo dans un
 canvas et passe par `coursPousseImage()`, partagé avec le fichier choisi — mêmes deux
-tailles (1500px q0.82 pour le serveur, 1000px q0.68 pour l'archive et l'aperçu).
+tailles (1500px q0.82 pour le serveur, 1000px q0.68 pour l'archive et l'aperçu), gardées
+comme **Blobs** et non comme texte base64 (voir « Les pages ne vivent plus en mémoire »).
 
-Après une prise, **seul le compteur est redessiné** : refaire tout l'écran détruirait la
-balise vidéo et redémarrerait la caméra, avec un clignotement à chaque page.
+**Aucun plafond de pages.** Il y en avait un (cinq), et il fermait l'appareil photo tout
+seul à la cinquième prise : un cours de huit pages était donc impossible. C'est l'envoi
+qui se découpe maintenant, pas la prise de vue.
+
+**Reprendre une page mal cadrée** : le bas de l'écran montre la dernière prise en vignette
+avec un `↩️ Reprendre` (`camAnnuleDerniere`). On sait tout de suite qu'une photo est floue,
+et il ne faut pas avoir à fermer l'appareil photo pour s'en débarrasser.
+
+Après une prise, **seul le bas de l'écran est redessiné** : refaire tout l'écran détruirait
+la balise vidéo et redémarrerait la caméra, avec un clignotement à chaque page.
 
 Replis, dans l'ordre : pas de `getUserMedia` (vieux navigateur, pas de caméra) ou
 autorisation refusée → on clique l'ancien `<input capture>`, qui reste dans le DOM
 exprès. Il marche quand le téléphone a de la mémoire, et c'est mieux que rien.
+
+## Les pages ne vivent plus en mémoire
+
+Alix, le 27/10/2026 : elle photographie son cours, appuie sur « Mettre au propre », et
+l'app **revient à l'écran de départ « comme si elle n'avait pas appuyé »**. Deux causes
+cumulées, toutes deux traitées ici.
+
+**1. L'échec ne se voyait pas.** Quand la requête échouait (connexion de téléphone qui
+lâche au milieu d'un envoi de trois mégaoctets, réponse illisible), `lancerTranscription`
+affichait un toast de trois secondes et remettait le bouton dans son état initial.
+Résultat : un écran identique à avant l'appui, et personne ne savait quoi réparer.
+Maintenant `coursErr` s'affiche **dans la page** (`#cours-erreur`), avec un bouton
+**🔄 Réessayer** et la phrase qui compte : *tes pages sont gardées*. Et avant de déranger
+l'enfant, l'envoi est **rejoué une fois** tout seul — une coupure passagère ne doit pas
+remonter jusqu'à lui. Un code famille refusé n'est pas un échec de lecture :
+`coursCodeDemande` évite une seconde requête inutile et le geste sera rejoué à
+l'acceptation du code.
+
+**2. Les photos n'existaient qu'en mémoire JavaScript.** Chaque page était gardée en
+**trois chaînes base64** (grande, archive, aperçu), et `JSON.stringify` en faisait une
+copie de plus au moment de l'envoi : quatre mégaoctets de texte sur un téléphone qui n'en
+a pas tant. Deux changements :
+
+- une page est désormais un couple de **Blobs** — le navigateur les garde hors du tas
+  JavaScript, et l'aperçu est une `URL.createObjectURL()`, pas une chaîne de 200 Ko ;
+- le base64 n'est fabriqué que **paquet par paquet** au moment d'envoyer
+  (`photosPaquet`), puis jeté.
+
+**Et surtout, elles sont écrites hors de la page.** `photosGarde()` range les Blobs dans
+**IndexedDB** (`adalix_pages`, clé = l'enfant) à **chaque prise** : si l'onglet meurt à la
+page suivante, les précédentes sont déjà à l'abri. Au retour dans « Mes cours »,
+`photosEnAttente()` les retrouve et propose *« Tes pages t'attendent »* — reprendre (avec
+la matière et les précisions tapées) ou les jeter. C'est la règle de
+`android-detruit-onglet-photo` appliquée jusqu'au bout : **tout ce qui n'est qu'en mémoire
+JavaScript est perdu.**
+
+Rien ne s'efface tout seul : `photosGarde()` sans page à garder ne fait **rien** (ouvrir
+l'écran d'ajout ou taper une note ne doit pas vider le stockage). Seuls un retrait
+explicite (`photosNote`), « les jeter » et l'enregistrement réussi effacent.
+
+Deux détails qui comptent : un `wakeLock` est demandé pendant la lecture (l'écran qui
+s'éteint, c'est Android qui reprend la mémoire de Chrome), et IndexedDB indisponible
+(mode privé, quota plein) ne casse rien — on ne promet simplement plus de retrouver les
+pages.
 
 ## Retrouver sa place après un rechargement subi
 
@@ -159,13 +212,23 @@ vrai essai.
 
 Vercel refuse un corps de requête au-delà d'environ **4,5 Mo** et répond alors un 413 en
 texte brut, que `r.json()` ne sait pas lire. `callCours` tolère donc une réponse non-JSON
-et l'explique, et `photosAEnvoyer()` bascule sur les versions d'archive (1000px) quand les
-grandes dépassent le seuil — un cours un peu moins fin vaut mieux qu'un échec.
+et l'explique.
+
+Un cours long part maintenant **par paquets de quatre pages** (`PHOTOS_PAR_ENVOI`), au
+lieu d'une seule requête de tout le cours : une requête courte passe là où une longue
+échouait, le modèle lit mieux quatre pages à la fois, et l'enfant voit l'avancement
+(« Je lis tes pages 5 à 8 sur 10… »). Chaque paquet reçoit le texte déjà mis au propre
+(`suite`, 4000 caractères) pour écrire la suite et pas un deuxième cours ;
+`fusionneCours()` recolle le tout — titre et matière des premières pages, résumé et points
+clés du dernier paquet (le seul à avoir tout vu), listes additionnées sans doublon. Dans
+un paquet, `photosPaquet()` bascule encore sur les versions d'archive (1000px) si le
+base64 dépasse le seuil : un cours un peu moins fin vaut mieux qu'un échec.
 
 ## Module « Mes cours »
 
-L'enfant photographie son cours (jusqu'à 5 pages), l'app le transcrit au propre et le structure,
-puis il peut réviser dessus. Onglet réservé à Adam et Alix — invisible pour les visiteurs.
+L'enfant photographie son cours (autant de pages qu'il veut), l'app le transcrit au propre
+et le structure, puis il peut réviser dessus. Onglet réservé à Adam et Alix — invisible
+pour les visiteurs.
 
 **Ce que fait la transcription** — `api/cours.js`, mode `transcrire` : fidélité au cahier avant tout
 (aucune connaissance ajoutée, les mots illisibles sont signalés), orthographe et abréviations corrigées,
@@ -174,7 +237,7 @@ des cartes question/réponse et des pistes pour aller plus loin.
 
 **Comment la photo entre dans l'app.** Sur téléphone ou tablette (`pointer: coarse`), le bouton
 « Prendre une photo » déclenche l'appareil photo depuis la page : aucun transfert, une page par prise,
-jusqu'à 5. Sur ordinateur ce bouton n'existe pas — `capture` y est ignoré et ouvrirait l'explorateur de
+sans limite de nombre. Sur ordinateur ce bouton n'existe pas — `capture` y est ignoré et ouvrirait l'explorateur de
 fichiers — et l'écran propose à la place le glisser-déposer, le collage (Ctrl + V, pratique pour un
 document de l'ENT) et le choix de fichier.
 
@@ -196,6 +259,34 @@ sur la clé, le serveur bascule tout seul sur `claude-sonnet-4-5` et l'écrit da
 
 **Les photos d'origine sont conservées** dans `adalix_cours_photos` (copie compressée, ~100 Ko) : elles
 permettent de vérifier une transcription douteuse et de retrouver un schéma que le texte ne rend pas.
+Elles sont insérées **par lots de trois** — un cours de douze pages ferait sinon un seul envoi énorme,
+exactement ce qu'on vient d'éviter à la lecture.
+
+## 🔤 Orthographe : une liste de mots photographiée
+
+Alix a photographié quatre listes de vocabulaire le 27/10/2026. Le cours au propre était
+parfait — et son carnet de mots est resté **vide**. Les cent cinq mots de ses listes
+n'étaient ni des fautes (`mots_a_revoir` ne signale que ce qu'elle a mal écrit) ni du
+vocabulaire à définir : rien ne les attrapait.
+
+La matière **🔤 Orthographe** (juste après Français dans `MATIERES`) change ce que le
+serveur doit produire : `texte` présente les listes telles quelles, `liste_mots` contient
+**chaque mot avec son découpage en syllabes**, et `mots_a_revoir` comme `a_retenir`
+restent vides — ces mots ne sont pas des fautes, et on n'interroge pas une liste avec des
+cartes question/réponse. Le choix de l'enfant fait foi : si le modèle répond « français »,
+`lancerTranscription` remet `orthographe`.
+
+À l'enregistrement, `liste_mots` part dans « Mes mots » (`motsAjoute(…, 'liste', …)`) en
+**proposition** — l'app a pu mal lire une écriture, et on ne fait pas apprendre un mot de
+travers. `MATS_MOTS` limite ça au français et à l'orthographe : la liste de verbes
+irréguliers anglais d'Adam n'a rien à faire dans un carnet d'orthographe française.
+
+Côté « Mes mots », une liste a sa **propre carte** (« 📋 Ta liste de mots ») avec les mots
+en pastilles et un **✓ Tout garder** : valider vingt-cinq mots un par un, elle
+abandonnerait avant la fin, et avec raison. Enfin, `motsAjoute` n'écrase plus ce qui est
+déjà travaillé — un mot déjà dans le carnet (peut-être en boîte 4) ou écarté exprès ne
+repart pas à zéro parce qu'il réapparaît sur une photo. Pour une **faute**, en revanche,
+le mot redescend toujours : c'est tout l'intérêt.
 
 ## « Interroge-moi » : d'abord sur quoi ?
 
@@ -251,6 +342,33 @@ clair (micro bloqué, rien entendu, pas de micro, réseau coupé). Tout se passe
 page** : contrairement à l'appareil photo du système, rien ne peut faire reprendre l'onglet
 par Android. Le micro n'est volontairement proposé **ni dans les dictées ni dans les
 exercices écrits** : là, écrire EST l'exercice.
+
+## La voix de l'assistant
+
+Elle peut déjà répondre au micro ; lui donner une voix ferme la boucle, et pour Alix c'est
+le vrai gain — **réécouter n'est pas relire**.
+
+Le moteur de lecture existait déjà pour la lecture guidée : la voix de l'assistant n'est
+qu'une couche au-dessus (`vx*` dans lecture.js, qui appelle `lectDire`). Une seule voix,
+un seul réglage de vitesse (celui de 👓) dans toute l'app. app.js et cours.js ne
+connaissent de cette couche que `vxBtn`, `vxCharge`, `vxAuto`, `vxDire`, `vxStop`,
+`vxDispo`.
+
+- **Un bouton qui se retient** (`🔊 Sa voix : oui` / `🔇 non`), dans le chat et dans
+  l'interro d'un cours, retenu par enfant dans `localStorage`. **Éteint au départ** : une
+  voix qui démarre sans prévenir en classe ou le soir, c'est l'app qu'on referme.
+- **Un 🔊 sur chaque réponse** (`vxDireMsg`, `vxDireQuestion`), qui parle même si la
+  lecture automatique est éteinte.
+- `vxNettoie` retire ce qui ne se dit pas : étoiles du gras, dièses des titres, puces,
+  adresses (« un lien ») et emojis.
+- La voix se taît quand on change d'onglet (`showTab`), quand on quitte une interro
+  (`finirInterro`) et **quand le micro s'ouvre** (`micToggle`) — sa voix dans le micro,
+  c'est elle qu'on réécouterait.
+
+Vérifié dans Chrome : `speechSynthesis` refuse de parler (`not-allowed`) tant que la page
+n'a pas été **touchée une fois**. Ce n'est pas un problème ici, le bouton est justement un
+appui — et une réponse n'arrive jamais sans que l'enfant ait envoyé quelque chose. Un
+refus est traité silencieusement, jamais en erreur affichée.
 
 ## Lire et écrire (lecture.js)
 
